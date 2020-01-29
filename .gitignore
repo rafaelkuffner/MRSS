@@ -1,0 +1,7 @@
+/build/*
+!/build/ignored_for_build
+/local/*
+!/local/ignored_for_local_resources
+/.vs
+
+/imgui.ini
