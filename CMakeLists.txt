@@ -18,6 +18,9 @@ include(cgu)
 # output directories
 cgu_maybe_set_output_dirs()
 
+# AssImp defaults this to on; we want it off
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+
 # GLEW
 add_subdirectory("ext/glew-2.1.0")
 set_property(TARGET glew PROPERTY FOLDER "ext")
@@ -42,7 +45,10 @@ set_property(TARGET imgui PROPERTY FOLDER "ext")
 #set_property(TARGET stb PROPERTY FOLDER "ext")
 
 # AssImp
-# TODO
+option(ASSIMP_BUILD_ASSIMP_TOOLS "If the supplementary tools for Assimp are built in addition to the library." OFF)
+option(ASSIMP_BUILD_TESTS "If the test suite for Assimp is built in addition to the library." OFF)
+add_subdirectory("ext/assimp-5.0.1")
+set_property(TARGET assimp PROPERTY FOLDER "ext")
 
 # allow including headers from src tree with <>
 include_directories("src")
