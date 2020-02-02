@@ -49,6 +49,16 @@ option(ASSIMP_BUILD_ASSIMP_TOOLS "If the supplementary tools for Assimp are buil
 option(ASSIMP_BUILD_TESTS "If the test suite for Assimp is built in addition to the library." OFF)
 add_subdirectory("ext/assimp-5.0.1")
 set_property(TARGET assimp PROPERTY FOLDER "ext")
+set_property(TARGET IrrXML PROPERTY FOLDER "ext")
+set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ext")
+set_property(TARGET zlib PROPERTY FOLDER "ext")
+set_property(TARGET zlibstatic PROPERTY FOLDER "ext")
+
+# OpenMesh
+add_subdirectory("ext/OpenMesh-8.0")
+set_property(TARGET OpenMeshCore PROPERTY FOLDER "ext")
+set_property(TARGET OpenMeshTools PROPERTY FOLDER "ext")
+include_directories("ext/OpenMesh-8.0/src")
 
 # allow including headers from src tree with <>
 include_directories("src")
