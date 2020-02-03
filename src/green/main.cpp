@@ -14,6 +14,8 @@
 #include <cgu/mesh.hpp>
 #include <cgu/shader.hpp>
 
+#include "model.hpp"
+
 using namespace std;
 
 namespace {
@@ -107,7 +109,9 @@ int main() {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCharCallback(window, char_callback);
 
-	cgu::gl_mesh teapot = cgu::mesh_load_obj("./res/teapot.obj").build();
+	auto model = std::make_unique<green::Model>("./local/lucy.ply");
+	model->update_vao();
+	model->update_vbos();
 
 	auto frame_duration = 8ms;
 	auto time_next_frame = chrono::steady_clock::now();
@@ -143,9 +147,9 @@ int main() {
 		glDepthFunc(GL_LEQUAL);
 
 		cgu::use_dummy_shaderprog(glm::scale(view, glm::vec3(0.2f)), proj, zfar, {1, 1, 1, 1});
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		teapot.draw();
+		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		model->draw();
 
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		glDepthFunc(GL_ALWAYS);

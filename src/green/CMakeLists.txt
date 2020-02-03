@@ -4,6 +4,8 @@ set(sources
 	main.cpp
 	model.hpp
 	model.cpp
+	assimp_openmesh.hpp
+	assimp_openmesh.cpp
 )
 
 cgu_create_missing(${sources})
@@ -13,3 +15,6 @@ target_compile_features(green PUBLIC cxx_std_17)
 target_link_libraries(green PRIVATE cgu assimp OpenMeshCore OpenMeshTools)
 cgu_target_default_build_options(green)
 cgu_target_source_group_tree(green)
+
+# for openmesh
+target_compile_definitions(green PUBLIC _USE_MATH_DEFINES)
