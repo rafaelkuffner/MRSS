@@ -9,6 +9,8 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <cgu/opengl.hpp>
 #include <cgu/util.hpp>
 #include <cgu/mesh.hpp>
@@ -109,7 +111,7 @@ int main() {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCharCallback(window, char_callback);
 
-	auto model = std::make_unique<green::Model>("./local/lucy.ply");
+	auto model = std::make_unique<green::Model>("./local/dragon.ply");
 	model->update_vao();
 	model->update_vbos();
 
@@ -146,10 +148,19 @@ int main() {
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
 
-		cgu::use_dummy_shaderprog(glm::scale(view, glm::vec3(0.2f)), proj, zfar, {1, 1, 1, 1});
+		//cgu::use_dummy_shaderprog(glm::scale(view, glm::vec3(0.2f)), proj, zfar, {1, 1, 1, 1});
 		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		model->draw();
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+
+		glm::mat4 transform(1);
+		transform = glm::scale(transform, glm::vec3(model->unit_bound_scale() * 4));
+		transform = glm::translate(transform, -model->bound_center());
+
+		model->draw(view * transform, proj, zfar);
+
+		glDisable(GL_CULL_FACE);
 
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		glDepthFunc(GL_ALWAYS);

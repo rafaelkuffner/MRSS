@@ -3,10 +3,16 @@
 
 #include <stdexcept>
 #include <iostream>
+#include <sstream>
+
+#include <glm/gtc/type_ptr.hpp>
+
+#include <cgu/shader.hpp>
 
 namespace green {
 
 	Model::Model(const std::filesystem::path &fpath) {
+		m_trimesh.request_face_normals();
 		m_trimesh.request_vertex_normals();
 		// load custom "quality" property, if it exists
 		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom;
@@ -19,7 +25,14 @@ namespace green {
 			throw std::runtime_error("failed to load model");
 		}
 		m_trimesh.triangulate();
-		m_trimesh.update_vertex_normals();
+		// calculate normals if missing (note: need face normals to calc vertex normals)
+		if (!readOptions.face_has_normal()) m_trimesh.update_face_normals();
+		if (!readOptions.vertex_has_normal()) m_trimesh.update_vertex_normals();
+		// bounding box
+		for (auto vit = m_trimesh.vertices_begin(); vit != m_trimesh.vertices_end(); ++vit) {
+			m_bound_min = min(m_bound_min, om2glm(m_trimesh.point(*vit)));
+			m_bound_max = max(m_bound_max, om2glm(m_trimesh.point(*vit)));
+		}
 
 		// TODO loading on background thread
 		// gl mesh upload has to happen on main thread
@@ -82,6 +95,28 @@ namespace green {
 		glBindVertexArray(m_vao);
 		glDrawElements(GL_TRIANGLES, m_vao_ntris * 3, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
+	}
+
+	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar) const {
+
+		static GLuint prog = 0;
+		if (!prog) {
+			std::ostringstream hdr;
+			hdr << "#ifdef _FRAGMENT_\n#define CGU_NEED_FRAG_DEPTH\n" << cgu::glsl_frag_depth_source << "\n#endif\n";
+			prog = cgu::make_shader_program_from_files(
+				"330 core",
+				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
+				{hdr.str()},
+				{"./res/model.glsl"}
+			).release();
+		}
+
+		glUseProgram(prog);
+		glUniform1f(glGetUniformLocation(prog, cgu::glsl_uniform_zfar_name), zfar);
+		glUniformMatrix4fv(glGetUniformLocation(prog, "u_modelview"), 1, false, value_ptr(modelview));
+		glUniformMatrix4fv(glGetUniformLocation(prog, "u_projection"), 1, false, value_ptr(projection));
+
+		draw();
 	}
 
 }

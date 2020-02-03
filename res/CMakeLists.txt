@@ -2,6 +2,7 @@
 
 set(sources
 	CMakeLists.txt
+	model.glsl
 )
 
 cgu_create_missing(${sources})
