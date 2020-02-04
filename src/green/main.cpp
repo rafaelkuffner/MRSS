@@ -19,9 +19,11 @@
 #include "model.hpp"
 
 using namespace std;
+using namespace green;
 
 namespace {
-	void cursor_pos_callback(GLFWwindow *, double xpos, double ypos);
+	void drop_callback(GLFWwindow *win, int count, const char **paths);
+	void cursor_pos_callback(GLFWwindow *win, double xpos, double ypos);
 	void mouse_button_callback(GLFWwindow *win, int button, int action, int mods);
 	void scroll_callback(GLFWwindow *win, double xoffset, double yoffset);
 	void key_callback(GLFWwindow *win, int key, int scancode, int action, int mods);
@@ -35,8 +37,10 @@ namespace {
 	
 	cgu::gl_framebuffer fb_scene{
 		cgu::gl_rendertarget_params{GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_FLOAT},
-		cgu::gl_rendertarget_params{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GL_RGBA8, GL_RGBA, GL_FLOAT}
+		cgu::gl_rendertarget_params{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT}
 	};
+
+	std::vector<std::unique_ptr<Entity>> entities;
 }
 
 int main() {
@@ -110,10 +114,7 @@ int main() {
 	glfwSetScrollCallback(window, scroll_callback);
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCharCallback(window, char_callback);
-
-	auto model = std::make_unique<green::Model>("./local/dragon.ply");
-	model->update_vao();
-	model->update_vbos();
+	glfwSetDropCallback(window, drop_callback);
 
 	auto frame_duration = 8ms;
 	auto time_next_frame = chrono::steady_clock::now();
@@ -126,20 +127,25 @@ int main() {
 		time_next_frame += frame_duration;
 
 		glfwPollEvents();
-
+		
 		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
-
-		glm::ivec2 fbsize;
-		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
-		glViewport(0, 0, fbsize.x, fbsize.y);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
+		if (ImGui::Begin("Models")) {
+			ImGui::Text("Drag'n'Drop to load");
+		}
+		ImGui::End();
+
+		glm::ivec2 fbsize;
+		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
+		glViewport(0, 0, fbsize.x, fbsize.y);
+
 		fb_scene.bind(GL_DRAW_FRAMEBUFFER, fbsize);
 
-		glClearColor(0.3f, 0.3f, 0.4f, 1.0f);
+		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glm::mat4 proj = glm::perspective(1.f, float(fbsize.x) / fbsize.y, 0.1f, zfar);
@@ -147,24 +153,22 @@ int main() {
 
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
-
-		//cgu::use_dummy_shaderprog(glm::scale(view, glm::vec3(0.2f)), proj, zfar, {1, 1, 1, 1});
-		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		glEnable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
+		glPointSize(3);
 
-		glm::mat4 transform(1);
-		transform = glm::scale(transform, glm::vec3(model->unit_bound_scale() * 4));
-		transform = glm::translate(transform, -model->bound_center());
-
-		model->draw(view * transform, proj, zfar);
+		for (auto &e : entities) {
+			e->draw(view, proj, zfar);
+		}
 
 		glDisable(GL_CULL_FACE);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		glDepthFunc(GL_ALWAYS);
+		glEnable(GL_FRAMEBUFFER_SRGB);
 		cgu::draw_texture2d(fb_scene[GL_COLOR_ATTACHMENT0].tex, fb_scene[GL_DEPTH_ATTACHMENT].tex, 0);
+		glDisable(GL_FRAMEBUFFER_SRGB);
 
 		glDepthFunc(GL_LEQUAL);
 
@@ -190,6 +194,14 @@ int main() {
 }
 
 namespace {
+
+	void drop_callback(GLFWwindow *win, int count, const char **paths) {
+		for (int i = 0; i < count; i++) {
+			auto e = std::make_unique<ModelEntity>();
+			e->load(std::filesystem::u8path(paths[i]));
+			entities.push_back(std::move(e));
+		}
+	}
 
 	void cursor_pos_callback(GLFWwindow *win, double xpos, double ypos) {
 		// if not captured then foward to application

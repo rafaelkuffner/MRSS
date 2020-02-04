@@ -6,15 +6,19 @@
 
 #include <filesystem>
 #include <utility>
+#include <memory>
 #include <algorithm>
+#include <future>
 
 #include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
 
+#include <cgu/opengl.hpp>
+
 // ensure assimp openmesh modules are registered via static init
 #include "assimp_openmesh.hpp"
 
-#include <cgu/opengl.hpp>
+#include "entity.hpp"
 
 namespace green {
 
@@ -74,6 +78,12 @@ namespace green {
 	{
 	};
 
+	struct model_draw_params {
+		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
+		float shading = 0.9f;
+		bool use_vert_color = false;
+	};
+
 	class Model {
 	private:
 		Model(const Model &) = delete;
@@ -83,7 +93,7 @@ namespace green {
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 
-		GLuint m_vao_ntris = 0;
+		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
 		cgu::gl_object m_vao;
 		cgu::gl_object m_ibo;
 		cgu::gl_object m_vbo_pos, m_vbo_norm;
@@ -128,12 +138,44 @@ namespace green {
 
 		void update_vbos();
 
-		void draw() const;
+		void draw(GLenum polymode = GL_FILL) const;
 
-		void draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar) const;
+		void draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode = GL_FILL) const;
 
 	};
 
+	class ModelEntity : public Entity {
+	private:
+		std::filesystem::path m_fpath;
+		std::unique_ptr<Model> m_model;
+		std::future<std::unique_ptr<Model>> m_pending;
+		
+		float m_scale = 1;
+		glm::vec3 m_translation{0};
+
+		bool m_show_faces = true;
+		bool m_show_edges = false;
+		bool m_show_verts = false;
+
+	public:
+		ModelEntity();
+
+		const Model * model() const {
+			return m_model.get();
+		}
+
+		Model * model() {
+			return m_model.get();
+		}
+
+		void load(const std::filesystem::path &fpath);
+
+		virtual glm::mat4 transform() const override;
+
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) override;
+
+		virtual ~ModelEntity();
+	};
 }
 
 #endif

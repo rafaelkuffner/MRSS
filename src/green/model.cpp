@@ -4,10 +4,14 @@
 #include <stdexcept>
 #include <iostream>
 #include <sstream>
+#include <chrono>
+#include <mutex>
 
 #include <glm/gtc/type_ptr.hpp>
 
 #include <cgu/shader.hpp>
+
+#include <imgui.h>
 
 namespace green {
 
@@ -46,8 +50,11 @@ namespace green {
 		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
 		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
 		const size_t ntris = m_trimesh.n_faces();
+		const size_t nverts = m_trimesh.n_vertices();
 		assert(ntris <= size_t(INT_MAX));
+		assert(nverts <= size_t(INT_MAX));
 		m_vao_ntris = ntris;
+		m_vao_nverts = nverts;
 		const size_t size_ibo = ntris * 3 * sizeof(GLuint);
 		glBindVertexArray(m_vao);
 		// the GL_ELEMENT_ARRAY_BUFFER binding sticks to the VAO so we shouldn't unbind it
@@ -90,14 +97,19 @@ namespace green {
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
-	void Model::draw() const {
+	void Model::draw(GLenum polymode) const {
 		if (!m_vao) return;
 		glBindVertexArray(m_vao);
-		glDrawElements(GL_TRIANGLES, m_vao_ntris * 3, GL_UNSIGNED_INT, 0);
+		if (polymode == GL_POINT) {
+			glDrawArrays(GL_POINTS, 0, m_vao_nverts);
+		} else {
+			glPolygonMode(GL_FRONT_AND_BACK, polymode);
+			glDrawElements(GL_TRIANGLES, m_vao_ntris * 3, GL_UNSIGNED_INT, 0);
+		}
 		glBindVertexArray(0);
 	}
 
-	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar) const {
+	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode) const {
 
 		static GLuint prog = 0;
 		if (!prog) {
@@ -115,8 +127,89 @@ namespace green {
 		glUniform1f(glGetUniformLocation(prog, cgu::glsl_uniform_zfar_name), zfar);
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_modelview"), 1, false, value_ptr(modelview));
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_projection"), 1, false, value_ptr(projection));
+		glUniform4fv(glGetUniformLocation(prog, "u_color"), 1, value_ptr(params.color));
+		glm::vec3 pos_bias = -bound_center();
+		glUniform3fv(glGetUniformLocation(prog, "u_pos_bias"), 1, value_ptr(pos_bias));
+		glUniform1f(glGetUniformLocation(prog, "u_shading"), params.shading);
+		float bias = 0;
+		// TODO adjust biases if using log-depth
+		if (polymode == GL_LINE) bias = -0.00007;
+		if (polymode == GL_POINT) bias = -0.0001;
+		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 
-		draw();
+		draw(polymode);
+	}
+
+	ModelEntity::ModelEntity() {
+		
+	}
+
+	void ModelEntity::load(const std::filesystem::path &fpath) {
+		static std::mutex load_mtx;
+		m_model.reset();
+		m_fpath = fpath;
+		m_pending = std::async([=]() {
+			// apparently openmesh load is not threadsafe?
+			// TODO check assimp too
+			std::lock_guard lock(load_mtx);
+			return std::make_unique<Model>(fpath);
+		});
+	}
+
+	glm::mat4 ModelEntity::transform() const {
+		if (!m_model) return glm::mat4(1);
+		glm::mat4 transform(1);
+		transform = glm::translate(transform, m_translation);
+		transform = glm::scale(transform, glm::vec3(m_scale));
+		// TODO rotation
+		return transform;
+	}
+
+	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
+		if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+			// is this the best place to do this?
+			m_model = m_pending.get();
+			// gl stuff has to happen on main thread
+			m_model->update_vao();
+			m_model->update_vbos();
+			m_scale = m_model->unit_bound_scale() * 4;
+			m_translation = glm::vec3(0);
+		}
+		if (ImGui::Begin("Models")) {
+			// TODO unicode...
+			if (ImGui::CollapsingHeader(m_fpath.filename().string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+				ImGui::PushID(m_model.get());
+				if (m_pending.valid()) {
+					ImGui::Text("Loading...");
+				} else if (m_model) {
+					ImGui::Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
+				}
+				ImGui::Checkbox("Faces", &m_show_faces);
+				ImGui::SameLine();
+				ImGui::Checkbox("Edges", &m_show_edges);
+				ImGui::SameLine();
+				ImGui::Checkbox("Verts", &m_show_verts);
+				ImGui::SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
+				ImGui::SliderFloat3("Translation", value_ptr(m_translation), -10, 10);
+				if (ImGui::Button("Reset Scale")) m_scale = m_model->unit_bound_scale() * 4;
+				ImGui::PopID();
+			}
+		}
+		ImGui::End();
+		if (m_model) {
+			model_draw_params params;
+			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+			params.shading = 0;
+			params.color = {0.1f, 0.1f, 0.1f, 1};
+			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
+			params.color = {0.5f, 0, 0, 1};
+			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
+		}
+	}
+
+	ModelEntity::~ModelEntity() {
+
 	}
 
 }

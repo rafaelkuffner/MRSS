@@ -6,6 +6,7 @@ set(sources
 	model.cpp
 	assimp_openmesh.hpp
 	assimp_openmesh.cpp
+	entity.hpp
 )
 
 cgu_create_missing(${sources})
