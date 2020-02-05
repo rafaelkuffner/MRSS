@@ -65,7 +65,7 @@ int main() {
 	// request a window that can perform gamma correction
 	glfwWindowHint(GLFW_SRGB_CAPABLE, true);
 
-	GLFWwindow *window = glfwCreateWindow(800, 600, "CGU", nullptr, nullptr);
+	GLFWwindow *window = glfwCreateWindow(800, 600, "GREEN Mesh Saliency", nullptr, nullptr);
 	if (!window) {
 		cerr << "Error: Could not create GLFW window" << endl;
 		abort();
@@ -157,8 +157,14 @@ int main() {
 		glCullFace(GL_BACK);
 		glPointSize(3);
 
-		for (auto &e : entities) {
+		for (auto it = entities.begin(); it != entities.end(); ) {
+			auto &e = *it;
 			e->draw(view, proj, zfar);
+			if (e->dead()) {
+				it = entities.erase(it);
+			} else {
+				++it;
+			}
 		}
 
 		glDisable(GL_CULL_FACE);

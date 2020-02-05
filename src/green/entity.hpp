@@ -16,6 +16,8 @@ namespace green {
 	public:
 		Entity() {}
 
+		virtual bool dead() const = 0;
+
 		// model to world
 		virtual glm::mat4 transform() const = 0;
 

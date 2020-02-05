@@ -162,18 +162,24 @@ namespace green {
 		transform = glm::translate(transform, m_translation);
 		transform = glm::scale(transform, glm::vec3(m_scale));
 		// TODO rotation
-		return transform;
+
+		glm::mat3 basis(m_basis_vectors[basis_right].v, m_basis_vectors[basis_up].v, m_basis_vectors[basis_back].v);
+		return transform * glm::mat4(transpose(basis));
 	}
 
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
 		if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-			// is this the best place to do this?
-			m_model = m_pending.get();
-			// gl stuff has to happen on main thread
-			m_model->update_vao();
-			m_model->update_vbos();
-			m_scale = m_model->unit_bound_scale() * 4;
-			m_translation = glm::vec3(0);
+			try {
+				// is this the best place to do this?
+				m_model = m_pending.get();
+				// gl stuff has to happen on main thread
+				m_model->update_vao();
+				m_model->update_vbos();
+				m_scale = m_model->unit_bound_scale() * 4;
+				m_translation = glm::vec3(0);
+			} catch (...) {
+				// load failed
+			}
 		}
 		if (ImGui::Begin("Models")) {
 			// TODO unicode...
@@ -184,27 +190,61 @@ namespace green {
 					ImGui::Text("Loading...");
 				} else if (m_model) {
 					ImGui::Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
+				} else {
+					ImGui::Text("Failed to load model");
 				}
 				ImGui::Checkbox("Faces", &m_show_faces);
 				ImGui::SameLine();
 				ImGui::Checkbox("Edges", &m_show_edges);
 				ImGui::SameLine();
 				ImGui::Checkbox("Verts", &m_show_verts);
+				auto pick_basis = [&](const char *label, int *basis) {
+					ImGui::SetNextItemWidth(ImGui::GetTextLineHeight() * 3.5f);
+					ImGui::Combo(
+						label, basis,
+						[](void *data, int item, const char **out_text) {
+							auto vs = reinterpret_cast<basis_vector *>(data);
+							*out_text = vs[item].name;
+							return true;
+						}, m_basis_vectors, 6
+					);
+				};
+				pick_basis("Right", &basis_right);
+				ImGui::SameLine();
+				pick_basis("Up", &basis_up);
+				ImGui::SameLine();
+				pick_basis("Back", &basis_back);
 				ImGui::SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
 				ImGui::SliderFloat3("Translation", value_ptr(m_translation), -10, 10);
 				if (ImGui::Button("Reset Scale")) m_scale = m_model->unit_bound_scale() * 4;
+				ImGui::SameLine();
+				if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
+					ImGui::Text("Remove model \"%s\" ?", m_fpath.filename().string().c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+					if (ImGui::Button("Remove")) {
+						m_dead = true;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+					ImGui::EndPopup();
+				}
 				ImGui::PopID();
 			}
 		}
 		ImGui::End();
 		if (m_model) {
 			model_draw_params params;
+			glEnable(GL_CULL_FACE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
 			params.shading = 0;
-			params.color = {0.1f, 0.1f, 0.1f, 1};
+			params.color = {0.03f, 0.03f, 0.03f, 1};
+			glDisable(GL_CULL_FACE);
 			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
 			params.color = {0.5f, 0, 0, 1};
 			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
+			glEnable(GL_CULL_FACE);
 		}
 	}
 

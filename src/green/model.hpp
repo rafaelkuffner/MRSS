@@ -153,9 +153,26 @@ namespace green {
 		float m_scale = 1;
 		glm::vec3 m_translation{0};
 
+		struct basis_vector {
+			glm::vec3 v;
+			const char *name;
+		};
+
+		basis_vector m_basis_vectors[6]{
+			{{+1, 0, 0}, "+X"},
+			{{-1, 0, 0}, "-X"},
+			{{0, +1, 0}, "+Y"},
+			{{0, -1, 0}, "-Y"},
+			{{0, 0, +1}, "+Z"},
+			{{0, 0, -1}, "-Z"}
+		};
+
+		int basis_right = 0, basis_up = 2, basis_back = 4;
+
 		bool m_show_faces = true;
 		bool m_show_edges = false;
 		bool m_show_verts = false;
+		bool m_dead = false;
 
 	public:
 		ModelEntity();
@@ -169,6 +186,10 @@ namespace green {
 		}
 
 		void load(const std::filesystem::path &fpath);
+
+		virtual bool dead() const override {
+			return m_dead;
+		}
 
 		virtual glm::mat4 transform() const override;
 
