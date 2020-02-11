@@ -79,8 +79,12 @@ namespace green {
 	};
 
 	struct model_draw_params {
+		selection sel;
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
+		glm::vec4 color_hover{1, 1, 0, 1};
+		glm::vec4 color_select{1, 0.5f, 0, 1};
 		float shading = 0.9f;
+		int entity_id = -1;
 		bool use_vert_color = false;
 	};
 
@@ -193,7 +197,7 @@ namespace green {
 
 		virtual glm::mat4 transform() const override;
 
-		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) override;
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, const selection &sel) override;
 
 		virtual ~ModelEntity();
 	};

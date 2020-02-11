@@ -37,10 +37,134 @@ namespace {
 	
 	cgu::gl_framebuffer fb_scene{
 		cgu::gl_rendertarget_params{GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_FLOAT},
-		cgu::gl_rendertarget_params{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT}
+		cgu::gl_rendertarget_params{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT},
+		cgu::gl_rendertarget_params{GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, GL_RG32I, GL_RG_INTEGER, GL_INT}
 	};
 
 	std::vector<std::unique_ptr<Entity>> entities;
+
+	GLsync sync_read_ids = nullptr;
+	cgu::gl_object buf_read_ids;
+	glm::ivec2 pos_read_ids{0};
+	const int size_read_ids = 64;
+	selection cur_sel;
+
+	void update_hover(const glm::ivec2 &mouse_pos_fb) {
+		if (!buf_read_ids) buf_read_ids = cgu::gl_object::gen_buffer();
+		if (sync_read_ids) {
+			if (glClientWaitSync(sync_read_ids, 0, 0) != GL_TIMEOUT_EXPIRED) {
+				glDeleteSync(sync_read_ids);
+				sync_read_ids = nullptr;
+				glBindBuffer(GL_ARRAY_BUFFER, buf_read_ids);
+				vector<glm::ivec2> iddata(size_read_ids * size_read_ids, glm::ivec2{0});
+				// TODO map the buffer instead
+				glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::ivec2) * iddata.size(), iddata.data());
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				float best_entity_dist = 9001;
+				float best_vertex_dist = 9001;
+				cur_sel.hover_entity = -1;
+				cur_sel.hover_vertex = -1;
+				for (int y = 0; y < size_read_ids; y++) {
+					for (int x = 0; x < size_read_ids; x++) {
+						glm::ivec2 ids = iddata[size_read_ids * y + x];
+						if (ids.x != -1) {
+							float dist = glm::length(glm::vec2{pos_read_ids} + glm::vec2{x, y} - glm::vec2{mouse_pos_fb});
+							if (dist < best_entity_dist && cur_sel.hover_vertex == -1) {
+								best_entity_dist = dist;
+								cur_sel.hover_entity = ids.x;
+							}
+							if (dist < best_vertex_dist && ids.y != -1) {
+								best_entity_dist = dist;
+								best_vertex_dist = dist;
+								cur_sel.hover_entity = ids.x;
+								cur_sel.hover_vertex = ids.y;
+							}
+						}
+					}
+				}
+			}
+		}
+		if (!sync_read_ids) {
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_read_ids);
+			glBufferData(GL_PIXEL_PACK_BUFFER, sizeof(glm::ivec2) * size_read_ids * size_read_ids, nullptr, GL_STREAM_READ);
+			// need fbo already setup
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, fb_scene.fbo);
+			glReadBuffer(GL_COLOR_ATTACHMENT1);
+			pos_read_ids = mouse_pos_fb - size_read_ids / 2;
+			glReadPixels(pos_read_ids.x, pos_read_ids.y, size_read_ids, size_read_ids, GL_RG_INTEGER, GL_INT, nullptr);
+			sync_read_ids = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		}
+	}
+
+	void render(GLFWwindow *window) {
+
+		glm::ivec2 fbsize;
+		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
+		glViewport(0, 0, fbsize.x, fbsize.y);
+
+		// FIXME when fb size != win size (hidpi)
+		glm::dvec2 mouse_pos{0};
+		glfwGetCursorPos(window, &mouse_pos.x, &mouse_pos.y);
+		glm::ivec2 mouse_pos_fb = {int(mouse_pos.x), fbsize.y - int(mouse_pos.y) - 1};
+
+		fb_scene.bind(GL_DRAW_FRAMEBUFFER, fbsize);
+
+		glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glClearBufferfv(GL_DEPTH, 0, value_ptr(glm::vec4{1.f}));
+		glClearBufferfv(GL_COLOR, 0, value_ptr(glm::vec4{0.1f, 0.1f, 0.2f, 1.0f}));
+		glClearBufferiv(GL_COLOR, 1, value_ptr(glm::ivec4{-1}));
+		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+		glm::mat4 proj = glm::perspective(1.f, float(fbsize.x) / fbsize.y, 0.1f, zfar);
+		glm::mat4 view = cam.view();
+
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LEQUAL);
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+		glPointSize(3);
+
+		bool can_hover = false;
+		for (auto it = entities.begin(); it != entities.end(); ) {
+			can_hover = true;
+			auto &e = *it;
+			e->draw(view, proj, zfar, cur_sel);
+			if (e->dead()) {
+				it = entities.erase(it);
+			} else {
+				++it;
+			}
+		}
+
+
+		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+		glDisable(GL_CULL_FACE);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		glDepthFunc(GL_ALWAYS);
+		glEnable(GL_FRAMEBUFFER_SRGB);
+		cgu::draw_texture2d(fb_scene[GL_COLOR_ATTACHMENT0].tex, fb_scene[GL_DEPTH_ATTACHMENT].tex, 0);
+		glDisable(GL_FRAMEBUFFER_SRGB);
+
+		glDepthFunc(GL_LEQUAL);
+
+		glEnable(GL_BLEND);
+		glBlendEquation(GL_FUNC_ADD);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		cgu::draw_grid(view, proj, zfar);
+		cgu::draw_axes(view, proj, zfar);
+		glDisable(GL_BLEND);
+
+		glDisable(GL_DEPTH_TEST);
+
+		// clearing the id buffer may not actually execute if we dont draw anything?! (driver bug?)
+		if (can_hover) update_hover(mouse_pos_fb);
+
+	}
+
 }
 
 int main() {
@@ -119,6 +243,8 @@ int main() {
 	auto frame_duration = 8ms;
 	auto time_next_frame = chrono::steady_clock::now();
 
+	glDisable(GL_DITHER);
+
 	// loop until the user closes the window
 	while (!glfwWindowShouldClose(window)) {
 
@@ -128,7 +254,7 @@ int main() {
 
 		glfwPollEvents();
 		
-		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+		//if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -139,53 +265,7 @@ int main() {
 		}
 		ImGui::End();
 
-		glm::ivec2 fbsize;
-		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
-		glViewport(0, 0, fbsize.x, fbsize.y);
-
-		fb_scene.bind(GL_DRAW_FRAMEBUFFER, fbsize);
-
-		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		glm::mat4 proj = glm::perspective(1.f, float(fbsize.x) / fbsize.y, 0.1f, zfar);
-		glm::mat4 view = cam.view();
-
-		glEnable(GL_DEPTH_TEST);
-		glDepthFunc(GL_LEQUAL);
-		glEnable(GL_CULL_FACE);
-		glCullFace(GL_BACK);
-		glPointSize(3);
-
-		for (auto it = entities.begin(); it != entities.end(); ) {
-			auto &e = *it;
-			e->draw(view, proj, zfar);
-			if (e->dead()) {
-				it = entities.erase(it);
-			} else {
-				++it;
-			}
-		}
-
-		glDisable(GL_CULL_FACE);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-		glDepthFunc(GL_ALWAYS);
-		glEnable(GL_FRAMEBUFFER_SRGB);
-		cgu::draw_texture2d(fb_scene[GL_COLOR_ATTACHMENT0].tex, fb_scene[GL_DEPTH_ATTACHMENT].tex, 0);
-		glDisable(GL_FRAMEBUFFER_SRGB);
-
-		glDepthFunc(GL_LEQUAL);
-
-		glEnable(GL_BLEND);
-		glBlendEquation(GL_FUNC_ADD);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		cgu::draw_grid(view, proj, zfar);
-		cgu::draw_axes(view, proj, zfar);
-		glDisable(GL_BLEND);
-
-		glDisable(GL_DEPTH_TEST);
+		render(window);
 
 		ImGui::ShowMetricsWindow();
 
@@ -215,7 +295,7 @@ namespace {
 		if (io.WantCaptureMouse) return;
 		glm::ivec2 winsize;
 		glfwGetWindowSize(win, &winsize.x, &winsize.y);
-		cam.update(glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS, {float(xpos), float(ypos)}, winsize);
+		cam.update(glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS, {float(xpos), float(ypos)}, winsize);
 	}
 
 	void mouse_button_callback(GLFWwindow *win, int button, int action, int mods) {
@@ -223,6 +303,10 @@ namespace {
 		// if not captured then foward to application
 		ImGuiIO& io = ImGui::GetIO();
 		if (io.WantCaptureMouse) return;
+		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+			cur_sel.select_entity = cur_sel.hover_entity;
+			cur_sel.select_vertex = cur_sel.hover_vertex;
+		}
 	}
 
 	void scroll_callback(GLFWwindow *win, double xoffset, double yoffset) {

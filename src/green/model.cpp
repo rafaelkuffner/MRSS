@@ -128,6 +128,8 @@ namespace green {
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_modelview"), 1, false, value_ptr(modelview));
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_projection"), 1, false, value_ptr(projection));
 		glUniform4fv(glGetUniformLocation(prog, "u_color"), 1, value_ptr(params.color));
+		glUniform4fv(glGetUniformLocation(prog, "u_color_hover"), 1, value_ptr(params.color_hover));
+		glUniform4fv(glGetUniformLocation(prog, "u_color_select"), 1, value_ptr(params.color_select));
 		glm::vec3 pos_bias = -bound_center();
 		glUniform3fv(glGetUniformLocation(prog, "u_pos_bias"), 1, value_ptr(pos_bias));
 		glUniform1f(glGetUniformLocation(prog, "u_shading"), params.shading);
@@ -136,6 +138,8 @@ namespace green {
 		if (polymode == GL_LINE) bias = -0.00007;
 		if (polymode == GL_POINT) bias = -0.0001;
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
+		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
+		glUniform4iv(glGetUniformLocation(prog, "u_selection"), 1, (GLint *) &params.sel);
 
 		draw(polymode);
 	}
@@ -167,7 +171,7 @@ namespace green {
 		return transform * glm::mat4(transpose(basis));
 	}
 
-	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
+	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, const selection &sel) {
 		if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
 				// is this the best place to do this?
@@ -236,13 +240,27 @@ namespace green {
 		ImGui::End();
 		if (m_model) {
 			model_draw_params params;
+			params.sel = sel;
+			params.entity_id = id();
+			params.color = {0.6f, 0.6f, 0.5f, 1};
+			params.color_hover = {0.7f, 0.7f, 0.3f, 1};
+			params.color_select = {0.7f, 0.4f, 0.1f, 1};
 			glEnable(GL_CULL_FACE);
+			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
 			params.shading = 0;
 			params.color = {0.03f, 0.03f, 0.03f, 1};
+			params.color_hover = params.color;
+			params.color_select = params.color;
 			glDisable(GL_CULL_FACE);
+			glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
 			params.color = {0.5f, 0, 0, 1};
+			params.color_hover = {1, 1, 0, 1};
+			params.color_select = {0.5f, 1, 0, 1};
+			params.sel.hover_entity = -1;
+			params.sel.select_entity = -1;
+			glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
 			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
 			glEnable(GL_CULL_FACE);
 		}

@@ -8,20 +8,33 @@
 
 namespace green {
 
+	struct selection {
+		int hover_entity = -1;
+		int hover_vertex = -1;
+		int select_entity = -1;
+		int select_vertex = -1;
+	};
+
 	class Entity {
 	private:
 		Entity(const Entity &) = delete;
 		Entity & operator=(const Entity &) = delete;
 
+		int m_id;
+
 	public:
-		Entity() {}
+		Entity();
+
+		int id() const {
+			return m_id;
+		}
 
 		virtual bool dead() const = 0;
 
 		// model to world
 		virtual glm::mat4 transform() const = 0;
 
-		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) = 0;
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, const selection &sel) = 0;
 
 		virtual ~Entity() {}
 	};
