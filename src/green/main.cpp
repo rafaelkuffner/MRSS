@@ -66,22 +66,44 @@ namespace {
 	std::vector<std::unique_ptr<Entity>> entities;
 
 	GLsync sync_read_ids = nullptr;
-	cgu::gl_object buf_read_ids;
+	cgu::gl_object buf_read_ids, buf_read_depths;
 	glm::ivec2 pos_read_ids{0};
 	const int size_read_ids = 64;
 	selection cur_sel;
+	float cur_depth = zfar;
+
+	float decode_depth(float depth_p) {
+		const float c = 0.01;
+		float fc = 1.0 / log(zfar * c + 1.0);
+		return (exp(depth_p / fc) - 1.0) / c;
+	}
+
+	std::pair<glm::vec3, glm::vec3> unproject(const glm::mat4 &proj_inv, const glm::vec2 &pos_p, float depth_v) {
+		// near plane position
+		glm::vec3 pos0_p = glm::vec3(pos_p, -1.0);
+		glm::vec4 pos0_vh = proj_inv * glm::vec4(pos0_p, 1.0);
+		glm::vec3 pos0_v = glm::vec3(pos0_vh) / pos0_vh.w;
+		// not-far plane position
+		// TODO better not-far-plane?
+		glm::vec3 pos1_p = glm::vec3(pos_p, 0.0);
+		glm::vec4 pos1_vh = proj_inv * glm::vec4(pos1_p, 1.0);
+		glm::vec3 pos1_v = glm::vec3(pos1_vh) / pos1_vh.w;
+		glm::vec3 dir = normalize(pos1_v - pos0_v);
+		glm::vec3 pos = pos0_v + dir * ((depth_v + pos0_v.z) / -dir.z);
+		return {pos, dir};
+	}
 
 	void update_hover(const glm::ivec2 &mouse_pos_fb) {
 		if (!buf_read_ids) buf_read_ids = cgu::gl_object::gen_buffer();
+		if (!buf_read_depths) buf_read_depths = cgu::gl_object::gen_buffer();
 		if (sync_read_ids) {
 			if (glClientWaitSync(sync_read_ids, 0, 0) != GL_TIMEOUT_EXPIRED) {
 				glDeleteSync(sync_read_ids);
 				sync_read_ids = nullptr;
 				glBindBuffer(GL_ARRAY_BUFFER, buf_read_ids);
-				vector<glm::ivec2> iddata(size_read_ids * size_read_ids, glm::ivec2{0});
-				// TODO map the buffer instead
-				glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::ivec2) * iddata.size(), iddata.data());
-				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				auto *iddata = reinterpret_cast<glm::ivec2 *>(
+					glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(glm::ivec2) * size_read_ids * size_read_ids, GL_MAP_READ_BIT)
+				);
 				float best_entity_dist = 9001;
 				float best_vertex_dist = 9001;
 				cur_sel.hover_entity = -1;
@@ -104,16 +126,36 @@ namespace {
 						}
 					}
 				}
+				glUnmapBuffer(GL_ARRAY_BUFFER);
+				glBindBuffer(GL_ARRAY_BUFFER, buf_read_depths);
+				auto *depthdata = reinterpret_cast<float *>(
+					glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(float) * size_read_ids * size_read_ids, GL_MAP_READ_BIT)
+				);
+				auto cur_xy = clamp(mouse_pos_fb - pos_read_ids, glm::ivec2(0), glm::ivec2(size_read_ids - 1));
+				float depth = depthdata[size_read_ids * cur_xy.y + cur_xy.x];
+				cur_depth = decode_depth(depth);
+				glUnmapBuffer(GL_ARRAY_BUFFER);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				if (ImGui::Begin("Hover")) {
+					ImGui::Text("Entity %d; Vertex %d", cur_sel.hover_entity, cur_sel.hover_vertex);
+					ImGui::Text("Depth %f", cur_depth);
+				}
+				ImGui::End();
 			}
 		}
 		if (!sync_read_ids) {
-			glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_read_ids);
-			glBufferData(GL_PIXEL_PACK_BUFFER, sizeof(glm::ivec2) * size_read_ids * size_read_ids, nullptr, GL_STREAM_READ);
 			// need fbo already setup
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, fb_scene.fbo);
-			glReadBuffer(GL_COLOR_ATTACHMENT1);
 			pos_read_ids = mouse_pos_fb - size_read_ids / 2;
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_read_ids);
+			glBufferData(GL_PIXEL_PACK_BUFFER, sizeof(glm::ivec2) * size_read_ids * size_read_ids, nullptr, GL_STREAM_READ);
+			glReadBuffer(GL_COLOR_ATTACHMENT1);
 			glReadPixels(pos_read_ids.x, pos_read_ids.y, size_read_ids, size_read_ids, GL_RG_INTEGER, GL_INT, nullptr);
+			glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_read_depths);
+			glBufferData(GL_PIXEL_PACK_BUFFER, sizeof(glm::ivec2) * size_read_ids * size_read_ids, nullptr, GL_STREAM_READ);
+			// read buffer only specified color, using depth component will read depth
+			glReadBuffer(GL_NONE);
+			glReadPixels(pos_read_ids.x, pos_read_ids.y, size_read_ids, size_read_ids, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 			sync_read_ids = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 			glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -141,6 +183,16 @@ namespace {
 
 		glm::mat4 proj = glm::perspective(1.f, float(fbsize.x) / fbsize.y, 0.1f, zfar);
 		glm::mat4 view = cam.view();
+
+		auto proj_inv = inverse(proj);
+		auto view_inv = inverse(view);
+
+		auto [view_pos, view_dir] = unproject(proj_inv, glm::vec2(mouse_pos_fb) / glm::vec2(fbsize) * 2.f - 1.f, cur_depth);
+		auto world_pos = glm::vec3(view_inv * glm::vec4(view_pos, 1));
+		if (ImGui::Begin("Hover")) {
+			ImGui::Text("Position x=%.2f y=%.2f z=%.2f", world_pos.x, world_pos.y, world_pos.z);
+		}
+		ImGui::End();
 
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
