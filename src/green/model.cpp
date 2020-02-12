@@ -113,12 +113,11 @@ namespace green {
 
 		static GLuint prog = 0;
 		if (!prog) {
-			std::ostringstream hdr;
-			hdr << "#ifdef _FRAGMENT_\n#define CGU_NEED_FRAG_DEPTH\n" << cgu::glsl_frag_depth_source << "\n#endif\n";
+			// note: needs custom depth env
 			prog = cgu::make_shader_program_from_files(
 				"330 core",
 				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
-				{hdr.str()},
+				{cgu::glsl_frag_depth_source},
 				{"./res/model.glsl"}
 			).release();
 		}
@@ -134,9 +133,9 @@ namespace green {
 		glUniform3fv(glGetUniformLocation(prog, "u_pos_bias"), 1, value_ptr(pos_bias));
 		glUniform1f(glGetUniformLocation(prog, "u_shading"), params.shading);
 		float bias = 0;
-		// TODO adjust biases if using log-depth
-		if (polymode == GL_LINE) bias = -0.00007;
-		if (polymode == GL_POINT) bias = -0.0001;
+		// biases adjusted for log-depth
+		if (polymode == GL_LINE) bias = -0.00001;
+		if (polymode == GL_POINT) bias = -0.00002;
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
 		glUniform4iv(glGetUniformLocation(prog, "u_selection"), 1, (GLint *) &params.sel);

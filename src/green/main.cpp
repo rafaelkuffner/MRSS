@@ -30,9 +30,31 @@ namespace {
 	void char_callback(GLFWwindow *win, unsigned int c);
 	void APIENTRY gl_debug_callback(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar *, const GLvoid *);
 
+	const char *glsl_depth_env = R"(
+	#ifndef DEPTH_ENV
+	#define DEPTH_ENV
+	uniform float u_zfar;
+	float encode_depth(float depth_v) {
+		const float c = 0.01;
+		float fc = 1.0 / log(u_zfar * c + 1.0);
+		return log(depth_v * c + 1.0) * fc;
+	}
+	float decode_depth(float depth_p) {
+		const float c = 0.01;
+		float fc = 1.0 / log(u_zfar * c + 1.0);
+		return (exp(depth_p / fc) - 1.0) / c;
+	}
+	#ifdef _FRAGMENT_
+	float frag_depth() {
+		return encode_depth(1.0 / gl_FragCoord.w);
+	}
+	#endif
+	#endif
+	)";
+
 	ImGuiContext *imguictx;
 
-	float zfar = 1000;
+	float zfar = 1000000;
 	cgu::orbital_camera cam;
 	
 	cgu::gl_framebuffer fb_scene{
@@ -239,6 +261,8 @@ int main() {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCharCallback(window, char_callback);
 	glfwSetDropCallback(window, drop_callback);
+
+	cgu::glsl_frag_depth_source = glsl_depth_env;
 
 	auto frame_duration = 8ms;
 	auto time_next_frame = chrono::steady_clock::now();
