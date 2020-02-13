@@ -191,6 +191,10 @@ namespace green {
 
 		void load(const std::filesystem::path &fpath);
 
+		virtual void move_by(const glm::vec3 &d) override {
+			m_translation += d;
+		}
+
 		virtual bool dead() const override {
 			return m_dead;
 		}

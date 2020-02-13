@@ -65,12 +65,21 @@ namespace {
 
 	std::vector<std::unique_ptr<Entity>> entities;
 
+	enum class drag_mode {
+		plane, axis
+	};
+
 	GLsync sync_read_ids = nullptr;
 	cgu::gl_object buf_read_ids, buf_read_depths;
 	glm::ivec2 pos_read_ids{0};
 	const int size_read_ids = 64;
 	selection cur_sel;
 	float cur_depth = zfar;
+	glm::vec3 cur_world_pos{0};
+	glm::vec3 drag_world_origin{0}, drag_world_pos{0};
+	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
+	bool maybe_dragging = false;
+	drag_mode cur_drag_mode = drag_mode::plane;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -78,7 +87,21 @@ namespace {
 		return (exp(depth_p / fc) - 1.0) / c;
 	}
 
-	std::pair<glm::vec3, glm::vec3> unproject(const glm::mat4 &proj_inv, const glm::vec2 &pos_p, float depth_v) {
+	struct unproject_result {
+		glm::vec3 origin{0};
+		glm::vec3 hitpos{0};
+		glm::vec3 dir{0};
+
+		friend unproject_result operator*(const glm::mat4 &m, const unproject_result &r) {
+			unproject_result rr;
+			rr.origin = glm::vec3(m * glm::vec4(r.origin, 1));
+			rr.hitpos = glm::vec3(m * glm::vec4(r.hitpos, 1));
+			rr.dir = glm::vec3(m * glm::vec4(r.dir, 0));
+			return rr;
+		}
+	};
+
+	unproject_result unproject(const glm::mat4 &proj_inv, const glm::vec2 &pos_p, float depth_v) {
 		// near plane position
 		glm::vec3 pos0_p = glm::vec3(pos_p, -1.0);
 		glm::vec4 pos0_vh = proj_inv * glm::vec4(pos0_p, 1.0);
@@ -88,9 +111,37 @@ namespace {
 		glm::vec3 pos1_p = glm::vec3(pos_p, 0.0);
 		glm::vec4 pos1_vh = proj_inv * glm::vec4(pos1_p, 1.0);
 		glm::vec3 pos1_v = glm::vec3(pos1_vh) / pos1_vh.w;
-		glm::vec3 dir = normalize(pos1_v - pos0_v);
-		glm::vec3 pos = pos0_v + dir * ((depth_v + pos0_v.z) / -dir.z);
-		return {pos, dir};
+		glm::vec3 dir_v = normalize(pos1_v - pos0_v);
+		glm::vec3 pos_v = pos0_v + dir_v * ((depth_v + pos0_v.z) / -dir_v.z);
+		return {pos0_v, pos_v, dir_v};
+	}
+
+	bool is_dragging() {
+		return maybe_dragging && cur_sel.select_entity >= 0 && (chrono::steady_clock::now() - time_drag_start > chrono::milliseconds(200));
+	}
+
+	float ray_plane_intersect(const glm::vec3 &ray_origin, const glm::vec3 &ray_dir, const glm::vec3 &plane_norm, float plane_d) {
+		const float d0 = dot(ray_origin, plane_norm);
+		const float dd = dot(ray_dir, plane_norm);
+		return (plane_d - d0) / dd;
+	}
+
+	void update_dragging(const unproject_result &world_ray, const glm::vec3 &axis, drag_mode mode) {
+		const glm::vec3 plane_norm = mode == drag_mode::plane ? axis : normalize(cross(cross(world_ray.dir, axis), axis));
+		const float plane_d = dot(plane_norm, drag_world_origin);
+		const float k = ray_plane_intersect(world_ray.origin, world_ray.dir, plane_norm, plane_d);
+		// inverted check for nan safety
+		if (!(k > 1 && k < 100)) return;
+		const auto p = world_ray.origin + k * world_ray.dir;
+		auto delta = p - drag_world_pos;
+		if (mode == drag_mode::axis) delta = axis * dot(delta, axis);
+		drag_world_pos = p;
+		std::cout << delta << std::endl;
+		for (auto &e : entities) {
+			if (e->id() == cur_sel.select_entity) {
+				e->move_by(delta);
+			}
+		}
 	}
 
 	void update_hover(const glm::ivec2 &mouse_pos_fb) {
@@ -153,7 +204,7 @@ namespace {
 			glReadPixels(pos_read_ids.x, pos_read_ids.y, size_read_ids, size_read_ids, GL_RG_INTEGER, GL_INT, nullptr);
 			glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_read_depths);
 			glBufferData(GL_PIXEL_PACK_BUFFER, sizeof(glm::ivec2) * size_read_ids * size_read_ids, nullptr, GL_STREAM_READ);
-			// read buffer only specified color, using depth component will read depth
+			// read buffer only specifies color, using depth component will read depth
 			glReadBuffer(GL_NONE);
 			glReadPixels(pos_read_ids.x, pos_read_ids.y, size_read_ids, size_read_ids, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 			sync_read_ids = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -183,16 +234,25 @@ namespace {
 
 		glm::mat4 proj = glm::perspective(1.f, float(fbsize.x) / fbsize.y, 0.1f, zfar);
 		glm::mat4 view = cam.view();
-
 		auto proj_inv = inverse(proj);
 		auto view_inv = inverse(view);
+		auto world_ray = view_inv * unproject(proj_inv, glm::vec2(mouse_pos_fb) / glm::vec2(fbsize) * 2.f - 1.f, cur_depth);
+		cur_world_pos = world_ray.hitpos;
 
-		auto [view_pos, view_dir] = unproject(proj_inv, glm::vec2(mouse_pos_fb) / glm::vec2(fbsize) * 2.f - 1.f, cur_depth);
-		auto world_pos = glm::vec3(view_inv * glm::vec4(view_pos, 1));
 		if (ImGui::Begin("Hover")) {
-			ImGui::Text("Position x=%.2f y=%.2f z=%.2f", world_pos.x, world_pos.y, world_pos.z);
+			ImGui::Text("Position x=%.2f y=%.2f z=%.2f", cur_world_pos.x, cur_world_pos.y, cur_world_pos.z);
 		}
 		ImGui::End();
+
+		if (ImGui::Begin("Drag")) {
+			if (ImGui::RadioButton("Plane (XZ)", cur_drag_mode == drag_mode::plane)) cur_drag_mode = drag_mode::plane;
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Axis (Y)", cur_drag_mode == drag_mode::axis)) cur_drag_mode = drag_mode::axis;
+			// TODO custom plane/axis
+		}
+		ImGui::End();
+
+		if (is_dragging()) update_dragging(world_ray, {0, 1, 0}, cur_drag_mode);
 
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
@@ -382,6 +442,12 @@ namespace {
 		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
 			cur_sel.select_entity = cur_sel.hover_entity;
 			cur_sel.select_vertex = cur_sel.hover_vertex;
+			drag_world_origin = cur_world_pos;
+			drag_world_pos = cur_world_pos;
+			maybe_dragging = true;
+			time_drag_start = chrono::steady_clock::now();
+		} else {
+			maybe_dragging = false;
 		}
 	}
 

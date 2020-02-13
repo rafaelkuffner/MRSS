@@ -31,6 +31,8 @@ namespace green {
 
 		virtual bool dead() const = 0;
 
+		virtual void move_by(const glm::vec3 &d) {}
+
 		// model to world
 		virtual glm::mat4 transform() const = 0;
 
