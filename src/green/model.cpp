@@ -184,8 +184,10 @@ namespace green {
 				// load failed
 			}
 		}
+		const bool selected = sel.select_entity == id();
 		if (ImGui::Begin("Models")) {
 			// TODO unicode...
+			if (selected) ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
 			if (ImGui::CollapsingHeader(m_fpath.filename().string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 				if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
 				ImGui::PushID(m_model.get());
@@ -201,6 +203,30 @@ namespace green {
 				ImGui::Checkbox("Edges", &m_show_edges);
 				ImGui::SameLine();
 				ImGui::Checkbox("Verts", &m_show_verts);
+				ImGui::SameLine();
+				if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
+					ImGui::Text("Remove model \"%s\" ?", m_fpath.filename().string().c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+					if (ImGui::Button("Remove")) {
+						m_dead = true;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+					ImGui::EndPopup();
+				}
+				ImGui::PopID();
+			}
+			if (selected) ImGui::PopStyleColor();
+		}
+		ImGui::End();
+		if (ImGui::Begin("Selection")) {
+			if (selected) {
+				// TODO unicode...
+				ImGui::Selectable(m_fpath.filename().string().c_str());
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+				ImGui::PushID(m_model.get());
 				auto pick_basis = [&](const char *label, int *basis) {
 					ImGui::SetNextItemWidth(ImGui::GetTextLineHeight() * 3.5f);
 					ImGui::Combo(
@@ -220,19 +246,6 @@ namespace green {
 				ImGui::SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
 				ImGui::SliderFloat3("Translation", value_ptr(m_translation), -10, 10);
 				if (ImGui::Button("Reset Scale")) m_scale = m_model->unit_bound_scale() * 4;
-				ImGui::SameLine();
-				if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
-				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
-					ImGui::Text("Remove model \"%s\" ?", m_fpath.filename().string().c_str());
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
-					if (ImGui::Button("Remove")) {
-						m_dead = true;
-						ImGui::CloseCurrentPopup();
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-					ImGui::EndPopup();
-				}
 				ImGui::PopID();
 			}
 		}

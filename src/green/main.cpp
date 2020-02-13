@@ -117,7 +117,7 @@ namespace {
 	}
 
 	bool is_dragging() {
-		return maybe_dragging && cur_sel.select_entity >= 0 && (chrono::steady_clock::now() - time_drag_start > chrono::milliseconds(200));
+		return maybe_dragging && cur_sel.select_entity >= 0 && (chrono::steady_clock::now() - time_drag_start > chrono::milliseconds(100));
 	}
 
 	float ray_plane_intersect(const glm::vec3 &ray_origin, const glm::vec3 &ray_dir, const glm::vec3 &plane_norm, float plane_d) {
@@ -136,7 +136,6 @@ namespace {
 		auto delta = p - drag_world_pos;
 		if (mode == drag_mode::axis) delta = axis * dot(delta, axis);
 		drag_world_pos = p;
-		std::cout << delta << std::endl;
 		for (auto &e : entities) {
 			if (e->id() == cur_sel.select_entity) {
 				e->move_by(delta);
@@ -244,11 +243,14 @@ namespace {
 		}
 		ImGui::End();
 
-		if (ImGui::Begin("Drag")) {
+		if (ImGui::Begin("Selection")) {
 			if (ImGui::RadioButton("Plane (XZ)", cur_drag_mode == drag_mode::plane)) cur_drag_mode = drag_mode::plane;
 			ImGui::SameLine();
 			if (ImGui::RadioButton("Axis (Y)", cur_drag_mode == drag_mode::axis)) cur_drag_mode = drag_mode::axis;
 			// TODO custom plane/axis
+			ImGui::SameLine();
+			ImGui::Text(" Drag Mode");
+			ImGui::Separator();
 		}
 		ImGui::End();
 
