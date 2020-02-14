@@ -8,6 +8,8 @@ set(sources
 	assimp_openmesh.cpp
 	entity.hpp
 	entity.cpp
+	saliency.hpp
+	saliency.cpp
 )
 
 cgu_create_missing(${sources})

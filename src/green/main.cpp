@@ -17,6 +17,7 @@
 #include <cgu/shader.hpp>
 
 #include "model.hpp"
+#include "saliency.hpp"
 
 using namespace std;
 using namespace green;
@@ -80,6 +81,12 @@ namespace {
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
 	bool maybe_dragging = false;
 	drag_mode cur_drag_mode = drag_mode::plane;
+
+	bool saliency_window_open = false;
+	int sal_entity_id = -1;
+	saliency_params sal_params;
+	saliency_progress sal_progress;
+	std::future<bool> sal_future;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -212,6 +219,86 @@ namespace {
 		}
 	}
 
+	void render_main_ui(GLFWwindow *window) {
+
+		glm::ivec2 winsize;
+		glfwGetWindowSize(window, &winsize.x, &winsize.y);
+
+		if (ImGui::Begin("Models")) {
+			ImGui::Text("Drag'n'Drop to load");
+		}
+		ImGui::End();
+
+		if (ImGui::Begin("Hover")) {
+			ImGui::Text("Position x=%.2f y=%.2f z=%.2f", cur_world_pos.x, cur_world_pos.y, cur_world_pos.z);
+		}
+		ImGui::End();
+
+		if (ImGui::Begin("Selection")) {
+			if (ImGui::RadioButton("Plane (XZ)", cur_drag_mode == drag_mode::plane)) cur_drag_mode = drag_mode::plane;
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Axis (Y)", cur_drag_mode == drag_mode::axis)) cur_drag_mode = drag_mode::axis;
+			// TODO custom plane/axis
+			ImGui::SameLine();
+			ImGui::Text(" Drag Mode");
+			ImGui::Separator();
+			if (ImGui::Button(sal_future.valid() ? "Saliency... (running)" : "Saliency...", {-1, 0})) saliency_window_open = true;
+			ImGui::Separator();
+		}
+		ImGui::End();
+
+		if (saliency_window_open) {
+			ImGui::SetNextWindowBgAlpha(0.5f);
+			ImGui::SetNextWindowSize({400, 400}, ImGuiCond_Appearing);
+			ImGui::SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
+			if (ImGui::Begin("Saliency", &saliency_window_open)) {
+				ImGui::Text("params...");
+				ImGui::Separator();
+				int eid = sal_entity_id >= 0 ? sal_entity_id : cur_sel.select_entity;
+				Entity *ep = nullptr;
+				for (auto &e : entities) {
+					if (e->id() == eid) ep = e.get();
+				}
+				if (ep) {
+					if (ImGui::Button("Reselect")) {
+						cur_sel.select_entity = eid;
+						cur_sel.select_vertex = -1;
+					}
+					ImGui::SameLine();
+					// TODO unicode...
+					ImGui::Text("%s", ep->name().c_str());
+				}
+				if (sal_future.valid()) {
+					if (ImGui::Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
+					const float frac = float(sal_progress.completed_vertices) / sal_progress.total_vertices;
+					ImGui::Text("%2d/%d", sal_progress.completed_levels + 1, sal_params.levels);
+					ImGui::SameLine();
+					ImGui::ProgressBar(frac);
+					if (sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+						if (!sal_future.get()) {
+							// reset all progress display if cancelled
+							sal_progress = {};
+						}
+					}
+				} else {
+					if (ep) {
+						if (ImGui::Button("GO", {-1, 0})) {
+							sal_entity_id = eid;
+							sal_progress = {};
+							sal_future = ep->compute_saliency_async(sal_params, sal_progress);
+						}
+					} else {
+						ImGui::TextDisabled("Select a model");
+					}
+				}
+				const double elapsed_seconds = sal_progress.elapsed_time / std::chrono::duration<double>(1.0);
+				ImGui::Text("Elapsed %.3fs", elapsed_seconds);
+			}
+			ImGui::End();
+		}
+
+	}
+
 	void render(GLFWwindow *window) {
 
 		glm::ivec2 fbsize;
@@ -237,22 +324,6 @@ namespace {
 		auto view_inv = inverse(view);
 		auto world_ray = view_inv * unproject(proj_inv, glm::vec2(mouse_pos_fb) / glm::vec2(fbsize) * 2.f - 1.f, cur_depth);
 		cur_world_pos = world_ray.hitpos;
-
-		if (ImGui::Begin("Hover")) {
-			ImGui::Text("Position x=%.2f y=%.2f z=%.2f", cur_world_pos.x, cur_world_pos.y, cur_world_pos.z);
-		}
-		ImGui::End();
-
-		if (ImGui::Begin("Selection")) {
-			if (ImGui::RadioButton("Plane (XZ)", cur_drag_mode == drag_mode::plane)) cur_drag_mode = drag_mode::plane;
-			ImGui::SameLine();
-			if (ImGui::RadioButton("Axis (Y)", cur_drag_mode == drag_mode::axis)) cur_drag_mode = drag_mode::axis;
-			// TODO custom plane/axis
-			ImGui::SameLine();
-			ImGui::Text(" Drag Mode");
-			ImGui::Separator();
-		}
-		ImGui::End();
 
 		if (is_dragging()) update_dragging(world_ray, {0, 1, 0}, cur_drag_mode);
 
@@ -381,6 +452,9 @@ int main() {
 	auto frame_duration = 8ms;
 	auto time_next_frame = chrono::steady_clock::now();
 
+	cam.cam_yaw = -glm::pi<float>() / 4;
+	cam.cam_pitch = glm::pi<float>() / 8;
+
 	glDisable(GL_DITHER);
 
 	// loop until the user closes the window
@@ -398,11 +472,7 @@ int main() {
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		if (ImGui::Begin("Models")) {
-			ImGui::Text("Drag'n'Drop to load");
-		}
-		ImGui::End();
-
+		render_main_ui(window);
 		render(window);
 
 		ImGui::ShowMetricsWindow();
@@ -414,6 +484,8 @@ int main() {
 	}
 
 	glfwTerminate();
+	sal_progress.should_cancel = true;
+	if (sal_future.valid()) sal_future.wait();
 
 }
 

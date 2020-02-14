@@ -191,6 +191,11 @@ namespace green {
 
 		void load(const std::filesystem::path &fpath);
 
+		virtual std::string name() const override {
+			// TODO unicode...
+			return m_fpath.filename().string();
+		}
+
 		virtual void move_by(const glm::vec3 &d) override {
 			m_translation += d;
 		}
@@ -201,7 +206,9 @@ namespace green {
 
 		virtual glm::mat4 transform() const override;
 
-		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, const selection &sel) override;
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) override;
+
+		virtual std::future<bool> compute_saliency_async(const saliency_params &params, saliency_progress &progress) override;
 
 		virtual ~ModelEntity();
 	};

@@ -170,7 +170,7 @@ namespace green {
 		return transform * glm::mat4(transpose(basis));
 	}
 
-	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, const selection &sel) {
+	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) {
 		if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
 				// is this the best place to do this?
@@ -205,6 +205,11 @@ namespace green {
 				ImGui::Checkbox("Verts", &m_show_verts);
 				ImGui::SameLine();
 				if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+				ImGui::SameLine();
+				if (ImGui::Button("Select")) {
+					sel.select_entity = id();
+					sel.select_vertex = -1;
+				}
 				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
 					ImGui::Text("Remove model \"%s\" ?", m_fpath.filename().string().c_str());
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
@@ -276,6 +281,11 @@ namespace green {
 			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
 			glEnable(GL_CULL_FACE);
 		}
+	}
+
+	std::future<bool> ModelEntity::compute_saliency_async(const saliency_params &params, saliency_progress &progress) {
+		if (!m_model) return {};
+		return green::compute_saliency_async(*m_model, params, progress);
 	}
 
 	ModelEntity::~ModelEntity() {

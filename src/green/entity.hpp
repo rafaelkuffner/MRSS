@@ -6,6 +6,8 @@
 
 #include <cgu/util.hpp>
 
+#include "saliency.hpp"
+
 namespace green {
 
 	struct selection {
@@ -29,6 +31,8 @@ namespace green {
 			return m_id;
 		}
 
+		virtual std::string name() const = 0;
+
 		virtual bool dead() const = 0;
 
 		virtual void move_by(const glm::vec3 &d) {}
@@ -36,7 +40,11 @@ namespace green {
 		// model to world
 		virtual glm::mat4 transform() const = 0;
 
-		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, const selection &sel) = 0;
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) = 0;
+
+		virtual std::future<bool> compute_saliency_async(const saliency_params &params, saliency_progress &progress) {
+			return {};
+		}
 
 		virtual ~Entity() {}
 	};
