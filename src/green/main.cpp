@@ -259,6 +259,12 @@ namespace {
 				for (auto &e : entities) {
 					if (e->id() == eid) ep = e.get();
 				}
+				if (ImGui::Button("Clear")) {
+					sal_progress = {};
+					sal_entity_id = -1;
+					ep = nullptr;
+				}
+				ImGui::SameLine();
 				if (ep) {
 					if (ImGui::Button("Reselect")) {
 						cur_sel.select_entity = eid;

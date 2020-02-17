@@ -1,4 +1,7 @@
 
+# for openmp
+cmake_minimum_required(VERSION 3.9)
+
 set(sources
 	CMakeLists.txt
 	main.cpp
@@ -8,8 +11,20 @@ set(sources
 	assimp_openmesh.cpp
 	entity.hpp
 	entity.cpp
+	simd.h
+	plf_colony.h
 	saliency.hpp
 	saliency.cpp
+	neighborhood.hpp
+	neighborhood.cpp
+	curvature.hpp
+	curvature.cpp
+	meshutils.hpp
+	meshutils.cpp
+	Histogram.h
+	Histogram.cpp
+	FloatHistogram.h
+	FloatHistogram.cpp
 )
 
 cgu_create_missing(${sources})
@@ -22,3 +37,14 @@ cgu_target_source_group_tree(green)
 
 # for openmesh
 target_compile_definitions(green PUBLIC _USE_MATH_DEFINES)
+
+cgu_target_msvc_compile_options(green PRIVATE "/arch:AVX2")
+cgu_target_gcc_compile_options(green PRIVATE "-mavx2")
+
+# msvc openmp conflicts with two-phase name lookup support
+cgu_target_msvc_compile_options(green PRIVATE "/Zc:twoPhase-")
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+	target_link_libraries(green PRIVATE OpenMP::OpenMP_CXX)
+endif()
