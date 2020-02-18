@@ -15,9 +15,68 @@
 #ifndef GREEN_MESHUTILS_HPP
 #define GREEN_MESHUTILS_HPP
 
-#include "model.hpp"
+#include <OpenMesh/Core/IO/MeshIO.hh>
+#include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
+
+#include <glm/glm.hpp>
 
 namespace green {
+
+	inline OpenMesh::Vec3f glm2om(const glm::vec3 &v) {
+		OpenMesh::Vec3f vv;
+		vv[0] = v.x;
+		vv[1] = v.y;
+		vv[2] = v.z;
+		return vv;
+	}
+
+	inline glm::vec3 om2glm(const OpenMesh::Vec3f &v) {
+		glm::vec3 vv;
+		vv.x = v[0];
+		vv.y = v[1];
+		vv.z = v[2];
+		return vv;
+	}
+
+	struct DefaultMeshTraitsLCE
+	{
+		// OpenMesh default
+		typedef OpenMesh::Vec3f  Point;
+
+		// OpenMesh default
+		typedef OpenMesh::Vec3f  Normal;
+
+		// OpenMesh default
+		typedef float  TexCoord1D;
+
+		// use higher precision for texture coordinates
+		typedef OpenMesh::Vec2d  TexCoord2D;
+
+		// OpenMesh default
+		typedef OpenMesh::Vec3f  TexCoord3D;
+
+		// OpenMesh default
+		typedef int TextureIndex;
+
+		// OpenMesh default
+		typedef OpenMesh::Vec3uc Color;
+
+#ifndef DOXY_IGNORE_THIS
+		VertexTraits    {};
+		HalfedgeTraits  {};
+		EdgeTraits      {};
+		FaceTraits      {};
+#endif
+
+		VertexAttributes(0);
+		HalfedgeAttributes(OpenMesh::Attributes::PrevHalfedge);
+		EdgeAttributes(0);
+		FaceAttributes(0);
+	};
+
+	struct TriMesh : public OpenMesh::PolyMesh_ArrayKernelT<DefaultMeshTraitsLCE>
+	{
+	};
 
 	enum TransferFunction
 	{

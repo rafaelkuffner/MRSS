@@ -84,9 +84,9 @@ namespace {
 
 	bool saliency_window_open = false;
 	int sal_entity_id = -1;
-	saliency_params sal_params;
+	saliency_user_params sal_uparams;
 	saliency_progress sal_progress;
-	std::future<bool> sal_future;
+	std::future<saliency_result> sal_future;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -225,6 +225,8 @@ namespace {
 		glfwGetWindowSize(window, &winsize.x, &winsize.y);
 
 		if (ImGui::Begin("Models")) {
+			if (ImGui::Button(sal_future.valid() ? "Saliency... (running)" : "Saliency...", {-1, 0})) saliency_window_open = true;
+			ImGui::Separator();
 			ImGui::Text("Drag'n'Drop to load");
 		}
 		ImGui::End();
@@ -241,8 +243,6 @@ namespace {
 			// TODO custom plane/axis
 			ImGui::SameLine();
 			ImGui::Text(" Drag Mode");
-			ImGui::Separator();
-			if (ImGui::Button(sal_future.valid() ? "Saliency... (running)" : "Saliency...", {-1, 0})) saliency_window_open = true;
 			ImGui::Separator();
 		}
 		ImGui::End();
@@ -277,7 +277,7 @@ namespace {
 				if (sal_future.valid()) {
 					if (ImGui::Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
 					const float frac = float(sal_progress.completed_vertices) / sal_progress.total_vertices;
-					ImGui::Text("%2d/%d", sal_progress.completed_levels + 1, sal_params.levels);
+					ImGui::Text("%2d/%d", sal_progress.completed_levels + 1, sal_uparams.levels);
 					ImGui::SameLine();
 					ImGui::ProgressBar(frac);
 					if (sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -291,7 +291,7 @@ namespace {
 						if (ImGui::Button("GO", {-1, 0})) {
 							sal_entity_id = eid;
 							sal_progress = {};
-							sal_future = ep->compute_saliency_async(sal_params, sal_progress);
+							sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
 						}
 					} else {
 						ImGui::TextDisabled("Select a model");

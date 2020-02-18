@@ -13,12 +13,65 @@
 
 #include <chrono>
 #include <future>
+#include <functional>
+
+#include <imgui.h>
+
+#include "meshutils.hpp"
+#include "Histogram.h"
 
 namespace green {
 
-	class Model;
+	class saliency_result {
+	private:
+		std::function<void(bool)> m_cleanup;
+		bool m_success = false;
 
-	struct saliency_params {
+		void cleanup() {
+			if (m_cleanup) m_cleanup(m_success);
+		}
+
+	public:
+		saliency_result() = default;
+
+		saliency_result(std::function<void(bool)> cleanup_, bool success_)
+			: m_cleanup(std::move(cleanup_))
+			, m_success(success_)
+		{}
+
+		saliency_result(const saliency_result &) = delete;
+		saliency_result & operator=(const saliency_result &) = delete;
+
+		saliency_result(saliency_result &&other)
+			: m_cleanup(std::move(other.m_cleanup))
+			, m_success(other.m_success)
+		{
+			other.m_cleanup = {};
+		}
+
+		saliency_result & operator=(saliency_result &&other) {
+			cleanup();
+			m_cleanup = std::move(other.m_cleanup);
+			m_success = other.m_success;
+			other.m_cleanup = {};
+			return *this;
+		}
+
+		explicit operator bool() const {
+			return m_success;
+		}
+
+		bool operator!() const {
+			return !bool(*this);
+		}
+
+		~saliency_result() {
+			cleanup();
+		}
+
+	};
+
+	struct saliency_user_params {
 		int levels = 5;
 		float area = 0.02f;
 		float curv_weight = 0.f;
@@ -26,6 +79,19 @@ namespace green {
 		// command line progress output
 		bool show_progress = true;
 		// TODO etc
+	};
+
+	struct saliency_mesh_params {
+		// TODO const
+		TriMesh *mesh = nullptr;
+		// inputs
+		OpenMesh::VPropHandleT<float> prop_vertex_area;
+		OpenMesh::EPropHandleT<float> prop_edge_length;
+		// outputs
+		OpenMesh::VPropHandleT<float> prop_curvature;
+		OpenMesh::VPropHandleT<float> prop_saliency;
+		std::vector<OpenMesh::VPropHandleT<float>> prop_saliency_levels;
+		std::function<void(bool)> cleanup;
 	};
 
 	struct saliency_progress {
@@ -36,9 +102,9 @@ namespace green {
 		bool should_cancel = false;
 	};
 
-	bool compute_saliency(Model &model, const saliency_params &params, saliency_progress &progress);
+	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);
 
-	std::future<bool> compute_saliency_async(Model &model, const saliency_params &params, saliency_progress &progress);
+	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);
 
 }
 

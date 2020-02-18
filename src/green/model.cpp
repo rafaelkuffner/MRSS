@@ -38,8 +38,11 @@ namespace green {
 			m_bound_max = max(m_bound_max, om2glm(m_trimesh.point(*vit)));
 		}
 
-		// TODO loading on background thread
-		// gl mesh upload has to happen on main thread
+		std::cout << "Computing vertex areas" << std::endl;
+		m_prop_vertex_area = computeVertexAreas(m_trimesh);
+
+		std::cout << "Computing edge lengths" << std::endl;
+		m_prop_edge_length = computeEdgeLengths(m_trimesh);
 
 	}
 
@@ -251,6 +254,45 @@ namespace green {
 				ImGui::SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
 				ImGui::SliderFloat3("Translation", value_ptr(m_translation), -10, 10);
 				if (ImGui::Button("Reset Scale")) m_scale = m_model->unit_bound_scale() * 4;
+
+				ImGui::Separator();
+				ImGui::Text("Saliency Results");
+				ImGui::Checkbox("Show Saliency", &m_show_saliency);
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+				ImGui::Combo(
+					"Result", &m_saliency_index,
+					[](void *data, int item, const char **out_text) {
+						auto ds = reinterpret_cast<model_saliency_data *>(data);
+						// TODO
+						*out_text = "TODO";
+						return true;
+					}, m_saliency_outputs.data(), m_saliency_outputs.size()
+				);
+
+				if (m_saliency_index < m_saliency_outputs.size()) {
+					if (ImGui::Button("Reload Parameters")) {
+						// TODO how?
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+					if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
+						ImGui::Text("Remove saliency result?");
+						if (ImGui::Button("Remove")) {
+							auto it = m_saliency_outputs.begin() + m_saliency_index;
+							m_model->trimesh().remove_property(it->prop_saliency);
+							m_saliency_outputs.erase(it);
+							if (m_saliency_index >= m_saliency_outputs.size()) {
+								m_saliency_index = std::max(0, m_saliency_index - 1);
+							}
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+						ImGui::EndPopup();
+					}
+				}
+
 				ImGui::PopID();
 			}
 		}
@@ -283,9 +325,30 @@ namespace green {
 		}
 	}
 
-	std::future<bool> ModelEntity::compute_saliency_async(const saliency_params &params, saliency_progress &progress) {
+	std::future<saliency_result> ModelEntity::compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) {
 		if (!m_model) return {};
-		return green::compute_saliency_async(*m_model, params, progress);
+		saliency_mesh_params mparams;
+		mparams.mesh = &m_model->trimesh();
+		mparams.prop_vertex_area = m_model->prop_vertex_area();
+		mparams.prop_edge_length = m_model->prop_edge_length();
+		// create properties
+		mparams.prop_saliency_levels.resize(uparams.levels);
+		mparams.mesh->add_property(mparams.prop_curvature);
+		mparams.mesh->add_property(mparams.prop_saliency);
+		for (int i = 0; i < uparams.levels; i++) {
+			mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
+		}
+		mparams.cleanup = [=](bool r) mutable {
+			// destroy properties
+			mparams.mesh->remove_property(mparams.prop_curvature);
+			for (int i = 0; i < uparams.levels; i++) {
+				mparams.mesh->remove_property(mparams.prop_saliency_levels[i]);
+			}
+			if (!r) mparams.mesh->remove_property(mparams.prop_saliency);
+			m_saliency_outputs.push_back({uparams, mparams.prop_saliency});
+			m_saliency_index = m_saliency_outputs.size() - 1;
+		};
+		return green::compute_saliency_async(mparams, uparams, progress);
 	}
 
 	ModelEntity::~ModelEntity() {

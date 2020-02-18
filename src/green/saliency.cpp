@@ -24,8 +24,8 @@
 
 namespace green {
 
-	std::future<bool> compute_saliency_async(Model &model, const saliency_params &params, saliency_progress &progress) {
-		return std::async([&, params=params]() { return compute_saliency(model, params, progress); });
+	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
+		return std::async([=, &progress]() { return compute_saliency(mparams, uparams, progress); });
 	}
 
 	class SaliencyComputation {
@@ -36,16 +36,11 @@ namespace green {
 			bool deleted = false;
 		};
 
-		saliency_params m_params;
+		saliency_mesh_params m_mparams;
+		saliency_user_params m_uparams;
 		saliency_progress &m_progress;
-		TriMesh &m_mesh;
 		MeshCache m_meshcache;
 		std::vector<sample_candidate> m_candidates0;
-		OpenMesh::VPropHandleT<float> m_vertexAreasProperty;
-		OpenMesh::EPropHandleT<float> m_edgeLengthProperty;
-		OpenMesh::VPropHandleT<float> m_curvatureProperty;
-		OpenMesh::VPropHandleT<float> m_saliencyProperty;
-		OpenMesh::VPropHandleT<std::vector<float>> m_multiscaleSaliencyProperty;
 		float m_surfaceArea = 0;
 		float m_hMin = 0;
 		float m_hMax = 0;
@@ -54,44 +49,28 @@ namespace green {
 		std::chrono::steady_clock::time_point m_time_last_percent = std::chrono::steady_clock::now();
 
 	public:
-		SaliencyComputation(const saliency_params &params_, saliency_progress &progress_, TriMesh &mesh_)
-			: m_params(params_)
+		SaliencyComputation(const saliency_mesh_params &mparams_, const saliency_user_params &uparams_, saliency_progress &progress_)
+			: m_mparams(mparams_)
+			, m_uparams(uparams_)
 			, m_progress(progress_)
-			, m_mesh(mesh_)
 		{
 			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
 			m_thread_stats.assign(omp_get_max_threads(), {});
 
-			if (m_mesh.get_property_handle(m_saliencyProperty, "quality")) {
-				// reuse saliency property
-			} else {
-				m_mesh.add_property(m_saliencyProperty);
-			}
-
-			std::cout << "Computing vertex areas" << std::endl;
-			m_vertexAreasProperty = computeVertexAreas(m_mesh);
-
-			std::cout << "Computing edge lengths" << std::endl;
-			m_edgeLengthProperty = computeEdgeLengths(m_mesh);
-
 			lce::Histogram curvhist;
 
+			// note: we can't cache the curvature because we couldn't adjust the normal power etc
 			std::cout << "Computing curvature" << std::endl;
 			// TODO params and curv selection
-			computeDoNMaxDiffs(m_mesh, m_curvatureProperty, curvhist, m_vertexAreasProperty, 1.f);
+			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, 1.f);
 
 			m_hMin = curvhist.getMin();
 			m_hMax = curvhist.getMax();
 
 			std::cout << "Computing surface area" << std::endl;
-			m_surfaceArea = surfaceArea(m_mesh);
+			m_surfaceArea = surfaceArea(*m_mparams.mesh);
 
-			m_mesh.add_property(m_multiscaleSaliencyProperty);
-			for (auto vIt = m_mesh.vertices_begin(), vEnd = m_mesh.vertices_end(); vIt != vEnd; ++vIt) {
-				m_mesh.property(m_multiscaleSaliencyProperty, *vIt).resize(m_params.levels);
-			}
-
-			m_meshcache = MeshCache(m_mesh, m_edgeLengthProperty, m_vertexAreasProperty, m_curvatureProperty);
+			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
 
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());
@@ -111,22 +90,22 @@ namespace green {
 			}
 		}
 
-		void run() {
+		bool run() {
 
 			// TODO cancellation
 
 			m_progress.completed_levels = 0;
 			m_progress.completed_vertices = 0;
-			m_progress.total_vertices = m_mesh.n_vertices();
+			m_progress.total_vertices = m_mparams.mesh->n_vertices();
 
-			const float MaxRadius = sqrt(m_surfaceArea * m_params.area / 3.14159265f);
+			const float MaxRadius = sqrt(m_surfaceArea * m_uparams.area / 3.14159265f);
 
 			// TODO params
 			const float samples_per_neighbourhood = 100;
 			std::cout << "Saliency samples per neighbourhood: " << samples_per_neighbourhood << std::endl;
 
 			// compute saliency at multiple levels
-			for (int currentLevel = 0; currentLevel < m_params.levels; currentLevel++)
+			for (int currentLevel = 0; currentLevel < m_uparams.levels; currentLevel++)
 			{
 				m_progress.completed_vertices = 0;
 
@@ -135,10 +114,10 @@ namespace green {
 
 				// upper bound because infinities and overflow and we don't support more than INT_MAX vertices atm anyway
 				const int subsampling = samples_per_neighbourhood > 0
-					? 1.5f + std::min((currentArea / m_surfaceArea) * m_mesh.n_vertices() / samples_per_neighbourhood, 1000000.f)
+					? 1.5f + std::min((currentArea / m_surfaceArea) * m_mparams.mesh->n_vertices() / samples_per_neighbourhood, 1000000.f)
 					: 1;
 
-				const bool normalmap_filter = m_params.normalmap_filter && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
+				const bool normalmap_filter = m_uparams.normalmap_filter && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
 
 				std::cout << "Desired saliency subsampling ~" << (100.f / subsampling) << "% (~" << subsampling << "x)" << std::endl;
 
@@ -159,42 +138,39 @@ namespace green {
 
 			// merge saliency values to a single score / property
 			std::cout << "Merging saliency values" << std::endl;
-			for (auto vIt = m_mesh.vertices_begin(), vEnd = m_mesh.vertices_end(); vIt != vEnd; ++vIt)
+			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
 				float s = 0.0f;
 
-				for (unsigned i = 0; i < m_params.levels; ++i)
+				for (unsigned i = 0; i < m_uparams.levels; ++i)
 				{
-					const std::vector<float> & saliencyValues = m_mesh.property(m_multiscaleSaliencyProperty, *vIt);
-					assert(saliencyValues.size() == m_params.levels);
-					//s = std::max(s, saliencyValues[i]);
-					s += saliencyValues[i];
+					s += m_mparams.mesh->property(m_mparams.prop_saliency_levels[i], *vIt);
 				}
 
-				s /= m_params.levels;
+				s /= m_uparams.levels;
 
-				m_mesh.property(m_saliencyProperty, *vIt) = s;
+				m_mparams.mesh->property(m_mparams.prop_saliency, *vIt) = s;
 			}
 
 			// normalize saliency and add curvature
 			std::cout << "Normalizing saliency values" << std::endl;
 			float sMin =  FLT_MAX;
 			float sMax = -FLT_MAX;
-			for (auto vIt = m_mesh.vertices_begin(), vEnd = m_mesh.vertices_end(); vIt != vEnd; ++vIt)
+			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
-				float s = m_mesh.property(m_saliencyProperty, *vIt);
+				float s = m_mparams.mesh->property(m_mparams.prop_saliency, *vIt);
 				sMin = std::min(s, sMin);
 				sMax = std::max(s, sMax);
 			}
 			std::cout << "Raw saliency range: " << sMin << ' ' << sMax << std::endl;
 			float sRange = sMax - sMin;
-			for (auto vIt = m_mesh.vertices_begin(), vEnd = m_mesh.vertices_end(); vIt != vEnd; ++vIt)
+			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
-				float curvature = m_mesh.property(m_curvatureProperty, *vIt);
-				float s = m_mesh.property(m_saliencyProperty, *vIt);
+				float curvature = m_mparams.mesh->property(m_mparams.prop_curvature, *vIt);
+				float s = m_mparams.mesh->property(m_mparams.prop_saliency, *vIt);
 				float normalizedSal = (s - sMin) / sRange;
-				normalizedSal = (normalizedSal + (m_params.curv_weight * curvature)) < 1 ? normalizedSal + (m_params.curv_weight * curvature) : 1;
-				m_mesh.property(m_saliencyProperty, *vIt) = normalizedSal;
+				normalizedSal = (normalizedSal + (m_uparams.curv_weight * curvature)) < 1 ? normalizedSal + (m_uparams.curv_weight * curvature) : 1;
+				m_mparams.mesh->property(m_mparams.prop_saliency, *vIt) = normalizedSal;
 			}
 
 			auto now = std::chrono::steady_clock::now();
@@ -204,20 +180,18 @@ namespace green {
 
 			// TODO colorization
 
-			// make sure the property is written to the file
-			m_mesh.property(m_saliencyProperty).set_persistent(true);
-
+			return true;
 		}
 
 		void run_level_full(int currentLevel, float currentRadius, bool normalmap_filter) {
 
 			std::atomic<int> completion{0};
 
-			std::cout << "Saliency computation [full] (lv " << (currentLevel + 1) << "/" << m_params.levels << "): 0%";
+			std::cout << "Saliency computation [full] (lv " << (currentLevel + 1) << "/" << m_uparams.levels << "): 0%";
 			std::cout.flush();	
 
 #pragma omp parallel for schedule(dynamic, 2)
-			for (int i = 0; i < m_mesh.n_vertices(); i += simd_traits::simd_size)
+			for (int i = 0; i < m_mparams.mesh->n_vertices(); i += simd_traits::simd_size)
 			{
 				auto &stats = m_thread_stats[omp_get_thread_num()];
 				stats.timer_begin();
@@ -227,7 +201,7 @@ namespace green {
 
 				std::array<unsigned, simd_traits::simd_size> vdis;
 				for (int j = 0; j < vdis.size(); j++) {
-					vdis[j] = i + j < m_mesh.n_vertices() ? m_meshcache.vdis[i + j] : -1;
+					vdis[j] = i + j < m_mparams.mesh->n_vertices() ? m_meshcache.vdis[i + j] : -1;
 				}
 
 				// NOTE: now produces vertex data indices, not ordinary vertex indices
@@ -244,7 +218,7 @@ namespace green {
 					//const float sal = computeSaliency(j, meshcache, neighbors, zero1, zero9);
 
 					using simd::simd_extract;
-					m_mesh.property(m_multiscaleSaliencyProperty, v)[currentLevel] = sal[j];
+					m_mparams.mesh->property(m_mparams.prop_saliency_levels[currentLevel], v) = sal[j];
 
 				}
 
@@ -252,15 +226,15 @@ namespace green {
 
 				const int completion1 = completion.fetch_add(simd_traits::simd_size);
 
-				if (m_params.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
+				if (m_uparams.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
 					m_time_last_percent = stats.time0;
-					auto pc = 100.0f * (float(completion1) / m_mesh.n_vertices());
-					std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%", currentLevel + 1, m_params.levels, pc);
+					auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
+					std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
 					m_progress.completed_vertices = completion1;
 				}
 			}
 
-			std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%\n", currentLevel + 1, m_params.levels, 100.0f * (float(completion) / m_mesh.n_vertices()));
+			std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%\n", currentLevel + 1, m_uparams.levels, 100.0f * (float(completion) / m_mparams.mesh->n_vertices()));
 			std::cout << "Actual saliency subsampling: 100% (1x)" << std::endl;
 
 		}
@@ -270,7 +244,7 @@ namespace green {
 			std::atomic<int> completion{0};
 
 			// should subsample
-			std::cout << "Saliency computation [subsampled] (lv " << (currentLevel + 1) << "/" << m_params.levels << "): 0%";
+			std::cout << "Saliency computation [subsampled] (lv " << (currentLevel + 1) << "/" << m_uparams.levels << "): 0%";
 			std::cout.flush();
 
 			struct weighted_saliency {
@@ -278,10 +252,10 @@ namespace green {
 				std::atomic<float> w{0.f};
 			};
 
-			std::vector<weighted_saliency> tempSaliencyProperty(m_mesh.n_vertices());
+			std::vector<weighted_saliency> tempSaliencyProperty(m_mparams.mesh->n_vertices());
 
 			// radius of a circle with 1/nsamples of the surface area
-			const float subsampling_radius = sqrt(m_surfaceArea * subsampling / m_mesh.n_vertices() / 3.14159265f);
+			const float subsampling_radius = sqrt(m_surfaceArea * subsampling / m_mparams.mesh->n_vertices() / 3.14159265f);
 
 			// correction factor to (experimentally) try to get closer to the desired number of samples.
 			// we would expect this to be < 2, because circles of subsampling_radius would overlap on a flat surface.
@@ -297,7 +271,7 @@ namespace green {
 			// radius within which to prevent future samples
 			const float exclusion_radius = subsampling_radius * sampling_correction;
 
-			std::vector<plf::colony<sample_candidate>::iterator> candidateProperty(m_mesh.n_vertices());
+			std::vector<plf::colony<sample_candidate>::iterator> candidateProperty(m_mparams.mesh->n_vertices());
 
 			plf::colony<sample_candidate> candidates;
 			candidates.reserve(m_meshcache.vdis.size());
@@ -361,7 +335,7 @@ namespace green {
 					// candidate already usable
 					return nc.it->vdi;
 				}
-				if (cand_inc_loop_area(nc, float(subsampling) / m_mesh.n_vertices())) {
+				if (cand_inc_loop_area(nc, float(subsampling) / m_mparams.mesh->n_vertices())) {
 					// search for next candidate (probably) exhausted
 					// note: the 'probably' currently prevents us from sentinel-izing the iterator
 					return unsigned(-1);
@@ -437,10 +411,10 @@ namespace green {
 					// TODO ? completion is approximate when subsampling
 					const int completion1 = completion.fetch_add(subsampling);
 
-					if (m_params.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
+					if (m_uparams.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
 						m_time_last_percent = stats.time0;
-						auto pc = 100.0f * (float(completion1) / m_mesh.n_vertices());
-						std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%", currentLevel + 1, m_params.levels, pc);
+						auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
+						std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
 						m_progress.completed_vertices = completion1;
 					}
 				}
@@ -467,38 +441,35 @@ namespace green {
 				}
 
 				if (candidates.empty()) {
-					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%% : no more sample candidates\n", currentLevel + 1, m_params.levels, 100.0f * (float(completion) / m_mesh.n_vertices()));
-					const float actual_subsampling = m_mesh.n_vertices() / float(completion / subsampling);
+					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%% : no more sample candidates\n", currentLevel + 1, m_uparams.levels, 100.0f * (float(completion) / m_mparams.mesh->n_vertices()));
+					const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion / subsampling);
 					std::cout << "Actual saliency subsampling: " << (100.f / actual_subsampling) << "% (" << actual_subsampling << "x)" << std::endl;
 					break;
 				}
 
 			}
 
-			for (auto vIt = m_mesh.vertices_begin(), vEnd = m_mesh.vertices_end(); vIt != vEnd; ++vIt) {
+			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt) {
 				const auto &p = tempSaliencyProperty[vIt->idx()];
-				m_mesh.property(m_multiscaleSaliencyProperty, *vIt)[currentLevel] = p.s / (p.w + 0.001f);
+				m_mparams.mesh->property(m_mparams.prop_saliency_levels[currentLevel], *vIt) = p.s / (p.w + 0.001f);
 			}
 
 		}
 
 		~SaliencyComputation() {
-			// TODO property reuse
-			m_mesh.remove_property(m_vertexAreasProperty);
-			m_mesh.remove_property(m_edgeLengthProperty);
-			m_mesh.remove_property(m_curvatureProperty);
-			m_mesh.remove_property(m_multiscaleSaliencyProperty);
+
 		}
 	};
 	
-	bool compute_saliency(Model &model, const saliency_params &params, saliency_progress &progress) {
+	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
 		// TODO thread control
+		// note: saliency computation should not create/destroy properties,
+		// only use them, to minimize problems (potential corruption) from concurrent access
 		omp_set_num_threads(2);
 		const auto time_start = std::chrono::steady_clock::now();
-		auto &mesh = model.trimesh();
-		SaliencyComputation s(params, progress, mesh);
-		s.run();
-		return true;
+		SaliencyComputation s(mparams, uparams, progress);
+		bool r = s.run();
+		saliency_result(mparams.cleanup, r);
 	}
 
 }

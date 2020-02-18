@@ -10,73 +10,15 @@
 #include <algorithm>
 #include <future>
 
-#include <OpenMesh/Core/IO/MeshIO.hh>
-#include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
-
 #include <cgu/opengl.hpp>
 
 // ensure assimp openmesh modules are registered via static init
 #include "assimp_openmesh.hpp"
 
+#include "meshutils.hpp"
 #include "entity.hpp"
 
 namespace green {
-
-	inline OpenMesh::Vec3f glm2om(const glm::vec3 &v) {
-		OpenMesh::Vec3f vv;
-		vv[0] = v.x;
-		vv[1] = v.y;
-		vv[2] = v.z;
-		return vv;
-	}
-
-	inline glm::vec3 om2glm(const OpenMesh::Vec3f &v) {
-		glm::vec3 vv;
-		vv.x = v[0];
-		vv.y = v[1];
-		vv.z = v[2];
-		return vv;
-	}
-
-	struct DefaultMeshTraitsLCE
-	{
-		// OpenMesh default
-		typedef OpenMesh::Vec3f  Point;
-
-		// OpenMesh default
-		typedef OpenMesh::Vec3f  Normal;
-
-		// OpenMesh default
-		typedef float  TexCoord1D;
-
-		// use higher precision for texture coordinates
-		typedef OpenMesh::Vec2d  TexCoord2D;
-
-		// OpenMesh default
-		typedef OpenMesh::Vec3f  TexCoord3D;
-
-		// OpenMesh default
-		typedef int TextureIndex;
-
-		// OpenMesh default
-		typedef OpenMesh::Vec3uc Color;
-
-#ifndef DOXY_IGNORE_THIS
-		VertexTraits    {};
-		HalfedgeTraits  {};
-		EdgeTraits      {};
-		FaceTraits      {};
-#endif
-
-		VertexAttributes(0);
-		HalfedgeAttributes(OpenMesh::Attributes::PrevHalfedge);
-		EdgeAttributes(0);
-		FaceAttributes(0);
-	};
-
-	struct TriMesh : public OpenMesh::PolyMesh_ArrayKernelT<DefaultMeshTraitsLCE>
-	{
-	};
 
 	struct model_draw_params {
 		selection sel;
@@ -88,12 +30,19 @@ namespace green {
 		bool use_vert_color = false;
 	};
 
+	struct model_saliency_data {
+		saliency_user_params uparams;
+		OpenMesh::VPropHandleT<float> prop_saliency;
+	};
+
 	class Model {
 	private:
 		Model(const Model &) = delete;
 		Model & operator=(const Model &) = delete;
 
 		TriMesh m_trimesh;
+		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
+		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 
@@ -111,6 +60,14 @@ namespace green {
 
 		TriMesh & trimesh() {
 			return m_trimesh;
+		}
+
+		OpenMesh::VPropHandleT<float> prop_vertex_area() const {
+			return m_prop_vertex_area;
+		}
+
+		OpenMesh::EPropHandleT<float> prop_edge_length() const {
+			return m_prop_edge_length;
 		}
 
 		glm::vec3 bound_min() const {
@@ -153,7 +110,9 @@ namespace green {
 		std::filesystem::path m_fpath;
 		std::unique_ptr<Model> m_model;
 		std::future<std::unique_ptr<Model>> m_pending;
-		
+		std::vector<model_saliency_data> m_saliency_outputs;
+		int m_saliency_index = 0;
+
 		float m_scale = 1;
 		glm::vec3 m_translation{0};
 
@@ -176,6 +135,7 @@ namespace green {
 		bool m_show_faces = true;
 		bool m_show_edges = false;
 		bool m_show_verts = false;
+		bool m_show_saliency = true;
 		bool m_dead = false;
 
 	public:
@@ -208,7 +168,7 @@ namespace green {
 
 		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) override;
 
-		virtual std::future<bool> compute_saliency_async(const saliency_params &params, saliency_progress &progress) override;
+		virtual std::future<saliency_result> compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) override;
 
 		virtual ~ModelEntity();
 	};

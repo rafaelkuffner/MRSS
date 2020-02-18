@@ -42,7 +42,7 @@ namespace green {
 
 		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) = 0;
 
-		virtual std::future<bool> compute_saliency_async(const saliency_params &params, saliency_progress &progress) {
+		virtual std::future<saliency_result> compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) {
 			return {};
 		}
 
