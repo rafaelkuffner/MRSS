@@ -258,8 +258,6 @@ namespace {
 			ImGui::SetNextWindowSize({400, 400}, ImGuiCond_Appearing);
 			ImGui::SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
 			if (ImGui::Begin("Saliency", &saliency_window_open)) {
-				ImGui::Text("params...");
-				ImGui::Separator();
 				int eid = sal_entity_id >= 0 ? sal_entity_id : cur_sel.select_entity;
 				Entity *ep = nullptr;
 				for (auto &e : entities) {
@@ -295,6 +293,8 @@ namespace {
 						ImGui::TextDisabled("Select a model");
 					}
 				}
+				ImGui::Separator();
+				ImGui::edit_saliency_params(sal_uparams);
 				ImGui::Separator();
 				ImGui::draw_saliency_progress(sal_progress);
 				if (ImGui::Button("Clear", {-1, 0})) sal_progress = {};
@@ -534,8 +534,14 @@ namespace ImGui {
 			ImGui::ProgressBar(frac, {-1, 0}, buf);
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d / %d vertices", level.completed_vertices, progress.total_vertices);
 		}
-		const double elapsed_seconds = progress.elapsed_time / std::chrono::duration<double>(1.0);
-		ImGui::Text("Elapsed %.3fs", elapsed_seconds);
+		ImGui::Text("Elapsed %.3fs", progress.elapsed_time / std::chrono::duration<double>(1.0));
+	}
+
+	void edit_saliency_params(green::saliency_user_params &uparams) {
+		ImGui::SliderInt("Levels", &uparams.levels, 1, 10);
+		ImGui::SliderFloat("Area", &uparams.area, 0, 0.5f, "%.3f", 3);
+		ImGui::SliderFloat("Curv Weight", &uparams.curv_weight, 0, 1);
+		ImGui::Checkbox("Normalmap Filter", &uparams.normalmap_filter);
 	}
 
 }

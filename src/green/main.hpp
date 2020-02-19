@@ -21,6 +21,8 @@ namespace ImGui {
 
 	void draw_saliency_progress(const green::saliency_progress &progress);
 
+	void edit_saliency_params(green::saliency_user_params &uparams);
+
 }
 
 #endif
