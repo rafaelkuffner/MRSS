@@ -35,14 +35,19 @@ out VertexData {
 	flat int id;
 } v_out;
 
-vec4 map_color_zbrush(vec4 c, bool h, bool s) {
+vec4 gamma_decode(vec4 c) {
+	return vec4(pow(c.rgb, vec3(2.2)), c.a);
+}
+
+vec4 map_color_zbrush(float k, bool h, bool s) {
 	// high color: red or hover/select
 	vec4 c0 = (h ? u_color_hover * 1.5 : s ? u_color_select * 1.5 : vec4(1, 0, 0, 1));
 	// cyan to white
-	vec4 cl = vec4(c.r * 2, 1, 1, 1);
+	vec4 cl = vec4(k * 2, 1, 1, 1);
 	// white to <high>
-	vec4 ch = mix(vec4(1), c0, 2 * c.r - 1);
-	return mix(cl, ch, bvec4(c.r > 0.5));
+	vec4 ch = mix(vec4(1), c0, 2 * k - 1);
+	// we have to interpolate in gamma-encoded space for it to look 'correct'
+	return gamma_decode(mix(cl, ch, bvec4(k > 0.5)));
 }
 
 vec4 map_color(vec4 c, bool h, bool s) {
@@ -55,7 +60,7 @@ vec4 map_color(vec4 c, bool h, bool s) {
 		return c.r * (h ? u_color_hover : s ? u_color_select : u_color);
 	case 2:
 		// zbrush style (with different colors for hover/select)
-		return map_color_zbrush(c, h, s);
+		return map_color_zbrush(c.r, h, s);
 	default:
 		return c;
 	}
