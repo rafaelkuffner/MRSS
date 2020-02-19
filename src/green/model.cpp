@@ -54,6 +54,7 @@ namespace green {
 		if (!m_ibo) m_ibo = cgu::gl_object::gen_buffer();
 		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
 		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
+		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
 		const size_t ntris = m_trimesh.n_faces();
 		const size_t nverts = m_trimesh.n_vertices();
 		assert(ntris <= size_t(INT_MAX));
@@ -81,10 +82,13 @@ namespace green {
 		if (makevao) {
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
 			glEnableVertexAttribArray(0);
-			glVertexAttribPointer(0, 3, GL_FLOAT, false, 12, 0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_norm);
 			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(1, 3, GL_FLOAT, false, 12, 0);
+			glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 4, GL_FLOAT, false, sizeof(glm::vec4), 0);
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindVertexArray(0);
@@ -93,12 +97,13 @@ namespace green {
 	void Model::update_vbos() {
 		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
 		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
-		m_trimesh.points();
-		m_trimesh.vertex_normals();
+		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
-		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * 12, m_trimesh.points(), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * sizeof(glm::vec3), m_trimesh.points(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_norm);
-		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * 12, m_trimesh.vertex_normals(), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * sizeof(glm::vec3), m_trimesh.vertex_normals(), GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
+		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
@@ -144,6 +149,9 @@ namespace green {
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
 		glUniform4iv(glGetUniformLocation(prog, "u_selection"), 1, (GLint *) &params.sel);
+		glUniform1i(glGetUniformLocation(prog, "u_use_vert_color"), params.use_vert_color);
+		// TODO color map selection
+		glUniform1i(glGetUniformLocation(prog, "u_vert_color_map"), params.use_vert_color ? 2 : 0);
 
 		draw(polymode);
 	}
@@ -173,6 +181,28 @@ namespace green {
 
 		glm::mat3 basis(m_basis_vectors[basis_right].v, m_basis_vectors[basis_up].v, m_basis_vectors[basis_back].v);
 		return transform * glm::mat4(transpose(basis));
+	}
+
+	void ModelEntity::update_vbo() {
+		if (!m_model) return;
+		if (!m_saliency_vbo_dirty) return;
+		if (m_saliency_index >= m_saliency_outputs.size()) return;
+		GLuint vbo_col = m_model->vbo_color();
+		if (!vbo_col) return;
+		const auto &mesh = m_model->trimesh();
+		const auto nverts = m_model->vao_nverts();
+		auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
+		glBindBuffer(GL_ARRAY_BUFFER, vbo_col);
+		auto *data = reinterpret_cast<glm::vec4 *>(
+			glMapBufferRange(GL_ARRAY_BUFFER, 0, nverts * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
+		);
+		for (size_t i = 0; i < nverts; i++) {
+			const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
+			data[i] = glm::vec4(s, 0, 0, 1);
+		}
+		glUnmapBuffer(GL_ARRAY_BUFFER);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		m_saliency_vbo_dirty = false;
 	}
 
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
@@ -263,7 +293,7 @@ namespace green {
 				ImGui::Checkbox("Show Saliency", &m_show_saliency);
 				ImGui::SameLine();
 				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-				ImGui::Combo(
+				if (ImGui::Combo(
 					"Result", &m_saliency_index,
 					[](void *data, int item, const char **out_text) {
 						auto ds = reinterpret_cast<model_saliency_data *>(data);
@@ -271,7 +301,9 @@ namespace green {
 						*out_text = "TODO";
 						return true;
 					}, m_saliency_outputs.data(), m_saliency_outputs.size()
-				);
+				)) {
+					m_saliency_vbo_dirty = true;
+				}
 				if (m_saliency_index < m_saliency_outputs.size()) {
 					auto &salout = m_saliency_outputs[m_saliency_index];
 					if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
@@ -300,15 +332,18 @@ namespace green {
 		}
 		ImGui::End();
 		if (m_model) {
+			update_vbo();
 			model_draw_params params;
 			params.sel = sel;
 			params.entity_id = id();
 			params.color = {0.6f, 0.6f, 0.5f, 1};
 			params.color_hover = {0.7f, 0.7f, 0.3f, 1};
 			params.color_select = {0.7f, 0.4f, 0.1f, 1};
+			if (m_show_saliency && m_saliency_index < m_saliency_outputs.size()) params.use_vert_color = true;
 			glEnable(GL_CULL_FACE);
 			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+			params.use_vert_color = false;
 			params.shading = 0;
 			params.color = {0.03f, 0.03f, 0.03f, 1};
 			params.color_hover = params.color;
@@ -352,6 +387,7 @@ namespace green {
 				m_saliency_outputs.push_back({uparams, *pprogress, mparams.prop_saliency});
 				// give focus to this result
 				m_saliency_index = m_saliency_outputs.size() - 1;
+				m_saliency_vbo_dirty = true;
 			} else {
 				// cancelled, destroy saliency property too
 				mparams.mesh->remove_property(mparams.prop_saliency);

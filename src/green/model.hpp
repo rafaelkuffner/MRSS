@@ -50,7 +50,7 @@ namespace green {
 		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
 		cgu::gl_object m_vao;
 		cgu::gl_object m_ibo;
-		cgu::gl_object m_vbo_pos, m_vbo_norm;
+		cgu::gl_object m_vbo_pos, m_vbo_norm, m_vbo_col;
 
 	public:
 		Model(const std::filesystem::path &fpath);
@@ -96,6 +96,14 @@ namespace green {
 			return xmin;
 		}
 
+		GLuint vbo_color() const {
+			return m_vbo_col;
+		}
+
+		GLuint vao_nverts() const {
+			return m_vao_nverts;
+		}
+
 		void update_vao();
 
 		void update_vbos();
@@ -113,6 +121,7 @@ namespace green {
 		std::future<std::unique_ptr<Model>> m_pending;
 		std::vector<model_saliency_data> m_saliency_outputs;
 		int m_saliency_index = 0;
+		bool m_saliency_vbo_dirty = false;
 
 		float m_scale = 1;
 		glm::vec3 m_translation{0};
@@ -138,6 +147,8 @@ namespace green {
 		bool m_show_verts = false;
 		bool m_show_saliency = true;
 		bool m_dead = false;
+
+		void update_vbo();
 
 	public:
 		ModelEntity();
