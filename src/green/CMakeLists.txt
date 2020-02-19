@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.9)
 
 set(sources
 	CMakeLists.txt
+	main.hpp
 	main.cpp
 	model.hpp
 	model.cpp

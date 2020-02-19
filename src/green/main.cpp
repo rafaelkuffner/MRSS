@@ -1,9 +1,11 @@
 
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <stdexcept>
 #include <chrono>
 #include <thread>
+#include <omp.h>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -16,6 +18,7 @@
 #include <cgu/mesh.hpp>
 #include <cgu/shader.hpp>
 
+#include "main.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
 
@@ -29,7 +32,9 @@ namespace {
 	void scroll_callback(GLFWwindow *win, double xoffset, double yoffset);
 	void key_callback(GLFWwindow *win, int key, int scancode, int action, int mods);
 	void char_callback(GLFWwindow *win, unsigned int c);
+	void focus_callback(GLFWwindow *win, int focused);
 	void APIENTRY gl_debug_callback(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar *, const GLvoid *);
+	void set_ui_thread_priority();
 
 	const char *glsl_depth_env = R"(
 	#ifndef DEPTH_ENV
@@ -74,13 +79,14 @@ namespace {
 	cgu::gl_object buf_read_ids, buf_read_depths;
 	glm::ivec2 pos_read_ids{0};
 	const int size_read_ids = 64;
-	selection cur_sel;
+	entity_selection cur_sel;
 	float cur_depth = zfar;
 	glm::vec3 cur_world_pos{0};
 	glm::vec3 drag_world_origin{0}, drag_world_pos{0};
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
 	bool maybe_dragging = false;
 	drag_mode cur_drag_mode = drag_mode::plane;
+	bool lost_focus = false;
 
 	bool saliency_window_open = false;
 	int sal_entity_id = -1;
@@ -259,12 +265,7 @@ namespace {
 				for (auto &e : entities) {
 					if (e->id() == eid) ep = e.get();
 				}
-				if (ImGui::Button("Clear")) {
-					sal_progress = {};
-					sal_entity_id = -1;
-					ep = nullptr;
-				}
-				ImGui::SameLine();
+				if (!ep) sal_entity_id = -1;
 				if (ep) {
 					if (ImGui::Button("Reselect")) {
 						cur_sel.select_entity = eid;
@@ -276,14 +277,10 @@ namespace {
 				}
 				if (sal_future.valid()) {
 					if (ImGui::Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
-					const float frac = float(sal_progress.completed_vertices) / sal_progress.total_vertices;
-					ImGui::Text("%2d/%d", sal_progress.completed_levels + 1, sal_uparams.levels);
-					ImGui::SameLine();
-					ImGui::ProgressBar(frac);
 					if (sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+						sal_entity_id = -1;
 						if (!sal_future.get()) {
-							// reset all progress display if cancelled
-							sal_progress = {};
+							// cancelled
 						}
 					}
 				} else {
@@ -291,14 +288,16 @@ namespace {
 						if (ImGui::Button("GO", {-1, 0})) {
 							sal_entity_id = eid;
 							sal_progress = {};
+							sal_progress.levels.resize(sal_uparams.levels);
 							sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
 						}
 					} else {
 						ImGui::TextDisabled("Select a model");
 					}
 				}
-				const double elapsed_seconds = sal_progress.elapsed_time / std::chrono::duration<double>(1.0);
-				ImGui::Text("Elapsed %.3fs", elapsed_seconds);
+				ImGui::Separator();
+				ImGui::draw_saliency_progress(sal_progress);
+				if (ImGui::Button("Clear", {-1, 0})) sal_progress = {};
 			}
 			ImGui::End();
 		}
@@ -343,7 +342,7 @@ namespace {
 		for (auto it = entities.begin(); it != entities.end(); ) {
 			can_hover = true;
 			auto &e = *it;
-			e->draw(view, proj, zfar, cur_sel);
+			e->draw(view, proj, zfar);
 			if (e->dead()) {
 				it = entities.erase(it);
 			} else {
@@ -387,6 +386,12 @@ int main() {
 		abort();
 	}
 
+	set_ui_thread_priority();
+
+	// TODO user thread control?
+	// use max hardware threads leaving 1 for UI
+	omp_set_num_threads(std::max(1, int(std::thread::hardware_concurrency()) - 1));
+	
 	// GL 3.3 core context
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -452,6 +457,7 @@ int main() {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCharCallback(window, char_callback);
 	glfwSetDropCallback(window, drop_callback);
+	glfwSetWindowFocusCallback(window, focus_callback);
 
 	cgu::glsl_frag_depth_source = glsl_depth_env;
 
@@ -495,6 +501,45 @@ int main() {
 
 }
 
+namespace green {
+
+	entity_selection & ui_selection() {
+		return cur_sel;
+	}
+
+	saliency_user_params & ui_saliency_user_params() {
+		return sal_uparams;
+	}
+
+	const saliency_progress & ui_saliency_progress() {
+		return sal_progress;
+	}
+
+}
+
+namespace ImGui {
+
+	void draw_saliency_progress(const green::saliency_progress &progress) {
+		for (int i = 0; i < std::min<int>(progress.completed_levels + 1, progress.levels.size()); i++) {
+			const auto &level = progress.levels[i];
+			const float frac = float(level.completed_vertices) / progress.total_vertices;
+			ImGui::Text("%2d/%zu", i + 1, progress.levels.size());
+			ImGui::SameLine();
+			char buf[1024];
+			if (level.subsampled) {
+				std::snprintf(buf, sizeof(buf), "%.0f%% [subsampled ~%dx]", frac * 100, level.desired_subsampling);
+			} else {
+				std::snprintf(buf, sizeof(buf), "%.0f%% [full]", frac * 100);
+			}
+			ImGui::ProgressBar(frac, {-1, 0}, buf);
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d / %d vertices", level.completed_vertices, progress.total_vertices);
+		}
+		const double elapsed_seconds = progress.elapsed_time / std::chrono::duration<double>(1.0);
+		ImGui::Text("Elapsed %.3fs", elapsed_seconds);
+	}
+
+}
+
 namespace {
 
 	void drop_callback(GLFWwindow *win, int count, const char **paths) {
@@ -515,6 +560,11 @@ namespace {
 	}
 
 	void mouse_button_callback(GLFWwindow *win, int button, int action, int mods) {
+		if (lost_focus) {
+			// prevent mouse clicks that refocus the window from doing anything
+			lost_focus = false;
+			return;
+		}
 		ImGui_ImplGlfw_MouseButtonCallback(win, button, action, mods);
 		// if not captured then foward to application
 		ImGuiIO& io = ImGui::GetIO();
@@ -553,6 +603,10 @@ namespace {
 		if (io.WantTextInput) return;
 	}
 
+	void focus_callback(GLFWwindow *win, int focused) {
+		if (!focused) lost_focus = true;
+	}
+
 	void APIENTRY gl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei, const GLchar *message, const GLvoid *) {
 		// don't report notification messages
 		if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) return;
@@ -565,5 +619,24 @@ namespace {
 
 		if (type == GL_DEBUG_TYPE_ERROR_ARB) throw runtime_error("GL Error: "s + message);
 	}
+
+#ifdef _WIN32
+	extern "C" {
+		__declspec(dllimport) void * __stdcall GetCurrentThread();
+		__declspec(dllimport) int __stdcall SetThreadPriority(void *hThread, int nPriority);
+	}
+
+	void set_ui_thread_priority() {
+		constexpr int THREAD_PRIORITY_ABOVE_NORMAL = 1;
+		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+	}
+
+#else
+
+	void set_ui_thread_priority() {
+
+	}
+
+#endif
 
 }

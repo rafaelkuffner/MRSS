@@ -21,7 +21,7 @@
 namespace green {
 
 	struct model_draw_params {
-		selection sel;
+		entity_selection sel;
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
 		glm::vec4 color_hover{1, 1, 0, 1};
 		glm::vec4 color_select{1, 0.5f, 0, 1};
@@ -32,6 +32,7 @@ namespace green {
 
 	struct model_saliency_data {
 		saliency_user_params uparams;
+		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency;
 	};
 
@@ -166,7 +167,7 @@ namespace green {
 
 		virtual glm::mat4 transform() const override;
 
-		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) override;
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) override;
 
 		virtual std::future<saliency_result> compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) override;
 

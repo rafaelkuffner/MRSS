@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <future>
+#include <vector>
 #include <functional>
 
 #include <imgui.h>
@@ -95,11 +96,19 @@ namespace green {
 	};
 
 	struct saliency_progress {
+		struct per_level {
+			int completed_vertices = 0;
+			int desired_subsampling = 1;
+			bool subsampled = false;
+		};
+
+		// this must be sized correctly before starting and not resized while running
+		std::vector<per_level> levels;
 		std::chrono::milliseconds elapsed_time{0};
-		int completed_levels = 0;
-		int completed_vertices = 0;
+		int completed_levels = 0;		
 		int total_vertices = 0;
 		bool should_cancel = false;
+		
 	};
 
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);

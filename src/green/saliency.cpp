@@ -95,7 +95,6 @@ namespace green {
 			// TODO cancellation
 
 			m_progress.completed_levels = 0;
-			m_progress.completed_vertices = 0;
 			m_progress.total_vertices = m_mparams.mesh->n_vertices();
 
 			const float MaxRadius = sqrt(m_surfaceArea * m_uparams.area / 3.14159265f);
@@ -107,8 +106,6 @@ namespace green {
 			// compute saliency at multiple levels
 			for (int currentLevel = 0; currentLevel < m_uparams.levels; currentLevel++)
 			{
-				m_progress.completed_vertices = 0;
-
 				const float currentRadius = MaxRadius / pow(2.0f, static_cast<float>(currentLevel));
 				const float currentArea = currentRadius * currentRadius * 3.14159265f;
 
@@ -119,11 +116,14 @@ namespace green {
 
 				const bool normalmap_filter = m_uparams.normalmap_filter && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
 
+				m_progress.levels[currentLevel].desired_subsampling = subsampling;
 				std::cout << "Desired saliency subsampling ~" << (100.f / subsampling) << "% (~" << subsampling << "x)" << std::endl;
 
 				if (subsampling >= 5 && samples_per_neighbourhood > 0) {
+					m_progress.levels[currentLevel].subsampled = true;
 					run_level_subsampled(currentLevel, currentRadius, subsampling, normalmap_filter);
 				} else {
+					m_progress.levels[currentLevel].subsampled = false;
 					run_level_full(currentLevel, currentRadius, normalmap_filter);
 				}
 
@@ -230,10 +230,11 @@ namespace green {
 					m_time_last_percent = stats.time0;
 					auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
 					std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
-					m_progress.completed_vertices = completion1;
+					m_progress.levels[currentLevel].completed_vertices = completion1;
 				}
 			}
 
+			m_progress.levels[currentLevel].completed_vertices = completion;
 			std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%\n", currentLevel + 1, m_uparams.levels, 100.0f * (float(completion) / m_mparams.mesh->n_vertices()));
 			std::cout << "Actual saliency subsampling: 100% (1x)" << std::endl;
 
@@ -415,7 +416,7 @@ namespace green {
 						m_time_last_percent = stats.time0;
 						auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
 						std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
-						m_progress.completed_vertices = completion1;
+						m_progress.levels[currentLevel].completed_vertices = completion1;
 					}
 				}
 
@@ -441,6 +442,7 @@ namespace green {
 				}
 
 				if (candidates.empty()) {
+					m_progress.levels[currentLevel].completed_vertices = completion;
 					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%% : no more sample candidates\n", currentLevel + 1, m_uparams.levels, 100.0f * (float(completion) / m_mparams.mesh->n_vertices()));
 					const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion / subsampling);
 					std::cout << "Actual saliency subsampling: " << (100.f / actual_subsampling) << "% (" << actual_subsampling << "x)" << std::endl;
@@ -462,14 +464,12 @@ namespace green {
 	};
 	
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
-		// TODO thread control
 		// note: saliency computation should not create/destroy properties,
 		// only use them, to minimize problems (potential corruption) from concurrent access
-		omp_set_num_threads(2);
 		const auto time_start = std::chrono::steady_clock::now();
 		SaliencyComputation s(mparams, uparams, progress);
-		bool r = s.run();
-		saliency_result(mparams.cleanup, r);
+		bool r = s.run() && !progress.should_cancel;
+		return saliency_result(mparams.cleanup, r);
 	}
 
 }

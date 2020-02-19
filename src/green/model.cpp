@@ -13,6 +13,8 @@
 
 #include <imgui.h>
 
+#include "main.hpp"
+
 namespace green {
 
 	Model::Model(const std::filesystem::path &fpath) {
@@ -173,7 +175,7 @@ namespace green {
 		return transform * glm::mat4(transpose(basis));
 	}
 
-	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, selection &sel) {
+	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
 		if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
 				// is this the best place to do this?
@@ -187,6 +189,7 @@ namespace green {
 				// load failed
 			}
 		}
+		auto &sel = ui_selection();
 		const bool selected = sel.select_entity == id();
 		if (ImGui::Begin("Models")) {
 			// TODO unicode...
@@ -269,13 +272,13 @@ namespace green {
 						return true;
 					}, m_saliency_outputs.data(), m_saliency_outputs.size()
 				);
-
 				if (m_saliency_index < m_saliency_outputs.size()) {
-					if (ImGui::Button("Reload Parameters")) {
-						// TODO how?
-					}
+					auto &salout = m_saliency_outputs[m_saliency_index];
+					if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
 					ImGui::SameLine();
 					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+					ImGui::Text("TODO saliency params");
+					ImGui::draw_saliency_progress(salout.progress);
 					if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
 						ImGui::Text("Remove saliency result?");
 						if (ImGui::Button("Remove")) {
@@ -292,7 +295,6 @@ namespace green {
 						ImGui::EndPopup();
 					}
 				}
-
 				ImGui::PopID();
 			}
 		}
@@ -338,15 +340,22 @@ namespace green {
 		for (int i = 0; i < uparams.levels; i++) {
 			mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
 		}
-		mparams.cleanup = [=](bool r) mutable {
-			// destroy properties
+		// cleanup will be run when the result is received from the future
+		mparams.cleanup = [=, pprogress=&progress](bool r) mutable {
+			// destroy temp properties
 			mparams.mesh->remove_property(mparams.prop_curvature);
 			for (int i = 0; i < uparams.levels; i++) {
 				mparams.mesh->remove_property(mparams.prop_saliency_levels[i]);
 			}
-			if (!r) mparams.mesh->remove_property(mparams.prop_saliency);
-			m_saliency_outputs.push_back({uparams, mparams.prop_saliency});
-			m_saliency_index = m_saliency_outputs.size() - 1;
+			if (r) {
+				// save user params, progress output and actual saliency mesh property
+				m_saliency_outputs.push_back({uparams, *pprogress, mparams.prop_saliency});
+				// give focus to this result
+				m_saliency_index = m_saliency_outputs.size() - 1;
+			} else {
+				// cancelled, destroy saliency property too
+				mparams.mesh->remove_property(mparams.prop_saliency);
+			}
 		};
 		return green::compute_saliency_async(mparams, uparams, progress);
 	}
