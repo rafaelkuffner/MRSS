@@ -99,8 +99,9 @@ namespace green {
 
 			const float MaxRadius = sqrt(m_surfaceArea * m_uparams.area / 3.14159265f);
 
-			// TODO params
-			const float samples_per_neighbourhood = 100;
+			const float samples_per_neighbourhood = m_uparams.subsample_manual
+				? (m_uparams.area * m_mparams.mesh->n_vertices() / (m_uparams.subsampling_rate - 1))
+				: (m_uparams.subsample_auto ? m_uparams.samples_per_neighborhood : 0);
 			std::cout << "Saliency samples per neighbourhood: " << samples_per_neighbourhood << std::endl;
 
 			// compute saliency at multiple levels

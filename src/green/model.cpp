@@ -297,8 +297,11 @@ namespace green {
 					"Result", &m_saliency_index,
 					[](void *data, int item, const char **out_text) {
 						auto ds = reinterpret_cast<model_saliency_data *>(data);
-						// TODO
-						*out_text = "TODO";
+						const auto &p = ds[item].uparams;
+						// TODO better?
+						static char buf[128];
+						snprintf(buf, sizeof(buf), "l=%d,a=%.3f,w=%.2f,p=%.2f,n=%d", p.levels, p.area, p.curv_weight, p.normal_power, p.normalmap_filter);
+						*out_text = buf;
 						return true;
 					}, m_saliency_outputs.data(), m_saliency_outputs.size()
 				)) {
@@ -309,7 +312,7 @@ namespace green {
 					if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
 					ImGui::SameLine();
 					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
-					ImGui::Text("TODO saliency params");
+					ImGui::draw_saliency_params(salout.uparams);
 					ImGui::draw_saliency_progress(salout.progress);
 					if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
 						ImGui::Text("Remove saliency result?");

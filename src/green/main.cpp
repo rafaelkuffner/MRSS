@@ -255,7 +255,7 @@ namespace {
 
 		if (saliency_window_open) {
 			ImGui::SetNextWindowBgAlpha(0.5f);
-			ImGui::SetNextWindowSize({400, 400}, ImGuiCond_Appearing);
+			ImGui::SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
 			ImGui::SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
 			if (ImGui::Begin("Saliency", &saliency_window_open)) {
 				int eid = sal_entity_id >= 0 ? sal_entity_id : cur_sel.select_entity;
@@ -538,10 +538,83 @@ namespace ImGui {
 	}
 
 	void edit_saliency_params(green::saliency_user_params &uparams) {
+		green::saliency_user_params defparams;
+		if (ImGui::Button("Reset##levels")) uparams.levels = defparams.levels;
+		ImGui::SameLine();
 		ImGui::SliderInt("Levels", &uparams.levels, 1, 10);
+		if (ImGui::Button("Reset##area")) uparams.area = defparams.area;
+		ImGui::SameLine();
 		ImGui::SliderFloat("Area", &uparams.area, 0, 0.5f, "%.3f", 3);
+		if (ImGui::Button("Reset##curvweight")) uparams.curv_weight = defparams.curv_weight;
+		ImGui::SameLine();
 		ImGui::SliderFloat("Curv Weight", &uparams.curv_weight, 0, 1);
+		if (ImGui::Button("Reset##normalpower")) uparams.normal_power = defparams.normal_power;
+		ImGui::SameLine();
+		ImGui::SliderFloat("Normal Power", &uparams.normal_power, 0, 2);
+		if (ImGui::Button("Reset##normalmapfilter")) uparams.normalmap_filter = defparams.normalmap_filter;
+		ImGui::SameLine();
 		ImGui::Checkbox("Normalmap Filter", &uparams.normalmap_filter);
+		if (ImGui::Button("Reset##subsample")) {
+			uparams.subsample_auto = defparams.subsample_auto;
+			uparams.subsample_manual = defparams.subsample_manual;
+		}
+		ImGui::SameLine();
+		if (ImGui::RadioButton("None", !uparams.subsample_auto && !uparams.subsample_manual)) {
+			uparams.subsample_auto = false;
+			uparams.subsample_manual = false;
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Full sampling (slow)");
+		ImGui::SameLine();
+		if (ImGui::RadioButton("Auto", uparams.subsample_auto && !uparams.subsample_manual)) {
+			uparams.subsample_auto = true;
+			uparams.subsample_manual = false;
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Automatic subsampling (fast, recommended)");
+		ImGui::SameLine();
+		if (ImGui::RadioButton("Manual", uparams.subsample_manual)) {
+			uparams.subsample_manual = true;
+			uparams.subsample_auto = false;
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Manual subsampling (not recommended)");
+		ImGui::SameLine();
+		ImGui::Text(" Subsample");
+		if (uparams.subsample_manual) {
+			if (ImGui::Button("Reset##subsamplingrate")) uparams.subsampling_rate = defparams.subsampling_rate;
+			ImGui::SameLine();
+			ImGui::SliderFloat("Rate", &uparams.subsampling_rate, 1, 5000, "%.1fx", 3);
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::Text("Subsampling Rate");
+				ImGui::Text("Must be tuned for each model.");
+				ImGui::Text("Higher: fewer samples, less accurate results.");
+				ImGui::EndTooltip();
+			}
+		} else if (uparams.subsample_auto) {
+			if (ImGui::Button("Reset##samplesperneighborhood")) uparams.samples_per_neighborhood = defparams.samples_per_neighborhood;
+			ImGui::SameLine();
+			ImGui::SliderFloat("S/N", &uparams.samples_per_neighborhood, 1, 500, "%.1f", 2);
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::Text("Samples per Neighbourhood");
+				ImGui::Text("Does not usually need tuning per model.");
+				ImGui::Text("Higher: more samples, more accurate results.");
+				ImGui::EndTooltip();
+			}
+		}
+	}
+
+	void draw_saliency_params(const green::saliency_user_params &uparams) {
+		ImGui::Text("Levels: %d", uparams.levels);
+		ImGui::Text("Area: %.3f", uparams.area);
+		ImGui::Text("Curv Weight: %.3f", uparams.curv_weight);
+		ImGui::Text("Normal Power: %.3f", uparams.normal_power);
+		ImGui::Text("Normalmap Filter: %s", uparams.normalmap_filter ? "true" : "false");
+		ImGui::Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
+		if (uparams.subsample_manual) {
+			ImGui::Text("Subsampling Rate: %.1f", uparams.subsampling_rate);
+		} else if (uparams.subsample_auto) {
+			ImGui::Text("Samples per Neighbourhood: %.1f", uparams.samples_per_neighborhood);
+		}
 	}
 
 }

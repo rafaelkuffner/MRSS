@@ -75,11 +75,19 @@ namespace green {
 	struct saliency_user_params {
 		int levels = 5;
 		float area = 0.02f;
-		float curv_weight = 0.f;
+		float curv_weight = 0;
+		float normal_power = 1;
+		// used with manual subsampling
+		float subsampling_rate = 1;
+		// used with auto subsampling
+		float samples_per_neighborhood = 100;
 		bool normalmap_filter = false;
+		// enable manual subsampling (takes precedence)
+		bool subsample_manual = false;
+		// enable auto subsampling
+		bool subsample_auto = true;
 		// command line progress output
 		bool show_progress = true;
-		// TODO etc
 	};
 
 	struct saliency_mesh_params {
