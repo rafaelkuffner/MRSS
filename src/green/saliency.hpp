@@ -28,14 +28,14 @@ namespace green {
 		std::function<void(bool)> m_cleanup;
 		bool m_success = false;
 
-		void cleanup() {
+		void cleanup() noexcept {
 			if (m_cleanup) m_cleanup(m_success);
 		}
 
 	public:
 		saliency_result() = default;
 
-		saliency_result(std::function<void(bool)> cleanup_, bool success_)
+		saliency_result(std::function<void(bool) /*noexcept*/> cleanup_, bool success_)
 			: m_cleanup(std::move(cleanup_))
 			, m_success(success_)
 		{}
@@ -43,14 +43,14 @@ namespace green {
 		saliency_result(const saliency_result &) = delete;
 		saliency_result & operator=(const saliency_result &) = delete;
 
-		saliency_result(saliency_result &&other)
+		saliency_result(saliency_result &&other) noexcept
 			: m_cleanup(std::move(other.m_cleanup))
 			, m_success(other.m_success)
 		{
 			other.m_cleanup = {};
 		}
 
-		saliency_result & operator=(saliency_result &&other) {
+		saliency_result & operator=(saliency_result &&other) noexcept {
 			cleanup();
 			m_cleanup = std::move(other.m_cleanup);
 			m_success = other.m_success;

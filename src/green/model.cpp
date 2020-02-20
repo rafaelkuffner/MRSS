@@ -379,7 +379,7 @@ namespace green {
 			mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
 		}
 		// cleanup will be run when the result is received from the future
-		mparams.cleanup = [=, pprogress=&progress](bool r) mutable {
+		mparams.cleanup = [=, pprogress=&progress](bool r) mutable noexcept {
 			// destroy temp properties
 			mparams.mesh->remove_property(mparams.prop_curvature);
 			for (int i = 0; i < uparams.levels; i++) {
