@@ -230,6 +230,8 @@ namespace {
 		glm::ivec2 winsize;
 		glfwGetWindowSize(window, &winsize.x, &winsize.y);
 
+		ImGui::SetNextWindowPos({10, 10}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({350, 250}, ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Models")) {
 			if (ImGui::Button(sal_future.valid() ? "Saliency... (running)" : "Saliency...", {-1, 0})) saliency_window_open = true;
 			ImGui::Separator();
@@ -237,11 +239,13 @@ namespace {
 		}
 		ImGui::End();
 
-		if (ImGui::Begin("Hover")) {
-			ImGui::Text("Position x=%.2f y=%.2f z=%.2f", cur_world_pos.x, cur_world_pos.y, cur_world_pos.z);
-		}
-		ImGui::End();
+		//if (ImGui::Begin("Hover")) {
+		//	ImGui::Text("Position x=%.2f y=%.2f z=%.2f", cur_world_pos.x, cur_world_pos.y, cur_world_pos.z);
+		//}
+		//ImGui::End();
 
+		ImGui::SetNextWindowPos({10, 270}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({350, 500}, ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Selection")) {
 			if (ImGui::RadioButton("Plane (XZ)", cur_drag_mode == drag_mode::plane)) cur_drag_mode = drag_mode::plane;
 			ImGui::SameLine();
@@ -487,7 +491,7 @@ int main() {
 		render_main_ui(window);
 		render(window);
 
-		ImGui::ShowMetricsWindow();
+		//ImGui::ShowMetricsWindow();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
