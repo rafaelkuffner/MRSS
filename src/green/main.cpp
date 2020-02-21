@@ -199,11 +199,11 @@ namespace {
 				cur_depth = decode_depth(depth);
 				glUnmapBuffer(GL_ARRAY_BUFFER);
 				glBindBuffer(GL_ARRAY_BUFFER, 0);
-				if (ImGui::Begin("Hover")) {
-					ImGui::Text("Entity %d; Vertex %d", cur_sel.hover_entity, cur_sel.hover_vertex);
-					ImGui::Text("Depth %f", cur_depth);
-				}
-				ImGui::End();
+				//if (ImGui::Begin("Hover")) {
+				//	ImGui::Text("Entity %d; Vertex %d", cur_sel.hover_entity, cur_sel.hover_vertex);
+				//	ImGui::Text("Depth %f", cur_depth);
+				//}
+				//ImGui::End();
 			}
 		}
 		if (!sync_read_ids) {

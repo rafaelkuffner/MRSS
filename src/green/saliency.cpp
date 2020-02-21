@@ -61,8 +61,8 @@ namespace green {
 
 			// note: we can't cache the curvature because we couldn't adjust the normal power etc
 			std::cout << "Computing curvature" << std::endl;
-			// TODO params and curv selection
-			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, 1.f);
+			// TODO curv selection param
+			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, m_uparams.normal_power);
 
 			m_hMin = curvhist.getMin();
 			m_hMax = curvhist.getMax();
