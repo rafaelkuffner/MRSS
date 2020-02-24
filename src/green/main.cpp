@@ -308,6 +308,36 @@ namespace {
 
 	}
 
+	void render_deferred() {
+
+		static GLuint prog = 0;
+		if (!prog) {
+			prog = cgu::make_shader_program_from_files(
+				"330 core",
+				{GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER},
+				{cgu::glsl_fullscreen_source},
+				{"./res/deferred.glsl"}
+			).release();
+		}
+
+		glUseProgram(prog);
+		
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, fb_scene[GL_COLOR_ATTACHMENT0].tex);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, fb_scene[GL_DEPTH_ATTACHMENT].tex);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, fb_scene[GL_COLOR_ATTACHMENT1].tex);
+
+		glUniform1i(glGetUniformLocation(prog, "u_sampler_color"), 0);
+		glUniform1i(glGetUniformLocation(prog, "u_sampler_depth"), 1);
+		glUniform1i(glGetUniformLocation(prog, "u_sampler_id"), 2);
+		glUniform4iv(glGetUniformLocation(prog, "u_selection"), 1, (GLint *) &cur_sel);
+
+		cgu::draw_dummy();
+
+	}
+
 	void render(GLFWwindow *window) {
 
 		glm::ivec2 fbsize;
@@ -362,7 +392,9 @@ namespace {
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		glDepthFunc(GL_ALWAYS);
 		glEnable(GL_FRAMEBUFFER_SRGB);
-		cgu::draw_texture2d(fb_scene[GL_COLOR_ATTACHMENT0].tex, fb_scene[GL_DEPTH_ATTACHMENT].tex, 0);
+		//cgu::draw_texture2d(fb_scene[GL_COLOR_ATTACHMENT0].tex, fb_scene[GL_DEPTH_ATTACHMENT].tex, 0);
+		render_deferred();
+
 		glDisable(GL_FRAMEBUFFER_SRGB);
 
 		glDepthFunc(GL_LEQUAL);
@@ -723,3 +755,4 @@ namespace {
 #endif
 
 }
+

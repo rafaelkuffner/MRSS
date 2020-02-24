@@ -23,8 +23,6 @@ namespace green {
 	struct model_draw_params {
 		entity_selection sel;
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
-		glm::vec4 color_hover{1, 1, 0, 1};
-		glm::vec4 color_select{1, 0.5f, 0, 1};
 		float shading = 0.9f;
 		int entity_id = -1;
 		bool use_vert_color = false;
