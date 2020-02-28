@@ -2,8 +2,6 @@
 
 set(sources
 	CMakeLists.txt
-	model.glsl
-	deferred.glsl
 )
 
 cgu_create_missing(${sources})

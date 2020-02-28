@@ -156,3 +156,24 @@ function(cgu_create_missing)
 		endif()
 	endforeach()
 endfunction()
+
+# Embed a file as a raw string literal
+function(cgu_target_embed_string target input name)
+	get_filename_component(fname ${input} NAME)
+	get_filename_component(fpath ${input} ABSOLUTE)
+	set(fpath2 "${CMAKE_CURRENT_BINARY_DIR}/${fname}.hpp")
+	set(gencmd "${CMAKE_CURRENT_BINARY_DIR}/${fname}.cmake")
+	file(WRITE ${gencmd} "
+		file(READ \"${fpath}\" text)
+		file(WRITE \"${fpath2}\" \"namespace cgu { namespace strings { static const char *${name} = \\\"#line 1\\\\n\\\" R\\\"be3b8bb9686d4d32(\")
+		file(APPEND \"${fpath2}\" \"\${text}\")
+		file(APPEND \"${fpath2}\" \")be3b8bb9686d4d32\\\"; } }\")
+	")
+	add_custom_command(
+		OUTPUT "${fpath2}"
+		COMMAND ${CMAKE_COMMAND} -P ${gencmd}
+		MAIN_DEPENDENCY "${fpath}"
+		DEPENDS ${gencmd}
+	)
+	target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+endfunction()

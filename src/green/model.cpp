@@ -14,6 +14,7 @@
 #include <imgui.h>
 
 #include "main.hpp"
+#include "model.glsl.hpp"
 
 namespace green {
 
@@ -124,11 +125,11 @@ namespace green {
 		static GLuint prog = 0;
 		if (!prog) {
 			// note: needs custom depth env
-			prog = cgu::make_shader_program_from_files(
+			prog = cgu::make_shader_program(
+				"green::model",
 				"330 core",
 				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
-				{cgu::glsl_frag_depth_source},
-				{"./res/model.glsl"}
+				{cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
 			).release();
 		}
 

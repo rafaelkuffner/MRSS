@@ -21,6 +21,7 @@
 #include "main.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
+#include "deferred.glsl.hpp"
 
 using namespace std;
 using namespace green;
@@ -312,11 +313,11 @@ namespace {
 
 		static GLuint prog = 0;
 		if (!prog) {
-			prog = cgu::make_shader_program_from_files(
+			prog = cgu::make_shader_program(
+				"green::deferred",
 				"330 core",
 				{GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER},
-				{cgu::glsl_fullscreen_source},
-				{"./res/deferred.glsl"}
+				{cgu::glsl_fullscreen_source, cgu::strings::glsl_green_deferred}
 			).release();
 		}
 
