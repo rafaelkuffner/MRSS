@@ -660,9 +660,15 @@ namespace {
 
 	void drop_callback(GLFWwindow *win, int count, const char **paths) {
 		for (int i = 0; i < count; i++) {
-			auto e = std::make_unique<ModelEntity>();
-			e->load(std::filesystem::u8path(paths[i]));
-			entities.push_back(std::move(e));
+			auto p = std::filesystem::u8path(paths[i]);
+			if (std::filesystem::is_directory(p)) {
+				std::cout << "chdir to " << p << std::endl;
+				std::filesystem::current_path(p);
+			} else {
+				auto e = std::make_unique<ModelEntity>();
+				e->load(std::move(p));
+				entities.push_back(std::move(e));
+			}
 		}
 	}
 

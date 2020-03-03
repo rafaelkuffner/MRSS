@@ -11,10 +11,12 @@
 #ifndef GREEN_SALIENCY_HPP
 #define GREEN_SALIENCY_HPP
 
+#include <cstdio>
 #include <chrono>
 #include <future>
 #include <vector>
 #include <functional>
+#include <string>
 
 #include <imgui.h>
 
@@ -88,6 +90,13 @@ namespace green {
 		bool subsample_auto = true;
 		// command line progress output
 		bool show_progress = true;
+
+		inline explicit operator std::string() const {
+			char buf[128];
+			snprintf(buf, sizeof(buf), "l=%d,a=%.3f,w=%.2f,p=%.2f,n=%d", levels, area, curv_weight, normal_power, normalmap_filter);
+			return {buf};
+		}
+
 	};
 
 	struct saliency_mesh_params {

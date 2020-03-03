@@ -31,7 +31,7 @@ namespace green {
 	struct model_saliency_data {
 		saliency_user_params uparams;
 		saliency_progress progress;
-		OpenMesh::VPropHandleT<float> prop_saliency;
+		OpenMesh::VPropHandleT<float> prop_saliency{};
 	};
 
 	class Model {
@@ -52,6 +52,8 @@ namespace green {
 
 	public:
 		Model(const std::filesystem::path &fpath);
+
+		void save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency);
 
 		const TriMesh & trimesh() const {
 			return m_trimesh;
@@ -114,9 +116,14 @@ namespace green {
 
 	class ModelEntity : public Entity {
 	private:
-		std::filesystem::path m_fpath;
+		std::filesystem::path m_fpath_load;
 		std::unique_ptr<Model> m_model;
-		std::future<std::unique_ptr<Model>> m_pending;
+		std::future<std::unique_ptr<Model>> m_pending_load;
+
+		std::filesystem::path m_fpath_save;
+		bool m_save_ok = false;
+		std::future<bool> m_pending_save;
+
 		std::vector<model_saliency_data> m_saliency_outputs;
 		int m_saliency_index = 0;
 		bool m_saliency_vbo_dirty = false;
@@ -161,9 +168,11 @@ namespace green {
 
 		void load(const std::filesystem::path &fpath);
 
+		void save(const std::filesystem::path &fpath);
+
 		virtual std::string name() const override {
 			// TODO unicode...
-			return m_fpath.filename().string();
+			return m_fpath_load.filename().string();
 		}
 
 		virtual void move_by(const glm::vec3 &d) override {

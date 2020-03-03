@@ -6,6 +6,7 @@
 #include <sstream>
 #include <chrono>
 #include <mutex>
+#include <algorithm>
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -15,6 +16,15 @@
 
 #include "main.hpp"
 #include "model.glsl.hpp"
+
+namespace {
+
+	auto & mesh_io_mutex() {
+		static std::mutex m;
+		return m;
+	}
+
+}
 
 namespace green {
 
@@ -47,6 +57,34 @@ namespace green {
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_trimesh);
 
+	}
+
+	void Model::save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency) {
+
+		if (m_trimesh.has_vertex_colors() && prop_saliency.is_valid()) {
+			std::cout << "Colorizing saliency" << std::endl;
+			for (auto vIt = m_trimesh.vertices_begin(); vIt != m_trimesh.vertices_end(); ++vIt) {
+				TriMesh::Color col;
+				const float s = m_trimesh.property(prop_saliency, *vIt);
+				OpenMesh::Vec3f v;
+				mapScalarToColor(v, s, TransferFunction::ZBRUSH);
+				v = v * 255;
+				col[0] = v[0];
+				col[1] = v[1];
+				col[2] = v[2];
+				m_trimesh.set_color(*vIt, col);
+			}
+		}
+
+		OpenMesh::IO::Options opts = 0;
+		if (m_trimesh.has_vertex_colors()) opts = opts | OpenMesh::IO::Options::VertexColor;
+		// (OpenMesh::IO::Options::VertexColor | OpenMesh::IO::Options::Custom);
+
+		// TODO unicode filenames...
+		if (!OpenMesh::IO::write_mesh(m_trimesh, fpath.string(), opts)) {
+			std::cerr << "Could not write mesh file " << fpath << std::endl;
+			throw std::runtime_error("failed to save model");
+		}
 	}
 
 	void Model::update_vao() {
@@ -158,14 +196,26 @@ namespace green {
 	}
 
 	void ModelEntity::load(const std::filesystem::path &fpath) {
-		static std::mutex load_mtx;
 		m_model.reset();
-		m_fpath = fpath;
-		m_pending = std::async([=]() {
+		m_fpath_load = fpath;
+		m_pending_load = std::async([=]() {
 			// apparently openmesh load is not threadsafe?
 			// TODO check assimp too
-			std::lock_guard lock(load_mtx);
+			std::lock_guard lock(mesh_io_mutex());
 			return std::make_unique<Model>(fpath);
+		});
+	}
+
+	void ModelEntity::save(const std::filesystem::path &fpath) {
+		const auto salout = m_saliency_index < m_saliency_outputs.size() ? m_saliency_outputs[m_saliency_index] : model_saliency_data{};
+		if (salout.prop_saliency.is_valid()) m_model->trimesh().request_vertex_colors();
+		m_fpath_save = fpath;
+		m_pending_save = std::async([=]() {
+			// TODO is this also not threadsafe? idk
+			// ... can it run parallel with load?
+			std::lock_guard lock(mesh_io_mutex());
+			m_model->save(fpath, salout.prop_saliency);
+			return true;
 		});
 	}
 
@@ -203,10 +253,10 @@ namespace green {
 	}
 
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
-		if (m_pending.valid() && m_pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		if (m_pending_load.valid() && m_pending_load.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
 				// is this the best place to do this?
-				m_model = m_pending.get();
+				m_model = m_pending_load.get();
 				// gl stuff has to happen on main thread
 				m_model->update_vao();
 				m_model->update_vbos();
@@ -221,10 +271,10 @@ namespace green {
 		if (ImGui::Begin("Models")) {
 			// TODO unicode...
 			if (selected) ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-			if (ImGui::CollapsingHeader(m_fpath.filename().string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+			if (ImGui::CollapsingHeader(m_fpath_load.filename().string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
 				ImGui::PushID(m_model.get());
-				if (m_pending.valid()) {
+				if (m_pending_load.valid()) {
 					ImGui::Text("Loading...");
 				} else if (m_model) {
 					ImGui::Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
@@ -244,8 +294,8 @@ namespace green {
 					sel.select_vertex = -1;
 				}
 				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
-					ImGui::Text("Remove model \"%s\" ?", m_fpath.filename().string().c_str());
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+					ImGui::Text("Remove model \"%s\" ?", m_fpath_load.filename().string().c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
 					if (ImGui::Button("Remove")) {
 						m_dead = true;
 						ImGui::CloseCurrentPopup();
@@ -261,10 +311,36 @@ namespace green {
 		ImGui::End();
 		if (ImGui::Begin("Selection")) {
 			if (selected) {
-				// TODO unicode...
-				ImGui::Selectable(m_fpath.filename().string().c_str());
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_fpath.string().c_str());
+				
+				ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
+				// TODO unicode?
+				ImGui::Selectable(m_fpath_load.filename().string().c_str(), true);
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
 				ImGui::PushID(m_model.get());
+
+				if (ImGui::Button("Export...")) ImGui::OpenPopup("Export##export");
+				ImGui::SameLine();
+				if (m_pending_save.valid()) {
+					if (m_pending_save.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+						try {
+							m_save_ok = m_pending_save.get();
+						} catch (...) {
+							// save failed
+							m_save_ok = false;
+						}
+					} else {
+						// TODO unicode?
+						ImGui::Text("Exporting %s...", m_fpath_save.filename().u8string().c_str());
+					}
+				} else if (!m_fpath_save.empty()) {
+					ImGui::Text("Export %s %s", m_fpath_save.filename().u8string().c_str(), m_save_ok ? "succeeded" : "failed");
+				} else {
+					ImGui::Text("");
+				}
+				// TODO unicode?
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_save.u8string().c_str());
+
 				auto pick_basis = [&](const char *label, int *basis) {
 					ImGui::SetNextItemWidth(ImGui::GetTextLineHeight() * 3.5f);
 					ImGui::Combo(
@@ -281,10 +357,59 @@ namespace green {
 				pick_basis("Up", &basis_up);
 				ImGui::SameLine();
 				pick_basis("Back", &basis_back);
+				if (ImGui::Button("Reset##scale")) m_scale = m_model->unit_bound_scale() * 4;
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
 				ImGui::SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
-				ImGui::SliderFloat3("Translation", value_ptr(m_translation), -10, 10);
-				if (ImGui::Button("Reset Scale")) m_scale = m_model->unit_bound_scale() * 4;
+				if (ImGui::Button("Reset##translation")) m_translation = glm::vec3{0};
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+				ImGui::InputFloat3("Translation", value_ptr(m_translation));
 
+				ImGui::SetNextWindowSize({400, 150}, ImGuiCond_Appearing);
+				if (ImGui::BeginPopupModal("Export##export")) {
+					ImGui::Selectable(m_fpath_load.filename().string().c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
+					if (m_show_saliency && m_saliency_index < m_saliency_outputs.size()) {
+						auto &salout = m_saliency_outputs[m_saliency_index];
+						ImGui::Text("Saliency: %s", std::string(salout.uparams).c_str());
+					} else {
+						ImGui::Text("No saliency will be exported");
+					}
+					auto cwd = std::filesystem::current_path();
+					ImGui::Text("CWD: %s", cwd.u8string().c_str());
+					// TODO better?
+					static char buf[1024];
+					if (ImGui::IsWindowAppearing()) {
+						snprintf(buf, sizeof(buf), "%s", m_fpath_save.u8string().c_str());
+					}
+					ImGui::InputText("Path", buf, sizeof(buf));
+					// TODO unicode?
+					auto fpath = std::filesystem::u8path(buf);
+					auto stat = std::filesystem::status(fpath);
+					bool cansave = !fpath.empty();
+					if (std::filesystem::is_directory(stat)) {
+						ImGui::Text("Path is a directory");
+						cansave = false;
+					} else if (std::filesystem::exists(stat)) {
+						ImGui::Text("Path exists! Save will overwrite.");
+					}
+					if (ImGui::Button("Save") && cansave && !m_pending_save.valid()) {
+						save(std::filesystem::absolute(fpath));
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::IsItemHovered()) {
+						if (m_pending_save.valid()) {
+							ImGui::SetTooltip("Export already in progress");
+						} else if (!cansave) {
+							ImGui::SetTooltip("Can't save to this path");
+						}
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+					ImGui::EndPopup();
+				}
+				
 				ImGui::Separator();
 				ImGui::Text("Saliency Results");
 				ImGui::Checkbox("Show Saliency", &m_show_saliency);
@@ -296,9 +421,9 @@ namespace green {
 						auto ds = reinterpret_cast<model_saliency_data *>(data);
 						const auto &p = ds[item].uparams;
 						// TODO better?
-						static char buf[128];
-						snprintf(buf, sizeof(buf), "l=%d,a=%.3f,w=%.2f,p=%.2f,n=%d", p.levels, p.area, p.curv_weight, p.normal_power, p.normalmap_filter);
-						*out_text = buf;
+						static std::string str;
+						str = std::string(p);
+						*out_text = str.c_str();
 						return true;
 					}, m_saliency_outputs.data(), m_saliency_outputs.size()
 				)) {
