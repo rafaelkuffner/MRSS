@@ -25,13 +25,18 @@ namespace green {
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
 		float shading = 0.9f;
 		int entity_id = -1;
-		bool use_vert_color = false;
+		int vert_color_map = 0;
 	};
 
 	struct model_saliency_data {
+		bool fromfile = false;
 		saliency_user_params uparams;
 		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency{};
+
+		explicit operator std::string() const {
+			return fromfile ? "<file>" : std::string(uparams);
+		}
 	};
 
 	class Model {
@@ -42,6 +47,8 @@ namespace green {
 		TriMesh m_trimesh;
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
+		OpenMesh::VPropHandleT<float> m_prop_saliency_original;
+		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 
@@ -69,6 +76,14 @@ namespace green {
 
 		OpenMesh::EPropHandleT<float> prop_edge_length() const {
 			return m_prop_edge_length;
+		}
+
+		OpenMesh::VPropHandleT<float> prop_saliency_original() const {
+			return m_prop_saliency_original;
+		}
+
+		OpenMesh::VPropHandleT<TriMesh::Color> prop_vcolor_original() const {
+			return m_prop_vcolor_original;
 		}
 
 		glm::vec3 bound_min() const {
@@ -147,10 +162,14 @@ namespace green {
 
 		int basis_right = 0, basis_up = 2, basis_back = 4;
 
+		enum class color_mode : unsigned char {
+			none, vcolor, saliency
+		};
+
+		color_mode m_color_mode = color_mode::saliency;
 		bool m_show_faces = true;
 		bool m_show_edges = false;
 		bool m_show_verts = false;
-		bool m_show_saliency = true;
 		bool m_dead = false;
 
 		void update_vbo();

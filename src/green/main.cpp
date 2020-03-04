@@ -487,6 +487,9 @@ int main() {
 	ImGui_ImplGlfw_InitForOpenGL(window, false);
 	ImGui_ImplOpenGL3_Init();
 
+	// disable imgui.ini
+	ImGui::GetIO().IniFilename = nullptr;
+
 	// attach input callbacks to window
 	glfwSetCursorPosCallback(window, cursor_pos_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);

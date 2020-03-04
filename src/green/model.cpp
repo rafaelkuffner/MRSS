@@ -31,8 +31,11 @@ namespace green {
 	Model::Model(const std::filesystem::path &fpath) {
 		m_trimesh.request_face_normals();
 		m_trimesh.request_vertex_normals();
-		// load custom "quality" property, if it exists
-		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom;
+		m_trimesh.request_vertex_colors();
+		// load custom "quality" property and vertex colors if they exist
+		// FIXME what else do we need to ask for and preserve on export? texcoords?
+		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom | OpenMesh::IO::Options::VertexColor;
+
 		// TODO unicode filenames...
 		std::cerr << "Loading model " << fpath << std::endl;
 		if (OpenMesh::IO::read_mesh(m_trimesh, fpath.string(), readOptions)) {
@@ -56,6 +59,21 @@ namespace green {
 
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_trimesh);
+
+		// copy original vertex colors
+		// (because we need to be able to overwrite the actual vertex colors during export)
+		if (readOptions.check(OpenMesh::IO::Options::VertexColor)) {
+			std::cout << "Found vertex colors" << std::endl;
+			m_trimesh.add_property(m_prop_vcolor_original);
+			for (auto vIt = m_trimesh.vertices_begin(); vIt != m_trimesh.vertices_end(); ++vIt) {
+				m_trimesh.property(m_prop_vcolor_original, *vIt) = m_trimesh.color(*vIt);
+			}
+		}
+
+		// check for 'raw' saliency property
+		if (m_trimesh.get_property_handle(m_prop_saliency_original, "quality")) {
+			std::cout << "Found quality property" << std::endl;
+		}
 
 	}
 
@@ -186,7 +204,7 @@ namespace green {
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
 		// TODO color map selection
-		glUniform1i(glGetUniformLocation(prog, "u_vert_color_map"), params.use_vert_color ? 3 : 0);
+		glUniform1i(glGetUniformLocation(prog, "u_vert_color_map"), params.vert_color_map);
 
 		draw(polymode);
 	}
@@ -233,7 +251,8 @@ namespace green {
 	void ModelEntity::update_vbo() {
 		if (!m_model) return;
 		if (!m_saliency_vbo_dirty) return;
-		if (m_saliency_index >= m_saliency_outputs.size()) return;
+		if (m_color_mode == color_mode::saliency && m_saliency_index >= m_saliency_outputs.size()) return;
+		if (m_color_mode == color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
 		GLuint vbo_col = m_model->vbo_color();
 		if (!vbo_col) return;
 		const auto &mesh = m_model->trimesh();
@@ -243,9 +262,17 @@ namespace green {
 		auto *data = reinterpret_cast<glm::vec4 *>(
 			glMapBufferRange(GL_ARRAY_BUFFER, 0, nverts * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 		);
-		for (size_t i = 0; i < nverts; i++) {
-			const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
-			data[i] = glm::vec4(s, 0, 0, 1);
+		if (m_color_mode == color_mode::saliency) {
+			for (size_t i = 0; i < nverts; i++) {
+				const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
+				data[i] = glm::vec4(s, 0, 0, 1);
+			}
+		} else if (m_color_mode == color_mode::vcolor) {
+			for (size_t i = 0; i < nverts; i++) {
+				const auto col = mesh.property(m_model->prop_vcolor_original(), OpenMesh::VertexHandle(i));
+				// need to gamma decode the color because the shader expects linear
+				data[i] = glm::vec4(pow(glm::vec3(col[0], col[1], col[2]) / 255.f, glm::vec3(2.2f)), 1);
+			}
 		}
 		glUnmapBuffer(GL_ARRAY_BUFFER);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -262,6 +289,11 @@ namespace green {
 				m_model->update_vbos();
 				m_scale = m_model->unit_bound_scale() * 4;
 				m_translation = glm::vec3(0);
+				// add fake saliency result for loaded saliency if it exists
+				if (m_model->prop_saliency_original().is_valid()) {
+					m_saliency_outputs.push_back({true, {}, {}, m_model->prop_saliency_original()});
+					m_saliency_vbo_dirty = true;
+				}
 			} catch (...) {
 				// load failed
 			}
@@ -370,9 +402,9 @@ namespace green {
 				if (ImGui::BeginPopupModal("Export##export")) {
 					ImGui::Selectable(m_fpath_load.filename().string().c_str());
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
-					if (m_show_saliency && m_saliency_index < m_saliency_outputs.size()) {
+					if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) {
 						auto &salout = m_saliency_outputs[m_saliency_index];
-						ImGui::Text("Saliency: %s", std::string(salout.uparams).c_str());
+						ImGui::Text("Saliency: %s", std::string(salout).c_str());
 					} else {
 						ImGui::Text("No saliency will be exported");
 					}
@@ -411,18 +443,22 @@ namespace green {
 				}
 				
 				ImGui::Separator();
-				ImGui::Text("Saliency Results");
-				ImGui::Checkbox("Show Saliency", &m_show_saliency);
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+
+				//ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+				int cur_color_mode = int(m_color_mode);
+				if (ImGui::Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0")) {
+					m_color_mode = color_mode(cur_color_mode);
+					if (m_color_mode != color_mode::none) m_saliency_vbo_dirty = true;
+				}
+				
 				if (ImGui::Combo(
-					"Result", &m_saliency_index,
+					"Saliency", &m_saliency_index,
 					[](void *data, int item, const char **out_text) {
 						auto ds = reinterpret_cast<model_saliency_data *>(data);
-						const auto &p = ds[item].uparams;
+						const auto &so = ds[item];
 						// TODO better?
 						static std::string str;
-						str = std::string(p);
+						str = std::string(so);
 						*out_text = str.c_str();
 						return true;
 					}, m_saliency_outputs.data(), m_saliency_outputs.size()
@@ -431,11 +467,13 @@ namespace green {
 				}
 				if (m_saliency_index < m_saliency_outputs.size()) {
 					auto &salout = m_saliency_outputs[m_saliency_index];
-					if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
-					ImGui::SameLine();
-					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
-					ImGui::draw_saliency_params(salout.uparams);
-					ImGui::draw_saliency_progress(salout.progress);
+					if (!salout.fromfile) {
+						if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+						ImGui::SameLine();
+						if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
+						ImGui::draw_saliency_params(salout.uparams);
+						ImGui::draw_saliency_progress(salout.progress);
+					}
 					if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
 						ImGui::Text("Remove saliency result?");
 						if (ImGui::Button("Remove")) {
@@ -462,11 +500,12 @@ namespace green {
 			params.sel = sel;
 			params.entity_id = id();
 			params.color = {0.6f, 0.6f, 0.5f, 1};
-			if (m_show_saliency && m_saliency_index < m_saliency_outputs.size()) params.use_vert_color = true;
+			if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) params.vert_color_map = 3;
+			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) params.vert_color_map = 1;
 			glEnable(GL_CULL_FACE);
 			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
-			params.use_vert_color = false;
+			params.vert_color_map = 0;
 			params.shading = 0;
 			params.color = {0.03f, 0.03f, 0.03f, 1};
 			glDisable(GL_CULL_FACE);
@@ -503,7 +542,7 @@ namespace green {
 			}
 			if (r) {
 				// save user params, progress output and actual saliency mesh property
-				m_saliency_outputs.push_back({uparams, *pprogress, mparams.prop_saliency});
+				m_saliency_outputs.push_back({false, uparams, *pprogress, mparams.prop_saliency});
 				// give focus to this result
 				m_saliency_index = m_saliency_outputs.size() - 1;
 				m_saliency_vbo_dirty = true;
