@@ -232,6 +232,7 @@ namespace green {
 					auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
 					std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
 					m_progress.levels[currentLevel].completed_vertices = completion1;
+					m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
 				}
 			}
 
@@ -418,6 +419,7 @@ namespace green {
 						auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
 						std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
 						m_progress.levels[currentLevel].completed_vertices = completion1;
+						m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
 					}
 				}
 
