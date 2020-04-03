@@ -70,9 +70,13 @@ namespace green {
 			}
 		}
 
-		// check for 'raw' saliency property
-		if (m_trimesh.get_property_handle(m_prop_saliency_original, "quality")) {
+		// check for 'raw' saliency property and move to unnamed property
+		auto prop_quality = decltype(m_prop_saliency_original){};
+		if (m_trimesh.get_property_handle(prop_quality, "quality")) {
 			std::cout << "Found quality property" << std::endl;
+			m_trimesh.add_property(m_prop_saliency_original);
+			m_trimesh.property(m_prop_saliency_original).data_vector() = std::move(m_trimesh.property(prop_quality).data_vector());
+			m_trimesh.remove_property(prop_quality);
 		}
 
 	}
@@ -94,12 +98,22 @@ namespace green {
 			}
 		}
 
-		OpenMesh::IO::Options opts = 0;
+		auto prop_quality = decltype(prop_saliency){};
+		if (prop_saliency.is_valid()) {
+			m_trimesh.add_property(prop_quality, "quality");
+			m_trimesh.property(prop_quality).set_persistent(true);
+			m_trimesh.property(prop_quality).data_vector() = m_trimesh.property(prop_saliency).data_vector();
+		}
+
+		OpenMesh::IO::Options opts = OpenMesh::IO::Options::Custom;
 		if (m_trimesh.has_vertex_colors()) opts = opts | OpenMesh::IO::Options::VertexColor;
-		// (OpenMesh::IO::Options::VertexColor | OpenMesh::IO::Options::Custom);
 
 		// TODO unicode filenames...
-		if (!OpenMesh::IO::write_mesh(m_trimesh, fpath.string(), opts)) {
+		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath.string(), opts);
+
+		m_trimesh.remove_property(prop_quality);
+
+		if (!res) {
 			std::cerr << "Could not write mesh file " << fpath << std::endl;
 			throw std::runtime_error("failed to save model");
 		}
