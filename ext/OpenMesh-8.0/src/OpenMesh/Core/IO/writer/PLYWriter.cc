@@ -52,6 +52,7 @@
 #include <OpenMesh/Core/IO/writer/PLYWriter.hh>
 
 #include <iostream>
+#include <iomanip>
 
 //=== NAMESPACES ==============================================================
 
@@ -353,8 +354,12 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
 
   write_header(_out, _be, _opt, vProps, fProps);
 
-  if (_opt.color_is_float())
-    _out << std::fixed;
+  // should never apply fixed to everything because that would wreck precision for points
+  //if (_opt.color_is_float())
+  //  _out << std::fixed;
+
+  // sufficient (iirc) to round-trip single-precision float
+  _out << std::setprecision(9);
 
   // vertex data (point, normals, colors, texcoords)
   for (i=0, nV=int(_be.n_vertices()); i<nV; ++i)
