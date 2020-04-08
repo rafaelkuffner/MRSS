@@ -71,6 +71,7 @@ namespace green {
 			m_surfaceArea = surfaceArea(*m_mparams.mesh);
 
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
+			//m_meshcache.dump_to_file();
 
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());

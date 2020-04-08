@@ -102,6 +102,8 @@ namespace green {
 			return reinterpret_cast<const vertex &>(data[vdi]);
 		}
 
+		void dump_to_file() const;
+
 	};
 
 	struct CalculationStats {

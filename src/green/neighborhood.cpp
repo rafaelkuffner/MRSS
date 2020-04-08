@@ -629,6 +629,30 @@ namespace green {
 
 	}
 
+	void MeshCache::dump_to_file() const {
+		std::cout << "Dumping meshcache" << std::endl;
+		// TODO custom filename
+		std::ofstream out("./meshcache.txt");
+		for (int i = 0; i < vi2di.size(); i++) {
+			int vdi = vi2di[i];
+			out << i << ":";
+			auto &v = get_vertex(vdi);
+			out << " a=" << v.props[MeshCache::vertex_prop_area];
+			out << " c=" << v.props[MeshCache::vertex_prop_curv];
+			out << " p=(" << v.pos[0] << "," << v.pos[1] << "," << v.pos[2] << ")";
+			out << " n=(" << v.norm[0] << "," << v.norm[1] << "," << v.norm[2] << ")";
+			out << " [";
+			for (int j = 0; j < v.nedges; j++) {
+				int ndi = v.edges[j].ndi;
+				int ni = get_vertex(ndi).vi;
+				out << ni << ":";
+				out << " l=" << v.edges[j].cost;
+				out << "; ";
+			}
+			out << "]\n";
+		}
+	}
+
 	void CalculationStats::dump_stats(int threadcount) const {
 
 		using namespace std;
