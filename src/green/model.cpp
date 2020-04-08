@@ -271,12 +271,12 @@ namespace green {
 		if (!vbo_col) return;
 		const auto &mesh = m_model->trimesh();
 		const auto nverts = m_model->vao_nverts();
-		auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
 		glBindBuffer(GL_ARRAY_BUFFER, vbo_col);
 		auto *data = reinterpret_cast<glm::vec4 *>(
 			glMapBufferRange(GL_ARRAY_BUFFER, 0, nverts * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 		);
 		if (m_color_mode == color_mode::saliency) {
+			auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
 			for (size_t i = 0; i < nverts; i++) {
 				const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
 				data[i] = glm::vec4(s, 0, 0, 1);
