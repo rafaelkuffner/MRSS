@@ -24,6 +24,15 @@ namespace {
 		return m;
 	}
 
+	struct saliency_clipboard_data {
+		green::model_saliency_data sd;
+		std::vector<float> data;
+	};
+
+	auto & saliency_clipboard() {
+		static saliency_clipboard_data d;
+		return d;
+	}
 }
 
 namespace green {
@@ -502,14 +511,48 @@ namespace green {
 				)) {
 					m_saliency_vbo_dirty = true;
 				}
+
+				if (ImGui::Button("Paste")) {
+					auto &clip = saliency_clipboard();
+					if (clip.data.size() == m_model->trimesh().n_vertices()) {
+						model_saliency_data sd = std::move(clip.sd);
+						m_model->trimesh().add_property(sd.prop_saliency);
+						m_model->trimesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
+						clip.sd = {};
+						clip.data.clear();
+						m_saliency_outputs.push_back(std::move(sd));
+						m_saliency_vbo_dirty = true;
+						// references/iterators into saliency outputs are invalidated
+					} else {
+						ImGui::OpenPopup("Paste Error##pasteerror");
+					}
+				}
+
 				if (m_saliency_index < m_saliency_outputs.size()) {
 					auto &salout = m_saliency_outputs[m_saliency_index];
+					ImGui::SameLine();
+					if (ImGui::Button("Copy")) {
+						auto &clip = saliency_clipboard();
+						clip.sd = salout;
+						clip.sd.prop_saliency.reset();
+						clip.data = m_model->trimesh().property(salout.prop_saliency).data_vector();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
 					if (salout.filename.empty()) {
-						if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
 						ImGui::SameLine();
 						if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
 						ImGui::draw_saliency_params(salout.uparams);
 						ImGui::draw_saliency_progress(salout.progress);
+					}
+					if (ImGui::BeginPopupModal("Paste Error##pasteerror")) {
+						auto &clip = saliency_clipboard();
+						if (clip.data.size() == m_model->trimesh().n_vertices()) {
+							ImGui::CloseCurrentPopup();
+						} else {
+							ImGui::Text("Can't paste saliency for %d vertices into model with %d vertices", clip.data.size(), m_model->trimesh().n_vertices());
+							if (ImGui::Button("OK")) ImGui::CloseCurrentPopup();
+						}
 					}
 					if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
 						ImGui::Text("Remove saliency result?");
@@ -517,8 +560,10 @@ namespace green {
 							auto it = m_saliency_outputs.begin() + m_saliency_index;
 							m_model->trimesh().remove_property(it->prop_saliency);
 							m_saliency_outputs.erase(it);
+							// references/iterators into saliency outputs are invalidated
 							if (m_saliency_index >= m_saliency_outputs.size()) {
 								m_saliency_index = std::max(0, m_saliency_index - 1);
+								m_saliency_vbo_dirty = true;
 							}
 							ImGui::CloseCurrentPopup();
 						}
