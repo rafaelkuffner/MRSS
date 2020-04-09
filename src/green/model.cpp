@@ -299,6 +299,8 @@ namespace green {
 		if (!m_saliency_vbo_dirty) return;
 		if (m_color_mode == color_mode::saliency && m_saliency_index >= m_saliency_outputs.size()) return;
 		if (m_color_mode == color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
+		if (m_color_mode == color_mode::saliency_comparison && m_saliency_index >= m_saliency_outputs.size()) return;
+		if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index >= m_saliency_outputs.size()) return;
 		GLuint vbo_col = m_model->vbo_color();
 		if (!vbo_col) return;
 		const auto &mesh = m_model->trimesh();
@@ -313,6 +315,23 @@ namespace green {
 				const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
 				data[i] = glm::vec4(s, 0, 0, 1);
 			}
+		} else if (m_color_mode == color_mode::saliency_comparison) {
+			auto baseprop = m_saliency_outputs[m_saliency_baseline_index].prop_saliency;
+			auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
+			m_saliency_errors.min = 9001;
+			m_saliency_errors.max = -9001;
+			float sse = 0;
+			for (size_t i = 0; i < nverts; i++) {
+				const float b = mesh.property(baseprop, OpenMesh::VertexHandle(i));
+				const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
+				const float e = s - b;
+				m_saliency_errors.min = std::min(m_saliency_errors.min, e);
+				m_saliency_errors.max = std::max(m_saliency_errors.max, e);
+				sse += e * e;
+				// TODO do scale on gpu
+				data[i] = glm::vec4(e * m_saliency_error_scale, 0, 0, 1);
+			}
+			m_saliency_errors.rms = sqrt(sse / nverts);
 		} else if (m_color_mode == color_mode::vcolor) {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto col = mesh.property(m_model->prop_vcolor_original(), OpenMesh::VertexHandle(i));
@@ -492,7 +511,7 @@ namespace green {
 
 				//ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 				int cur_color_mode = int(m_color_mode);
-				if (ImGui::Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0")) {
+				if (ImGui::Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
 					m_color_mode = color_mode(cur_color_mode);
 					if (m_color_mode != color_mode::none) m_saliency_vbo_dirty = true;
 				}
@@ -510,6 +529,17 @@ namespace green {
 					}, m_saliency_outputs.data(), m_saliency_outputs.size()
 				)) {
 					m_saliency_vbo_dirty = true;
+				}
+
+				if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index < m_saliency_outputs.size()) {
+					ImGui::Text("Baseline: %s", m_saliency_outputs[m_saliency_baseline_index].str().c_str());
+					if (m_saliency_index < m_saliency_outputs.size()) {
+						auto &err = m_saliency_errors;
+						ImGui::Text("Errors: min=%.3f, max=%.3f, rmse=%.3f", err.min, err.max, err.rms);
+						if (ImGui::SliderFloat("Error Scale", &m_saliency_error_scale, 1, 100, "%.3f", 2)) {
+							m_saliency_vbo_dirty = true;
+						}
+					}
 				}
 
 				if (ImGui::Button("Paste")) {
@@ -539,11 +569,12 @@ namespace green {
 					}
 					ImGui::SameLine();
 					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
+					ImGui::SameLine();
+					if (ImGui::Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
 					if (salout.filename.empty()) {
-						ImGui::SameLine();
-						if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
 						ImGui::draw_saliency_params(salout.uparams);
 						ImGui::draw_saliency_progress(salout.progress);
+						if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
 					}
 					if (ImGui::BeginPopupModal("Paste Error##pasteerror")) {
 						auto &clip = saliency_clipboard();
@@ -583,6 +614,7 @@ namespace green {
 			params.entity_id = id();
 			params.color = {0.6f, 0.6f, 0.5f, 1};
 			if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) params.vert_color_map = 3;
+			if (m_color_mode == color_mode::saliency_comparison && m_saliency_index < m_saliency_outputs.size() && m_saliency_baseline_index < m_saliency_outputs.size()) params.vert_color_map = 4;
 			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) params.vert_color_map = 1;
 			glEnable(GL_CULL_FACE);
 			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);

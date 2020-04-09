@@ -35,8 +35,12 @@ namespace green {
 		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency{};
 
-		explicit operator std::string() const {
+		std::string str() const {
 			return filename.empty() ? std::string(uparams) : filename + "?" + propname;
+		}
+
+		explicit operator std::string() const {
+			return str();
 		}
 	};
 
@@ -142,7 +146,17 @@ namespace green {
 
 		std::vector<model_saliency_data> m_saliency_outputs;
 		int m_saliency_index = 0;
+		int m_saliency_baseline_index = 0;
 		bool m_saliency_vbo_dirty = false;
+
+		struct saliency_errors {
+			float min = 0;
+			float max = 0;
+			float rms = 0;
+		};
+
+		saliency_errors m_saliency_errors;
+		float m_saliency_error_scale = 1;
 
 		float m_scale = 1;
 		glm::vec3 m_translation{0};
@@ -164,7 +178,7 @@ namespace green {
 		int basis_right = 0, basis_up = 2, basis_back = 4;
 
 		enum class color_mode : unsigned char {
-			none, vcolor, saliency
+			none, vcolor, saliency, saliency_comparison
 		};
 
 		color_mode m_color_mode = color_mode::saliency;

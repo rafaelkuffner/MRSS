@@ -28,6 +28,7 @@ vec4 gamma_decode(vec4 c) {
 }
 
 vec4 map_color_zbrush(float k) {
+	k = clamp(k, 0.0, 1.0);
 	// high color: red
 	vec4 c0 = vec4(1, 0, 0, 1);
 	// cyan to white
@@ -52,6 +53,9 @@ vec4 map_color(vec4 c) {
 	case 3:
 		// zbrush style
 		return map_color_zbrush(c.r);
+	case 4:
+		// difference, zbrush style
+		return map_color_zbrush(c.r * 0.5 + 0.5);
 	default:
 		return c;
 	}
