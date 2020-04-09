@@ -29,13 +29,14 @@ namespace green {
 	};
 
 	struct model_saliency_data {
-		bool fromfile = false;
+		std::string filename;
+		std::string propname;
 		saliency_user_params uparams;
 		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency{};
 
 		explicit operator std::string() const {
-			return fromfile ? "<file>" : std::string(uparams);
+			return filename.empty() ? std::string(uparams) : filename + "?" + propname;
 		}
 	};
 
@@ -47,8 +48,8 @@ namespace green {
 		TriMesh m_trimesh;
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
-		OpenMesh::VPropHandleT<float> m_prop_saliency_original;
 		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
+		std::vector<model_saliency_data> m_original_saliency;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 
@@ -78,8 +79,8 @@ namespace green {
 			return m_prop_edge_length;
 		}
 
-		OpenMesh::VPropHandleT<float> prop_saliency_original() const {
-			return m_prop_saliency_original;
+		const std::vector<model_saliency_data> original_saliency() const {
+			return m_original_saliency;
 		}
 
 		OpenMesh::VPropHandleT<TriMesh::Color> prop_vcolor_original() const {

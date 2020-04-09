@@ -70,13 +70,35 @@ namespace green {
 			}
 		}
 
-		// check for 'raw' saliency property and move to unnamed property
-		auto prop_quality = decltype(m_prop_saliency_original){};
-		if (m_trimesh.get_property_handle(prop_quality, "quality")) {
-			std::cout << "Found quality property" << std::endl;
-			m_trimesh.add_property(m_prop_saliency_original);
-			m_trimesh.property(m_prop_saliency_original).data_vector() = std::move(m_trimesh.property(prop_quality).data_vector());
-			m_trimesh.remove_property(prop_quality);
+		using sprop_t = decltype(model_saliency_data::prop_saliency);
+		std::vector<std::pair<sprop_t, model_saliency_data>> sprops;
+
+		// check for 'raw' saliency properties
+		for (auto it = m_trimesh.vprops_begin(); it != m_trimesh.vprops_end(); ++it) {
+			// TODO any way to do this other than dynamic cast?
+			auto prop = dynamic_cast<OpenMesh::PropertyT<float> *>(*it);
+			if (!prop) continue;
+			if (prop->name().substr(0, 7) == "quality") {
+				std::cout << "Found quality property " << prop->name() << std::endl;
+				auto ph0 = sprop_t{int(it - m_trimesh.vprops_begin())};
+				if (&m_trimesh.property(ph0) != prop) abort();
+				model_saliency_data sd;
+				sd.filename = fpath.filename().u8string();
+				sd.propname = prop->name();
+				sprops.emplace_back(ph0, std::move(sd));
+			}
+		}
+
+		// move 'raw' saliency to unnamed properties
+		// need 2 passes because we cant modify the properties while iterating them
+		for (auto &p : sprops) {
+			sprop_t ph;
+			m_trimesh.add_property(ph);
+			m_trimesh.property(ph).data_vector() = std::move(m_trimesh.property(p.first).data_vector());
+			m_trimesh.remove_property(p.first);
+			auto sd = std::move(p.second);
+			sd.prop_saliency = ph;
+			m_original_saliency.push_back(std::move(sd));
 		}
 
 	}
@@ -98,6 +120,7 @@ namespace green {
 			}
 		}
 
+		// TODO save arbitrary saliency properties with arbitrary names
 		auto prop_quality = decltype(prop_saliency){};
 		if (prop_saliency.is_valid()) {
 			m_trimesh.add_property(prop_quality, "quality");
@@ -303,9 +326,9 @@ namespace green {
 				m_model->update_vbos();
 				m_scale = m_model->unit_bound_scale() * 4;
 				m_translation = glm::vec3(0);
-				// add fake saliency result for loaded saliency if it exists
-				if (m_model->prop_saliency_original().is_valid()) {
-					m_saliency_outputs.push_back({true, {}, {}, m_model->prop_saliency_original()});
+				// add saliency results for loaded saliency
+				for (auto &sd : m_model->original_saliency()) {
+					m_saliency_outputs.push_back(sd);
 					m_saliency_vbo_dirty = true;
 				}
 			} catch (...) {
@@ -481,7 +504,7 @@ namespace green {
 				}
 				if (m_saliency_index < m_saliency_outputs.size()) {
 					auto &salout = m_saliency_outputs[m_saliency_index];
-					if (!salout.fromfile) {
+					if (salout.filename.empty()) {
 						if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
 						ImGui::SameLine();
 						if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
@@ -556,7 +579,7 @@ namespace green {
 			}
 			if (r) {
 				// save user params, progress output and actual saliency mesh property
-				m_saliency_outputs.push_back({false, uparams, *pprogress, mparams.prop_saliency});
+				m_saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency});
 				// give focus to this result
 				m_saliency_index = m_saliency_outputs.size() - 1;
 				m_saliency_vbo_dirty = true;
