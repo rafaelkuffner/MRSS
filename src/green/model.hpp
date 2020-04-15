@@ -26,6 +26,7 @@ namespace green {
 		float shading = 0.9f;
 		int entity_id = -1;
 		int vert_color_map = 0;
+		bool show_samples = false;
 	};
 
 	struct model_saliency_data {
@@ -34,6 +35,7 @@ namespace green {
 		saliency_user_params uparams;
 		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency{};
+		OpenMesh::VPropHandleT<unsigned char> prop_sampled{};
 
 		std::string str() const {
 			return filename.empty() ? std::string(uparams) : filename + "?" + propname;
@@ -185,6 +187,7 @@ namespace green {
 		bool m_show_faces = true;
 		bool m_show_edges = false;
 		bool m_show_verts = false;
+		
 		bool m_dead = false;
 
 		void update_vbo();

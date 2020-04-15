@@ -102,13 +102,19 @@ namespace green {
 	struct saliency_mesh_params {
 		// TODO const
 		TriMesh *mesh = nullptr;
-		// inputs
+		// input
 		OpenMesh::VPropHandleT<float> prop_vertex_area;
+		// input
 		OpenMesh::EPropHandleT<float> prop_edge_length;
-		// outputs
-		OpenMesh::VPropHandleT<float> prop_curvature;
+		// output: saliency
 		OpenMesh::VPropHandleT<float> prop_saliency;
+		// output: sample location flags (bool, uchar to avoid vector<bool>)
+		OpenMesh::VPropHandleT<unsigned char> prop_sampled;
+		// temp
+		OpenMesh::VPropHandleT<float> prop_curvature;
+		// temp
 		std::vector<OpenMesh::VPropHandleT<float>> prop_saliency_levels;
+		// cleanup to be run from result
 		std::function<void(bool)> cleanup;
 	};
 

@@ -249,8 +249,8 @@ namespace green {
 		if (polymode == GL_POINT) bias = -0.00002;
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
-		// TODO color map selection
 		glUniform1i(glGetUniformLocation(prog, "u_vert_color_map"), params.vert_color_map);
+		glUniform1i(glGetUniformLocation(prog, "u_show_samples"), params.show_samples);
 
 		draw(polymode);
 	}
@@ -311,30 +311,37 @@ namespace green {
 		);
 		if (m_color_mode == color_mode::saliency) {
 			auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
+			auto sampledprop = m_saliency_outputs[m_saliency_index].prop_sampled;
 			for (size_t i = 0; i < nverts; i++) {
-				const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
-				data[i] = glm::vec4(s, 0, 0, 1);
+				const auto v = OpenMesh::VertexHandle(i);
+				const float s = mesh.property(salprop, v);
+				const bool sampled = mesh.property(sampledprop, v);
+				data[i] = glm::vec4(s, 0, 0, sampled);
 			}
 		} else if (m_color_mode == color_mode::saliency_comparison) {
 			auto baseprop = m_saliency_outputs[m_saliency_baseline_index].prop_saliency;
 			auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
+			auto sampledprop = m_saliency_outputs[m_saliency_index].prop_sampled;
 			m_saliency_errors.min = 9001;
 			m_saliency_errors.max = -9001;
 			float sse = 0;
 			for (size_t i = 0; i < nverts; i++) {
-				const float b = mesh.property(baseprop, OpenMesh::VertexHandle(i));
-				const float s = mesh.property(salprop, OpenMesh::VertexHandle(i));
+				const auto v = OpenMesh::VertexHandle(i);
+				const float b = mesh.property(baseprop, v);
+				const float s = mesh.property(salprop, v);
+				const bool sampled = mesh.property(sampledprop, v);
 				const float e = s - b;
 				m_saliency_errors.min = std::min(m_saliency_errors.min, e);
 				m_saliency_errors.max = std::max(m_saliency_errors.max, e);
 				sse += e * e;
 				// TODO do scale on gpu
-				data[i] = glm::vec4(e * m_saliency_error_scale, 0, 0, 1);
+				data[i] = glm::vec4(e * m_saliency_error_scale, 0, 0, sampled);
 			}
 			m_saliency_errors.rms = sqrt(sse / nverts);
 		} else if (m_color_mode == color_mode::vcolor) {
 			for (size_t i = 0; i < nverts; i++) {
-				const auto col = mesh.property(m_model->prop_vcolor_original(), OpenMesh::VertexHandle(i));
+				const auto v = OpenMesh::VertexHandle(i);
+				const auto col = mesh.property(m_model->prop_vcolor_original(), v);
 				// need to gamma decode the color because the shader expects linear
 				data[i] = glm::vec4(pow(glm::vec3(col[0], col[1], col[2]) / 255.f, glm::vec3(2.2f)), 1);
 			}
@@ -612,22 +619,27 @@ namespace green {
 			model_draw_params params;
 			params.sel = sel;
 			params.entity_id = id();
+			// faces
 			params.color = {0.6f, 0.6f, 0.5f, 1};
-			if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) params.vert_color_map = 3;
-			if (m_color_mode == color_mode::saliency_comparison && m_saliency_index < m_saliency_outputs.size() && m_saliency_baseline_index < m_saliency_outputs.size()) params.vert_color_map = 4;
+			const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
+			if (m_color_mode == color_mode::saliency && sal_valid) params.vert_color_map = 3;
+			if (m_color_mode == color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < m_saliency_outputs.size()) params.vert_color_map = 4;
 			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) params.vert_color_map = 1;
 			glEnable(GL_CULL_FACE);
 			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+			// edges
 			params.vert_color_map = 0;
 			params.shading = 0;
 			params.color = {0.03f, 0.03f, 0.03f, 1};
 			glDisable(GL_CULL_FACE);
 			glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
+			// verts
 			params.color = {0.5f, 0, 0, 1};
 			params.sel.hover_entity = -1;
 			params.sel.select_entity = -1;
+			params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);
 			glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
 			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
 			glEnable(GL_CULL_FACE);
@@ -644,6 +656,7 @@ namespace green {
 		mparams.prop_saliency_levels.resize(uparams.levels);
 		mparams.mesh->add_property(mparams.prop_curvature);
 		mparams.mesh->add_property(mparams.prop_saliency);
+		mparams.mesh->add_property(mparams.prop_sampled);
 		for (int i = 0; i < uparams.levels; i++) {
 			mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
 		}
@@ -656,13 +669,14 @@ namespace green {
 			}
 			if (r) {
 				// save user params, progress output and actual saliency mesh property
-				m_saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency});
+				m_saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency, mparams.prop_sampled});
 				// give focus to this result
 				m_saliency_index = m_saliency_outputs.size() - 1;
 				m_saliency_vbo_dirty = true;
 			} else {
 				// cancelled, destroy saliency property too
 				mparams.mesh->remove_property(mparams.prop_saliency);
+				mparams.mesh->remove_property(mparams.prop_sampled);
 			}
 		};
 		return green::compute_saliency_async(mparams, uparams, progress);

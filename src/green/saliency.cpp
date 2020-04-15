@@ -223,6 +223,8 @@ namespace green {
 					using simd::simd_extract;
 					m_mparams.mesh->property(m_mparams.prop_saliency_levels[currentLevel], v) = sal[j];
 
+					// record sampled vertices (which is all of them here)
+					m_mparams.mesh->property(m_mparams.prop_sampled, v) = true;
 				}
 
 				//stats.sal_timer_end();
@@ -382,6 +384,8 @@ namespace green {
 
 					const auto visitor = [&](unsigned vdi, float r, float s) {
 						TriMesh::VertexHandle v(m_meshcache.get_vertex(vdi).vi);
+						// record sampled vertices
+						if (vdi == rootvdi) m_mparams.mesh->property(m_mparams.prop_sampled, v) = true;
 						//const float w = rootvdi == vdi;
 						//const float w = r < exclusion_radius * 0.5f;
 						// approx inverse distance, preventing inf
@@ -391,7 +395,6 @@ namespace green {
 						const float re = exclusion_radius;
 						const float b = 0.001f;
 						const float w = std::max(re / (r + re * b) - (1 / (b + 2)), 0.f);
-						// TODO try gaussian weighting?
 						atomic_float_accum(tempSaliencyProperty[v.idx()].s, s * w);
 						atomic_float_accum(tempSaliencyProperty[v.idx()].w, w);
 						if (r < exclusion_radius) {
@@ -409,6 +412,7 @@ namespace green {
 
 					// could be up to exclusion_radius * 2 distance between samples, so distribute over that to ensure coverage
 					// need to go slightly more to avoid problems due to vertex discretization (to allow weight to reach zero)
+					// note: show_samples needs to be single threaded or else the lack of computation time can affect the sampling
 					subsampleGeodesicNeighborhoodSaliency(m_meshcache, stats, rootvdi, currentRadius, m_hMin, m_hMax, normalmap_filter, exclusion_radius * 2.1f, visitor);
 
 					stats.nh_timer_end();
@@ -471,7 +475,6 @@ namespace green {
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
 		// note: saliency computation should not create/destroy properties,
 		// only use them, to minimize problems (potential corruption) from concurrent access
-		const auto time_start = std::chrono::steady_clock::now();
 		SaliencyComputation s(mparams, uparams, progress);
 		bool r = s.run() && !progress.should_cancel;
 		return saliency_result(mparams.cleanup, r);
