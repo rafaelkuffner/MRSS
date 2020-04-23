@@ -463,7 +463,8 @@ namespace green {
 		if (minimizeSmallChanges) {
 			for (int i = 0; i < SimdTraits::simd_size; i++) {
 				using simd::simd_extract;
-				float nmapWeight = std::min(pow(simd_extract(plane_range, i) / radius + 0.65f, 10.f), 1.f);
+                //float nmapWeight = std::min(pow(simd_extract(plane_range, i) / radius + 0.65f, 10.f), 1.f);
+				float nmapWeight = std::min(simd_extract(plane_range, i)/0.005f, 1.f);
 				score[i] *= nmapWeight;
 			}
 		}

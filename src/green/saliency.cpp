@@ -116,8 +116,9 @@ namespace green {
 					? 1.5f + std::min((currentArea / m_surfaceArea) * m_mparams.mesh->n_vertices() / samples_per_neighbourhood, 1000000.f)
 					: 1;
 
-				const bool normalmap_filter = m_uparams.normalmap_filter && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
-
+				const bool normalmap_filter = m_uparams.normalmap_filter && currentRadius / 4.f < 0.005f;
+				// && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
+				
 				m_progress.levels[currentLevel].desired_subsampling = subsampling;
 				std::cout << "Desired saliency subsampling ~" << (100.f / subsampling) << "% (~" << subsampling << "x)" << std::endl;
 
