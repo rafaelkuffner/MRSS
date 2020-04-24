@@ -12,6 +12,7 @@
 #include <chrono>
 #include <algorithm>
 #include <iostream>
+#include <random>
 
 #include <omp.h>
 
@@ -32,6 +33,7 @@ namespace green {
 	private:
 		struct sample_candidate {
 			unsigned vdi = -1;
+			float area = 0;
 			float summedarea = 0;
 			bool deleted = false;
 		};
@@ -42,6 +44,7 @@ namespace green {
 		MeshCache m_meshcache;
 		std::vector<sample_candidate> m_candidates0;
 		float m_surfaceArea = 0;
+		float m_total_vertex_area = 0;
 		float m_hMin = 0;
 		float m_hMax = 0;
 		std::vector<CalculationStats> m_thread_stats;
@@ -75,17 +78,26 @@ namespace green {
 
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());
-			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return sample_candidate{vdi, 0.f}; });
+			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return sample_candidate{vdi}; });
+
+			// randomize sample candidates
+			// makes subsampling more stable and less sensitive to parallelization
+			std::minstd_rand rand{std::random_device{}()};
+			std::shuffle(m_candidates0.begin(), m_candidates0.end(), rand);
+
 			{
 				float aa = 0;
 				for (auto &cand : m_candidates0) {
 					const float a = m_meshcache.get_vertex(cand.vdi).props[MeshCache::vertex_prop_area];
+					cand.area = a;
 					cand.summedarea = aa;
 					aa += a;
 				}
+				m_total_vertex_area = aa;
 				for (auto &cand : m_candidates0) {
 					TriMesh::VertexHandle v(m_meshcache.get_vertex(cand.vdi).vi);
-					// normalize summed areas
+					// normalize areas
+					cand.area /= aa;
 					cand.summedarea /= aa;
 				}
 			}
@@ -264,20 +276,6 @@ namespace green {
 			// radius of a circle with 1/nsamples of the surface area
 			const float subsampling_radius = sqrt(m_surfaceArea * subsampling / m_mparams.mesh->n_vertices() / 3.14159265f);
 
-			// correction factor to (experimentally) try to get closer to the desired number of samples.
-			// we would expect this to be < 2, because circles of subsampling_radius would overlap on a flat surface.
-			// the actual surface area of the geodesic r-neighbourhood roughly decreases with increasing curvature,
-			// so more complex models will generally result in taking more samples than intended.
-			// (geodesic r-neighbourhood area probably isn't bounded in reality, and can exceed pi*r^2).
-			// TODO this may depend on degree of subsampling
-			// TODO this depends on parallelism! (but not necessarily predictably)
-			// this is also affected by the neighbourhood distance measurement, which is calculated
-			// as a sum of edge lengths and so is an upper bound on the real distance.
-			constexpr float sampling_correction = 1.8f;
-
-			// radius within which to prevent future samples
-			const float exclusion_radius = subsampling_radius * sampling_correction;
-
 			std::vector<plf::colony<sample_candidate>::iterator> candidateProperty(m_mparams.mesh->n_vertices());
 
 			plf::colony<sample_candidate> candidates;
@@ -352,14 +350,40 @@ namespace green {
 				return nc.it->vdi;
 			};
 
+			// correction factor to (experimentally) try to get closer to the desired number of samples.
+			// we would expect this to be < 2, because circles of subsampling_radius would overlap on a flat surface.
+			// the actual surface area of the geodesic r-neighbourhood roughly decreases with increasing curvature,
+			// so more complex models will generally result in taking more samples than intended.
+			// (geodesic r-neighbourhood area probably isn't bounded in reality, and can exceed pi*r^2).
+			// TODO this may depend on degree of subsampling
+			// TODO this depends on parallelism! (less so with candidate randomization, and also smaller value)
+			// this is also affected by the neighbourhood distance measurement, which is calculated
+			// as a sum of edge lengths and so is an approximation of the real distance.
+			// NOTE should not initialize sampling correction too high and adjust down because exclusion is irreversible.
+			// NOTE using a constant value is desirable rather than trying to aim for a specific number of samples.
+			// we want to control the distance between samples (rather than the area 'owned' by a sample)
+			// because that is what should determine the interpolation error.
+			// NOTE the number of samples is then incidental and the 'overcompletion' is the algorithm operating as desired.
+			// NOTE 1.4 is not scientific and may not be quite low enough in all scenarios but is generally ok.
+			const float sampling_correction = 1.4f;
+
+			// area of non-excluded vertices
+			// can use this to report actual progress %
+			float remaining_area = 1;
+
+			// sample in spits until there are no more candidates
 			while (true) {
+
+				// radius within which to prevent future samples
+				const float exclusion_radius = subsampling_radius * sampling_correction;
 
 				// specifying dynamic scheduling seems very important for this to perform well
 				// note: too few samples per thread per will hurt performance (with openmp overhead)
-				// while too many samples per thread will result in worse sampling characteristics
-				// due to lazy candidate deletion
+				// while too many samples per thread will also hurt performance due to lazy candidate
+				// deletion and may result in worse sampling characteristics.
+				const int samples_per_spit = 50 * omp_get_max_threads();
 #pragma omp parallel for schedule(dynamic)
-				for (int i = 0; i < 50 * omp_get_max_threads(); i++)
+				for (int i = 0; i < samples_per_spit; i++)
 				{
 					auto &stats = m_thread_stats[omp_get_thread_num()];
 					stats.timer_begin();
@@ -383,7 +407,8 @@ namespace green {
 					};
 
 					const auto visitor = [&](unsigned vdi, float r, float s) {
-						TriMesh::VertexHandle v(m_meshcache.get_vertex(vdi).vi);
+						auto &vert = m_meshcache.get_vertex(vdi);
+						TriMesh::VertexHandle v(vert.vi);
 						// record sampled vertices
 						if (vdi == rootvdi) m_mparams.mesh->property(m_mparams.prop_sampled, v) = true;
 						//const float w = rootvdi == vdi;
@@ -442,10 +467,12 @@ namespace green {
 				}
 
 				// actually erase candidates after some number of samples
+				remaining_area = 0;
 				for (auto it = candidates.begin(); it != candidates.end(); ) {
 					if (it->deleted) {
 						it = candidates.erase(it);
 					} else {
+						remaining_area += it->area;
 						it++;
 					}
 				}
@@ -475,8 +502,11 @@ namespace green {
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
 		// note: saliency computation should not create/destroy properties,
 		// only use them, to minimize problems (potential corruption) from concurrent access
+		const int prev_max_threads = omp_get_max_threads();
+		if (uparams.thread_count) omp_set_num_threads(uparams.thread_count);
 		SaliencyComputation s(mparams, uparams, progress);
 		bool r = s.run() && !progress.should_cancel;
+		omp_set_num_threads(prev_max_threads);
 		return saliency_result(mparams.cleanup, r);
 	}
 

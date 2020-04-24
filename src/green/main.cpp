@@ -425,10 +425,6 @@ int main() {
 
 	set_ui_thread_priority();
 
-	// TODO user thread control?
-	// use max hardware threads leaving 1 for UI
-	omp_set_num_threads(std::max(1, int(std::thread::hardware_concurrency()) - 1));
-	
 	// GL 3.3 core context
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -578,7 +574,11 @@ namespace ImGui {
 	}
 
 	void edit_saliency_params(green::saliency_user_params &uparams) {
+		// max hardware threads leaving 1 for UI
+		static const int defthreads = std::max(1, int(std::thread::hardware_concurrency()) - 1);
 		green::saliency_user_params defparams;
+		defparams.thread_count = defthreads;
+		if (!uparams.thread_count) uparams.thread_count = defthreads;
 		if (ImGui::Button("Reset##levels")) uparams.levels = defparams.levels;
 		ImGui::SameLine();
 		ImGui::SliderInt("Levels", &uparams.levels, 1, 10);
@@ -641,6 +641,9 @@ namespace ImGui {
 				ImGui::EndTooltip();
 			}
 		}
+		if (ImGui::Button("Reset##threadcount")) uparams.thread_count = defparams.thread_count;
+		ImGui::SameLine();
+		ImGui::SliderInt("Threads", &uparams.thread_count, 1, defthreads);
 	}
 
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
