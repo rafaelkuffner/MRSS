@@ -85,7 +85,7 @@ namespace green {
 			return m_prop_edge_length;
 		}
 
-		const std::vector<model_saliency_data> original_saliency() const {
+		const std::vector<model_saliency_data> & original_saliency() const {
 			return m_original_saliency;
 		}
 
