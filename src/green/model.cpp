@@ -315,7 +315,7 @@ namespace green {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				const float s = mesh.property(salprop, v);
-				const bool sampled = mesh.property(sampledprop, v);
+				const bool sampled = sampledprop.is_valid() && mesh.property(sampledprop, v);
 				data[i] = glm::vec4(s, 0, 0, sampled);
 			}
 		} else if (m_color_mode == color_mode::saliency_comparison) {
