@@ -364,7 +364,7 @@ namespace green {
 		float radius,
 		float curvmin,
 		float curvmax,
-		bool minimizeSmallChanges
+		float noise_height
 	) {
 		// so we can use < instead of <=
 		// probably doesnt really matter, but should allow more exact testing
@@ -406,7 +406,7 @@ namespace green {
 		OpenMesh::Vec3f avg_normal[SimdTraits::simd_size];
 		dist_t plane_min{+9001e19}, plane_max{-9001e19};
 
-		if (minimizeSmallChanges) {
+		if (noise_height > 0) {
 
 			for (int k = 0; k < SimdTraits::simd_size; k++) {
 				using simd::simd_extract;
@@ -460,11 +460,12 @@ namespace green {
 			}
 		}
 
-		if (minimizeSmallChanges) {
+		if (noise_height > 0) {
 			for (int i = 0; i < SimdTraits::simd_size; i++) {
 				using simd::simd_extract;
                 //float nmapWeight = std::min(pow(simd_extract(plane_range, i) / radius + 0.65f, 10.f), 1.f);
-				float nmapWeight = std::min(simd_extract(plane_range, i)/0.005f, 1.f);
+				// FIXME smoothstep ?
+				float nmapWeight = std::min(simd_extract(plane_range, i) / noise_height, 1.f);
 				score[i] *= nmapWeight;
 			}
 		}
@@ -479,10 +480,10 @@ namespace green {
 		float radius,
 		float curvmin,
 		float curvmax,
-		bool minimizeSmallChanges
+		float noise_height
 	) {
 		static thread_local neighborhood_search<> search;
-		return getGeodesicNeighborhoodSaliencyImpl(search, mesh, stats, rootvdis, radius, curvmin, curvmax, minimizeSmallChanges);
+		return getGeodesicNeighborhoodSaliencyImpl(search, mesh, stats, rootvdis, radius, curvmin, curvmax, noise_height);
 	}
 
 	void subsampleGeodesicNeighborhoodSaliency(
@@ -492,12 +493,12 @@ namespace green {
 		float radius,
 		float curvmin,
 		float curvmax,
-		bool minimizeSmallChanges,
+		float noise_height,
 		float distribution_radius,
 		const std::function<void(unsigned vdi, float r, float s)> &distribute_saliency
 	) {
 		static thread_local neighborhood_search<simd1_traits> search;
-		const float s = getGeodesicNeighborhoodSaliencyImpl<simd1_traits>(search, mesh, stats, {rootvdi}, radius, curvmin, curvmax, minimizeSmallChanges)[0];
+		const float s = getGeodesicNeighborhoodSaliencyImpl<simd1_traits>(search, mesh, stats, {rootvdi}, radius, curvmin, curvmax, noise_height)[0];
 		using mask_t = simd1_traits::mask_t;
 		using dist_t = simd1_traits::dist_t;
 		if (distribution_radius <= radius) {

@@ -562,38 +562,55 @@ namespace ImGui {
 			ImGui::Text("%2d/%zu", i + 1, progress.levels.size());
 			ImGui::SameLine();
 			char buf[1024];
+			const char *normalmap_filter_str = level.normalmap_filter ? "; normalmap-filter" : "";
 			if (level.subsampled) {
 				std::snprintf(buf, sizeof(buf), "%.0f%% [subsampled ~%dx]", frac * 100, level.desired_subsampling);
 			} else {
 				std::snprintf(buf, sizeof(buf), "%.0f%% [full]", frac * 100);
 			}
 			ImGui::ProgressBar(frac, {-1, 0}, buf);
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d / %d vertices", level.completed_vertices, progress.total_vertices);
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d / %d vertices%s", level.completed_vertices, progress.total_vertices, normalmap_filter_str);
 		}
 		ImGui::Text("Elapsed %.3fs", progress.elapsed_time / std::chrono::duration<double>(1.0));
 	}
 
+	bool SliderAny(const char *label, int *v, int v_min, int v_max, const char *format = "%d") {
+		return SliderInt(label, v, v_min, v_max, format);
+	}
+
+	bool SliderAny(const char *label, float *v, float v_min, float v_max, const char *format = "%.3f", float power = 1.f) {
+		return SliderFloat(label, v, v_min, v_max, format, power);
+	}
+
 	void edit_saliency_params(green::saliency_user_params &uparams) {
+		using green::saliency_user_params;
 		// max hardware threads leaving 1 for UI
 		static const int defthreads = std::max(1, int(std::thread::hardware_concurrency()) - 1);
-		green::saliency_user_params defparams;
+		saliency_user_params defparams;
 		defparams.thread_count = defthreads;
 		if (!uparams.thread_count) uparams.thread_count = defthreads;
-		if (ImGui::Button("Reset##levels")) uparams.levels = defparams.levels;
-		ImGui::SameLine();
-		ImGui::SliderInt("Levels", &uparams.levels, 1, 10);
-		if (ImGui::Button("Reset##area")) uparams.area = defparams.area;
-		ImGui::SameLine();
-		ImGui::SliderFloat("Area", &uparams.area, 0, 0.5f, "%.3f", 3);
-		if (ImGui::Button("Reset##curvweight")) uparams.curv_weight = defparams.curv_weight;
-		ImGui::SameLine();
-		ImGui::SliderFloat("Curv Weight", &uparams.curv_weight, 0, 1);
-		if (ImGui::Button("Reset##normalpower")) uparams.normal_power = defparams.normal_power;
-		ImGui::SameLine();
-		ImGui::SliderFloat("Normal Power", &uparams.normal_power, 0, 2);
-		if (ImGui::Button("Reset##normalmapfilter")) uparams.normalmap_filter = defparams.normalmap_filter;
-		ImGui::SameLine();
-		ImGui::Checkbox("Normalmap Filter", &uparams.normalmap_filter);
+		auto slider = [&](const char *label, auto param, auto vmin, auto vmax, auto ...args) {
+			ImGui::PushID(label);
+			if (ImGui::Button("Reset")) uparams.*param = defparams.*param;
+			ImGui::SameLine();
+			bool r = ImGui::SliderAny(label, &(uparams.*param), vmin, vmax, args...);
+			ImGui::PopID();
+			return r;
+		};
+		auto checkbox = [&](const char *label, auto param) {
+			ImGui::PushID(label);
+			if (ImGui::Button("Reset")) uparams.*param = defparams.*param;
+			ImGui::SameLine();
+			bool r = ImGui::Checkbox("Normalmap Filter", &(uparams.*param));
+			ImGui::PopID();
+			return r;
+		};
+		slider("Levels", &saliency_user_params::levels, 1, 10);
+		slider("Area", &saliency_user_params::area, 0.f, 0.5f, "%.4f", 3.f);
+		slider("Curv Weight", &saliency_user_params::curv_weight, 0.f, 1.f);
+		slider("Normal Power", &saliency_user_params::normal_power, 0.f, 2.f);
+		checkbox("Normalmap Filter", &saliency_user_params::normalmap_filter);
+		slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
 		if (ImGui::Button("Reset##subsample")) {
 			uparams.subsample_auto = defparams.subsample_auto;
 			uparams.subsample_manual = defparams.subsample_manual;
@@ -619,9 +636,7 @@ namespace ImGui {
 		ImGui::SameLine();
 		ImGui::Text(" Subsample");
 		if (uparams.subsample_manual) {
-			if (ImGui::Button("Reset##subsamplingrate")) uparams.subsampling_rate = defparams.subsampling_rate;
-			ImGui::SameLine();
-			ImGui::SliderFloat("Rate", &uparams.subsampling_rate, 1, 5000, "%.1fx", 3);
+			slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
 			if (ImGui::IsItemHovered()) {
 				ImGui::BeginTooltip();
 				ImGui::Text("Subsampling Rate");
@@ -630,9 +645,7 @@ namespace ImGui {
 				ImGui::EndTooltip();
 			}
 		} else if (uparams.subsample_auto) {
-			if (ImGui::Button("Reset##samplesperneighborhood")) uparams.samples_per_neighborhood = defparams.samples_per_neighborhood;
-			ImGui::SameLine();
-			ImGui::SliderFloat("S/N", &uparams.samples_per_neighborhood, 1, 500, "%.1f", 2);
+			slider("S/N", &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
 			if (ImGui::IsItemHovered()) {
 				ImGui::BeginTooltip();
 				ImGui::Text("Samples per Neighbourhood");
@@ -641,9 +654,7 @@ namespace ImGui {
 				ImGui::EndTooltip();
 			}
 		}
-		if (ImGui::Button("Reset##threadcount")) uparams.thread_count = defparams.thread_count;
-		ImGui::SameLine();
-		ImGui::SliderInt("Threads", &uparams.thread_count, 1, defthreads);
+		slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
 	}
 
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
@@ -652,6 +663,7 @@ namespace ImGui {
 		ImGui::Text("Curv Weight: %.3f", uparams.curv_weight);
 		ImGui::Text("Normal Power: %.3f", uparams.normal_power);
 		ImGui::Text("Normalmap Filter: %s", uparams.normalmap_filter ? "true" : "false");
+		ImGui::Text("Noise Height: %f", uparams.noise_height);
 		ImGui::Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
 		if (uparams.subsample_manual) {
 			ImGui::Text("Subsampling Rate: %.1f", uparams.subsampling_rate);

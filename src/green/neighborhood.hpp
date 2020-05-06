@@ -178,7 +178,7 @@ namespace green {
 		float radius,
 		float curvmin,
 		float curvmax,
-		bool minimizeSmallChanges
+		float noise_height
 	);
 
 	void subsampleGeodesicNeighborhoodSaliency(
@@ -188,7 +188,7 @@ namespace green {
 		float radius,
 		float curvmin,
 		float curvmax,
-		bool minimizeSmallChanges,
+		float noise_height,
 		float distribution_radius,
 		const std::function<void(unsigned vdi, float r, float s)> &distribute_saliency
 	);

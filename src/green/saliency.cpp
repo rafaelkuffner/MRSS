@@ -45,6 +45,7 @@ namespace green {
 		std::vector<sample_candidate> m_candidates0;
 		float m_surfaceArea = 0;
 		float m_total_vertex_area = 0;
+		float m_real_noise_height = 0;
 		float m_hMin = 0;
 		float m_hMax = 0;
 		std::vector<CalculationStats> m_thread_stats;
@@ -72,6 +73,8 @@ namespace green {
 
 			std::cout << "Computing surface area" << std::endl;
 			m_surfaceArea = surfaceArea(*m_mparams.mesh);
+
+			m_real_noise_height = m_uparams.noise_height * sqrt(m_surfaceArea);
 
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
 			//m_meshcache.dump_to_file();
@@ -128,8 +131,10 @@ namespace green {
 					? 1.5f + std::min((currentArea / m_surfaceArea) * m_mparams.mesh->n_vertices() / samples_per_neighbourhood, 1000000.f)
 					: 1;
 
-				const bool normalmap_filter = m_uparams.normalmap_filter && currentRadius / 4.f < 0.005f;
+				// TODO 4 is a magic number, is it a good one?
+				const bool normalmap_filter = m_uparams.normalmap_filter && currentRadius < m_real_noise_height * 4;
 				// && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
+				m_progress.levels[currentLevel].normalmap_filter = normalmap_filter;
 				
 				m_progress.levels[currentLevel].desired_subsampling = subsampling;
 				std::cout << "Desired saliency subsampling ~" << (100.f / subsampling) << "% (~" << subsampling << "x)" << std::endl;
@@ -221,7 +226,7 @@ namespace green {
 
 				// NOTE: now produces vertex data indices, not ordinary vertex indices
 				//getGeodesicNeighborhood(meshcache, stats, vdis, currentRadius, neighbors);
-				const auto sal = getGeodesicNeighborhoodSaliency(m_meshcache, stats, vdis, currentRadius, m_hMin, m_hMax, normalmap_filter);
+				const auto sal = getGeodesicNeighborhoodSaliency(m_meshcache, stats, vdis, currentRadius, m_hMin, m_hMax, normalmap_filter * m_real_noise_height);
 
 				stats.nh_timer_end();
 
@@ -438,7 +443,7 @@ namespace green {
 					// could be up to exclusion_radius * 2 distance between samples, so distribute over that to ensure coverage
 					// need to go slightly more to avoid problems due to vertex discretization (to allow weight to reach zero)
 					// note: show_samples needs to be single threaded or else the lack of computation time can affect the sampling
-					subsampleGeodesicNeighborhoodSaliency(m_meshcache, stats, rootvdi, currentRadius, m_hMin, m_hMax, normalmap_filter, exclusion_radius * 2.1f, visitor);
+					subsampleGeodesicNeighborhoodSaliency(m_meshcache, stats, rootvdi, currentRadius, m_hMin, m_hMax, normalmap_filter * m_real_noise_height, exclusion_radius * 2.1f, visitor);
 
 					stats.nh_timer_end();
 

@@ -83,6 +83,8 @@ namespace green {
 		float subsampling_rate = 1;
 		// used with auto subsampling
 		float samples_per_neighborhood = 100;
+		// used with normalmap filter; relative to sqrt(real_surface_area)
+		float noise_height = 0.002f;
 		// parallelization (0 -> all)
 		int thread_count = 0;
 		// filter out normalmappable detail
@@ -126,6 +128,7 @@ namespace green {
 			int completed_vertices = 0;
 			int desired_subsampling = 1;
 			bool subsampled = false;
+			bool normalmap_filter = false;
 		};
 
 		// this must be sized correctly before starting and not resized while running
