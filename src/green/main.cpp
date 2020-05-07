@@ -318,7 +318,7 @@ namespace {
 						sal_need_preview = false;
 					}
 				}
-				if (go) {
+				if (go && ep) {
 					// launc calculation
 					sal_entity_id = eid;
 					sal_progress = {};
