@@ -38,7 +38,9 @@ namespace green {
 		OpenMesh::VPropHandleT<unsigned char> prop_sampled{};
 
 		std::string str() const {
-			return filename.empty() ? std::string(uparams) : filename + "?" + propname;
+			if (uparams.preview) return "<preview>";
+			if (filename.empty()) return std::string(uparams);
+			return filename + "?" + propname;
 		}
 
 		explicit operator std::string() const {

@@ -668,6 +668,8 @@ namespace green {
 				mparams.mesh->remove_property(mparams.prop_saliency_levels[i]);
 			}
 			if (r) {
+				// if preview, remove any previous preview results
+				m_saliency_outputs.erase(std::remove_if(m_saliency_outputs.begin(), m_saliency_outputs.end(), [](const auto &sd) { return sd.uparams.preview; }), m_saliency_outputs.end());
 				// save user params, progress output and actual saliency mesh property
 				m_saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency, mparams.prop_sampled});
 				// give focus to this result

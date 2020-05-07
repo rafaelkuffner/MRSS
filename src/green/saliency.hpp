@@ -12,6 +12,7 @@
 #define GREEN_SALIENCY_HPP
 
 #include <cstdio>
+#include <cstring>
 #include <chrono>
 #include <future>
 #include <vector>
@@ -95,11 +96,22 @@ namespace green {
 		bool subsample_auto = true;
 		// command line progress output
 		bool show_progress = true;
+		// interactive previewing
+		bool preview = false;
 
 		explicit operator std::string() const {
 			char buf[128];
 			snprintf(buf, sizeof(buf), "l=%d,a=%.3f,w=%.2f,p=%.2f,n=%d", levels, area, curv_weight, normal_power, normalmap_filter);
 			return {buf};
+		}
+
+		bool operator==(const saliency_user_params &other) const {
+			// TODO quick hack assuming pod
+			return std::memcmp(this, &other, sizeof(*this)) == 0;
+		}
+
+		bool operator!=(const saliency_user_params &other) const {
+			return !(*this == other);
 		}
 
 	};
@@ -137,7 +149,6 @@ namespace green {
 		int completed_levels = 0;		
 		int total_vertices = 0;
 		bool should_cancel = false;
-		
 	};
 
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);

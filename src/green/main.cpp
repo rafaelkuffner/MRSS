@@ -94,6 +94,7 @@ namespace {
 	saliency_user_params sal_uparams;
 	saliency_progress sal_progress;
 	std::future<saliency_result> sal_future;
+	bool sal_need_preview = false;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -231,6 +232,17 @@ namespace {
 		glm::ivec2 winsize;
 		glfwGetWindowSize(window, &winsize.x, &winsize.y);
 
+		// check for saliency completion
+		if (sal_future.valid()) {
+			if (sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				sal_entity_id = -1;
+				// getting the result will trigger cleanup (from its dtor)
+				if (!sal_future.get()) {
+					// cancelled
+				}
+			}
+		}
+
 		ImGui::SetNextWindowPos({10, 10}, ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize({350, 250}, ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Models")) {
@@ -278,31 +290,41 @@ namespace {
 					// TODO unicode...
 					ImGui::Text("%s", ep->name().c_str());
 				}
+				sal_need_preview |= ImGui::Checkbox("Preview", &sal_uparams.preview);
+				ImGui::SameLine();
+				bool go = false;
 				if (sal_future.valid()) {
 					if (ImGui::Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
-					if (sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-						sal_entity_id = -1;
-						if (!sal_future.get()) {
-							// cancelled
-						}
-					}
 				} else {
 					if (ep) {
 						if (ImGui::Button("GO", {-1, 0})) {
-							sal_entity_id = eid;
-							sal_progress = {};
-							sal_progress.levels.resize(sal_uparams.levels);
-							sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
+							go = true;
 						}
 					} else {
 						ImGui::TextDisabled("Select a model");
 					}
 				}
 				ImGui::Separator();
-				ImGui::edit_saliency_params(sal_uparams);
+				sal_need_preview |= ImGui::edit_saliency_params(sal_uparams);
 				ImGui::Separator();
 				ImGui::draw_saliency_progress(sal_progress);
 				if (ImGui::Button("Clear", {-1, 0})) sal_progress = {};
+				if (sal_need_preview && sal_uparams.preview) {
+					// user params edited and preview enabled, try launch preview
+					if (sal_future.valid()) {
+						sal_progress.should_cancel = true;
+					} else {
+						go = true;
+						sal_need_preview = false;
+					}
+				}
+				if (go) {
+					// launc calculation
+					sal_entity_id = eid;
+					sal_progress = {};
+					sal_progress.levels.resize(sal_uparams.levels);
+					sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
+				}
 			}
 			ImGui::End();
 		}
@@ -582,8 +604,9 @@ namespace ImGui {
 		return SliderFloat(label, v, v_min, v_max, format, power);
 	}
 
-	void edit_saliency_params(green::saliency_user_params &uparams) {
+	bool edit_saliency_params(green::saliency_user_params &uparams) {
 		using green::saliency_user_params;
+		const auto uparams0 = uparams;
 		// max hardware threads leaving 1 for UI
 		static const int defthreads = std::max(1, int(std::thread::hardware_concurrency()) - 1);
 		saliency_user_params defparams;
@@ -655,6 +678,7 @@ namespace ImGui {
 			}
 		}
 		slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
+		return uparams != uparams0;
 	}
 
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
