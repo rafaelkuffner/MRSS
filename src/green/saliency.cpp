@@ -108,7 +108,7 @@ namespace green {
 
 		bool run() {
 
-			// TODO cancellation
+			if (m_progress.should_cancel) return false;
 
 			m_progress.completed_levels = 0;
 			m_progress.total_vertices = m_mparams.mesh->n_vertices();
@@ -148,6 +148,7 @@ namespace green {
 				}
 
 				m_progress.completed_levels = currentLevel + 1;
+				if (m_progress.should_cancel) return false;
 			}
 
 			CalculationStats stats;
@@ -213,6 +214,9 @@ namespace green {
 #pragma omp parallel for schedule(dynamic, 2)
 			for (int i = 0; i < m_mparams.mesh->n_vertices(); i += simd_traits::simd_size)
 			{
+				// can't break openmp loop, spin instead
+				if (m_progress.should_cancel) continue;
+				
 				auto &stats = m_thread_stats[omp_get_thread_num()];
 				stats.timer_begin();
 
@@ -377,7 +381,7 @@ namespace green {
 			float remaining_area = 1;
 
 			// sample in spits until there are no more candidates
-			while (true) {
+			while (!m_progress.should_cancel) {
 
 				// radius within which to prevent future samples
 				const float exclusion_radius = subsampling_radius * sampling_correction;
