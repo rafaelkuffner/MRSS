@@ -47,6 +47,7 @@ set_property(TARGET imgui PROPERTY FOLDER "ext")
 # AssImp
 option(ASSIMP_BUILD_ASSIMP_TOOLS "If the supplementary tools for Assimp are built in addition to the library." OFF)
 option(ASSIMP_BUILD_TESTS "If the test suite for Assimp is built in addition to the library." OFF)
+option(ASSIMP_BUILD_ZLIB "Build your own zlib" ON)
 add_subdirectory("ext/assimp-5.0.1")
 set_property(TARGET assimp PROPERTY FOLDER "ext")
 set_property(TARGET IrrXML PROPERTY FOLDER "ext")
