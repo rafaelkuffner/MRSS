@@ -32,7 +32,7 @@ namespace green {
 		Options can be passed via _opt. After execution _opt contains the Options
 		that were available
 		*/
-		virtual bool read(const std::string& _filename, OpenMesh::IO::BaseImporter& _bi, OpenMesh::IO::Options& _opt) override;
+		virtual bool read(const std::filesystem::path& _filename, OpenMesh::IO::BaseImporter& _bi, OpenMesh::IO::Options& _opt) override;
 
 		/** Reads a mesh given by a std::stream. This method usually uses the same stream reading method
 		that read uses. Options can be passed via _opt. After execution _opt contains the Options
@@ -47,7 +47,7 @@ namespace green {
 		* @param _filename complete name of a file or just the extension
 		* @result true, if reader can read data with the given extension
 		*/
-		virtual bool can_u_read(const std::string& _filename) const override;
+		virtual bool can_u_read(const std::filesystem::path& _filename) const override;
 
 		virtual ~AssimpReader() {}
 

@@ -44,19 +44,21 @@ namespace green {
 		OpenMesh::IO::IOManager().register_module(this);
 	}
 
-	bool AssimpReader::read(const std::string &_filename, OpenMesh::IO::BaseImporter &_bi, OpenMesh::IO::Options &_opt) {
+	bool AssimpReader::read(const std::filesystem::path &_filename, OpenMesh::IO::BaseImporter &_bi, OpenMesh::IO::Options &_opt) {
+		omerr() << "[Assimp] : loading " << _filename.u8string() << std::endl;
+		// NOTE assimp appears to support utf8 filenames; see assimp-5.0.1\code\Common\DefaultIOSystem.cpp
 		Assimp::Importer importer;
 		//importer.SetProgressHandler
 		//importer.SetPropertyFloat(AI_CONFIG_PP_GSN_MAX_SMOOTHING_ANGLE, 70.f);
 		// scene is owned by the importer
 		const aiScene *scene = importer.ReadFile(
-			_filename,
+			_filename.u8string(),
 			aiProcess_Triangulate
 			//| aiProcess_JoinIdenticalVertices
 			//| aiProcess_GenSmoothNormals
 		);
 		if (!scene) {
-			omerr() << "[Assimp] : failed to load " << _filename << ": " << importer.GetErrorString() << std::endl;
+			omerr() << "[Assimp] : failed to load " << _filename.u8string() << ": " << importer.GetErrorString() << std::endl;
 			return false;
 		}
 		OpenMesh::IO::BaseImporter::VHandles vhandles;
@@ -108,8 +110,9 @@ namespace green {
 		throw std::logic_error("not implemented");
 	}
 
-	bool AssimpReader::can_u_read(const std::string &_filename) const {
-		const auto ext = stdfs::path(_filename).extension();
+	bool AssimpReader::can_u_read(const std::filesystem::path &_filename) const {
+		// assume utf8
+		auto ext = _filename.extension();
 		for (const char *e : {".om", ".OM", ".ply", ".PLY", ".obj", ".OBJ", ".off", ".OFF", ".stl", ".STL"}) {
 			// skip formats that openmesh can already load
 			if (ext == e) return false;

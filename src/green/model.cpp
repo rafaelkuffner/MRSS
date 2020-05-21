@@ -46,8 +46,8 @@ namespace green {
 		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom | OpenMesh::IO::Options::VertexColor;
 
 		// TODO unicode filenames...
-		std::cerr << "Loading model " << fpath << std::endl;
-		if (OpenMesh::IO::read_mesh(m_trimesh, fpath.string(), readOptions)) {
+		std::cerr << "Loading model " << fpath.u8string() << std::endl;
+		if (OpenMesh::IO::read_mesh(m_trimesh, fpath, readOptions)) {
 			std::cerr << "Loaded" << std::endl;
 		} else {
 			std::cerr << "Failed" << std::endl;
@@ -141,12 +141,12 @@ namespace green {
 		if (m_trimesh.has_vertex_colors()) opts = opts | OpenMesh::IO::Options::VertexColor;
 
 		// TODO unicode filenames...
-		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath.string(), opts);
+		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath, opts);
 
 		m_trimesh.remove_property(prop_quality);
 
 		if (!res) {
-			std::cerr << "Could not write mesh file " << fpath << std::endl;
+			std::cerr << "Could not write mesh file " << fpath.u8string() << std::endl;
 			throw std::runtime_error("failed to save model");
 		}
 	}
@@ -366,8 +366,10 @@ namespace green {
 					m_saliency_outputs.push_back(sd);
 					m_saliency_vbo_dirty = true;
 				}
+			} catch (std::exception &e) {
+				std::cerr << "failed to load model: " << e.what() << std::endl;
 			} catch (...) {
-				// load failed
+				std::cerr << "failed to load model" << std::endl;
 			}
 		}
 		auto &sel = ui_selection();
@@ -375,8 +377,8 @@ namespace green {
 		if (ImGui::Begin("Models")) {
 			// TODO unicode...
 			if (selected) ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-			if (ImGui::CollapsingHeader(m_fpath_load.filename().string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
+			if (ImGui::CollapsingHeader(m_fpath_load.filename().u8string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
 				ImGui::PushID(m_model.get());
 				if (m_pending_load.valid()) {
 					ImGui::Text("Loading...");
@@ -398,8 +400,8 @@ namespace green {
 					sel.select_vertex = -1;
 				}
 				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
-					ImGui::Text("Remove model \"%s\" ?", m_fpath_load.filename().string().c_str());
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
+					ImGui::Text("Remove model \"%s\" ?", m_fpath_load.filename().u8string().c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
 					if (ImGui::Button("Remove")) {
 						m_dead = true;
 						ImGui::CloseCurrentPopup();
@@ -418,9 +420,9 @@ namespace green {
 				
 				ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
 				// TODO unicode?
-				ImGui::Selectable(m_fpath_load.filename().string().c_str(), true);
+				ImGui::Selectable(m_fpath_load.filename().u8string().c_str(), true);
 				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
 				ImGui::PushID(m_model.get());
 
 				if (ImGui::Button("Export...")) ImGui::OpenPopup("Export##export");
@@ -429,8 +431,11 @@ namespace green {
 					if (m_pending_save.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 						try {
 							m_save_ok = m_pending_save.get();
+						} catch (std::exception &e) {
+							std::cerr << "failed to save model: " << e.what() << std::endl;
+							m_save_ok = false;
 						} catch (...) {
-							// save failed
+							std::cerr << "failed to save model" << std::endl;
 							m_save_ok = false;
 						}
 					} else {
@@ -472,8 +477,8 @@ namespace green {
 
 				ImGui::SetNextWindowSize({400, 150}, ImGuiCond_Appearing);
 				if (ImGui::BeginPopupModal("Export##export")) {
-					ImGui::Selectable(m_fpath_load.filename().string().c_str());
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.string().c_str());
+					ImGui::Selectable(m_fpath_load.filename().u8string().c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
 					if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) {
 						auto &salout = m_saliency_outputs[m_saliency_index];
 						ImGui::Text("Saliency: %s", std::string(salout).c_str());
