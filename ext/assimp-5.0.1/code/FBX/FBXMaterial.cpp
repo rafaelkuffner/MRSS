@@ -86,7 +86,9 @@ Material::Material(uint64_t id, const Element& element, const Document& doc, con
     std::string templateName;
 
     // lower-case shading because Blender (for example) writes "Phong"
-    std::transform(shading.begin(), shading.end(), shading.begin(), ::tolower);
+    // vs2019: workaround for probable bad codegen - ben
+    const auto shading0 = shading;
+    std::transform(shading0.begin(), shading0.end(), shading.begin(), ::tolower);
     if(shading == "phong") {
         templateName = "Material.FbxSurfacePhong";
     }
