@@ -59,6 +59,7 @@
 // STD C++
 #include <iosfwd>
 #include <string>
+#include <filesystem>
 
 // OpenMesh
 #include <OpenMesh/Core/System/config.h>
@@ -100,7 +101,7 @@ public:
    * @param _filename complete name of a file or just the extension
    * @result true, if writer can write data with the given extension
    */
-  virtual bool can_u_write(const std::string& _filename) const;
+  virtual bool can_u_write(const std::filesystem::path& _filename) const;
 
   /** Write to a file
    * @param _filename write to file with the given filename
@@ -108,7 +109,7 @@ public:
    * @param _opt writing options
    * @param _precision can be used to specify the precision of the floating point notation.
    */
-  virtual bool write(const std::string& _filename,
+  virtual bool write(const std::filesystem::path& _filename,
 		     BaseExporter& _be,
                      Options _opt,
                      std::streamsize _precision = 6) const = 0;

@@ -96,7 +96,7 @@ public:
   { return "Stereolithography Interface Format"; }
   std::string get_extensions() const { return "stl stla stlb"; }
 
-  bool read(const std::string& _filename,
+  bool read(const std::filesystem::path& _filename,
 	    BaseImporter& _bi,
             Options& _opt);
 
@@ -116,11 +116,11 @@ public:
 private:
 
   enum STL_Type { STLA, STLB, NONE };
-  STL_Type check_stl_type(const std::string& _filename) const;
+  STL_Type check_stl_type(const std::filesystem::path& _filename) const;
 
-  bool read_stla(const std::string& _filename, BaseImporter& _bi, Options& _opt) const;
+  bool read_stla(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const;
   bool read_stla(std::istream& _in, BaseImporter& _bi, Options& _opt) const;
-  bool read_stlb(const std::string& _filename, BaseImporter& _bi, Options& _opt) const;
+  bool read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const;
   bool read_stlb(std::istream& _in, BaseImporter& _bi, Options& _opt) const;
 
 

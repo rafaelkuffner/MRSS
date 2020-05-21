@@ -81,14 +81,14 @@ _OBJWriter_::_OBJWriter_() { IOManager().register_module(this); }
 
 bool
 _OBJWriter_::
-write(const std::string& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
   std::fstream out(_filename.c_str(), std::ios_base::out );
 
   if (!out)
   {
     omerr() << "[OBJWriter] : cannot open file "
-	  << _filename << std::endl;
+	  << _filename.u8string() << std::endl;
     return false;
   }
 
@@ -100,24 +100,28 @@ write(const std::string& _filename, BaseExporter& _be, Options _opt, std::stream
 
   {
 #if defined(WIN32)
-    std::string::size_type dot = _filename.find_last_of("\\/");
+    //std::string::size_type dot = _filename.find_last_of("\\/");
 #else
-    std::string::size_type dot = _filename.rfind("/");
+    //std::string::size_type dot = _filename.rfind("/");
 #endif
 
-    if (dot == std::string::npos){
-      path_ = "./";
-      objName_ = _filename;
-    }else{
-      path_ = _filename.substr(0,dot+1);
-      objName_ = _filename.substr(dot+1);
-    }
+    path_ = _filename.parent_path();
+    objName_ = _filename.filename();
+
+    //if (dot == std::string::npos){
+    //  path_ = "./";
+    //  objName_ = _filename;
+    //}else{
+    //  path_ = _filename.substr(0,dot+1);
+    //  objName_ = _filename.substr(dot+1);
+    //}
 
     //remove the file extension
-    dot = objName_.find_last_of(".");
+    //dot = objName_.find_last_of(".");
 
-    if(dot != std::string::npos)
-      objName_ = objName_.substr(0,dot);
+    //if(dot != std::string::npos)
+      //objName_ = objName_.substr(0,dot);
+    objName_.replace_extension("");
   }
 
   bool result = write(out, _be, _opt, _precision);
@@ -243,13 +247,15 @@ write(std::ostream& _out, BaseExporter& _be, Options _opt, std::streamsize _prec
   //create material file if needed
   if ( _opt.check(Options::FaceColor) ){
 
-    std::string matFile = path_ + objName_ + ".mat";
+    auto matFile = path_ / objName_;
+    matFile.replace_extension(".mat");
+    // shouldnt it be .mtl ? - ben
 
-    std::fstream matStream(matFile.c_str(), std::ios_base::out );
+    std::fstream matStream(matFile, std::ios_base::out );
 
     if (!matStream)
     {
-      omerr() << "[OBJWriter] : cannot write material file " << matFile << std::endl;
+      omerr() << "[OBJWriter] : cannot write material file " << matFile.u8string() << std::endl;
 
     }else{
       useMatrial = writeMaterial(matStream, _be, _opt);

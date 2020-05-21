@@ -116,7 +116,7 @@ protected:
   static const OMFormat::uchar magic_[3];
   static const OMFormat::uint8 version_;
 
-  bool write(const std::string&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
 
   bool write_binary(std::ostream&, BaseExporter&, Options) const;
 

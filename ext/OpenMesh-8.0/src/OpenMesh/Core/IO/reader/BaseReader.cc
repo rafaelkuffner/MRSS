@@ -74,17 +74,17 @@ static inline char tolower(char c)
 
 bool 
 BaseReader::
-can_u_read(const std::string& _filename) const 
+can_u_read(const std::filesystem::path& _filename) const 
 {
   // get file extension
-  std::string extension;
-  std::string::size_type pos(_filename.rfind("."));
-
-  if (pos != std::string::npos)
-    extension = _filename.substr(pos+1, _filename.length()-pos-1);
+  auto extension = _filename.extension().u8string();
+  
+  if (!extension.empty())
+    extension = extension.substr(1);
   else
-    extension = _filename; //check, if the whole filename defines the extension
+    extension = _filename.u8string(); //check, if the whole filename defines the extension
 
+  // NOT UNICODE SAFE
   std::transform( extension.begin(), extension.end(),
 	  extension.begin(), tolower );
 
@@ -98,21 +98,21 @@ can_u_read(const std::string& _filename) const
 
 bool 
 BaseReader::
-check_extension(const std::string& _fname, const std::string& _ext) const
+check_extension(const std::filesystem::path& _fname, const std::filesystem::path& _ext) const
 {
-  std::string cmpExt(_ext);
+  auto cmpExt = _ext.u8string();
 
-  std::transform( _ext.begin(), _ext.end(),  cmpExt.begin(), tolower );
+  // NOT UNICODE SAFE
+  std::transform( cmpExt.begin(), cmpExt.end(),  cmpExt.begin(), tolower );
 
-  std::string::size_type pos(_fname.rfind("."));
+  auto ext = _fname.extension().u8string();
 
-  if (pos != std::string::npos && !_ext.empty() )
+  if (!ext.empty())
   { 
-    std::string ext;
-
     // extension without dot!
-    ext = _fname.substr(pos+1, _fname.length()-pos-1);
+    ext = ext.substr(1);
 
+    // NOT UNICODE SAFE
     std::transform( ext.begin(), ext.end(), ext.begin(), tolower );
     
     return ext == cmpExt;

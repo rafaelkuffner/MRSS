@@ -90,7 +90,7 @@ public:
   std::string get_description() const { return "Alias/Wavefront"; }
   std::string get_extensions()  const { return "obj"; }
 
-  bool read(const std::string& _filename,
+  bool read(const std::filesystem::path& _filename,
 	    BaseImporter& _bi,
 	    Options& _opt);
 
@@ -176,7 +176,7 @@ private:
                      std::vector<VertexHandle> & vertexHandles,
                      Options & fileOptions);
 
-  std::string path_;
+  std::filesystem::path path_;
 
 };
 

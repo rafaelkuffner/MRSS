@@ -47,6 +47,9 @@ else ()
 
 endif ()
 
+# use c++17 for std::filesystem - ben
+target_compile_features(OpenMeshCore PUBLIC cxx_std_17)
+
 # Add core as dependency before fixbundle 
 if ( (${PROJECT_NAME} MATCHES "OpenMesh") AND BUILD_APPS )
 

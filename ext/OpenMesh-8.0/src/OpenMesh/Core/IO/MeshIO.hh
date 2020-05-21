@@ -110,7 +110,7 @@ namespace IO   {
 template <class Mesh>
 bool
 read_mesh(Mesh&         _mesh,
-	  const std::string&  _filename)
+	  const std::filesystem::path&  _filename)
 {
   Options opt;
   return read_mesh(_mesh, _filename, opt, true);
@@ -140,7 +140,7 @@ read_mesh(Mesh&         _mesh,
 template <class Mesh>
 bool
 read_mesh(Mesh&         _mesh,
-	  const std::string&  _filename,
+	  const std::filesystem::path&  _filename,
 	  Options&            _opt,
 	  bool                _clear = true)
 {
@@ -173,7 +173,7 @@ template <class Mesh>
 bool
 read_mesh(Mesh&         _mesh,
 	  std::istream&       _is,
-	  const std::string&  _ext,
+	  const std::filesystem::path&  _ext,
 	  Options&            _opt,
 	  bool                _clear = true)
 {
@@ -205,7 +205,7 @@ read_mesh(Mesh&         _mesh,
 */
 template <class Mesh>
 bool write_mesh(const Mesh&        _mesh,
-                const std::string& _filename,
+                const std::filesystem::path& _filename,
                 Options            _opt = Options::Default,
                 std::streamsize    _precision = 6)
 {
@@ -238,7 +238,7 @@ bool write_mesh(const Mesh&        _mesh,
 template <class Mesh>
 bool write_mesh(const Mesh&        _mesh,
 		std::ostream&      _os,
-	        const std::string& _ext,
+	        const std::filesystem::path& _ext,
                 Options            _opt = Options::Default,
                 std::streamsize    _precision = 6)
 {
@@ -266,7 +266,7 @@ bool write_mesh(const Mesh&        _mesh,
 */
 template <class Mesh>
 size_t binary_size(const Mesh&        _mesh,
-                   const std::string& _ext,
+                   const std::filesystem::path& _ext,
                    Options            _opt = Options::Default)
 {
   ExporterT<Mesh> exporter(_mesh);

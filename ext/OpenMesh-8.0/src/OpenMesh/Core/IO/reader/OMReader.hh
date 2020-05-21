@@ -93,7 +93,7 @@ public:
   std::string get_extensions()  const { return "om"; }
   std::string get_magic()       const { return "OM"; }
 
-  bool read(const std::string& _filename,
+  bool read(const std::filesystem::path& _filename,
 	    BaseImporter& _bi,
 	    Options& _opt );
 
@@ -102,7 +102,7 @@ public:
 	    BaseImporter& _bi,
 	    Options& _opt );
 
-  virtual bool can_u_read(const std::string& _filename) const;
+  virtual bool can_u_read(const std::filesystem::path& _filename) const;
   virtual bool can_u_read(std::istream& _is) const;
 
 

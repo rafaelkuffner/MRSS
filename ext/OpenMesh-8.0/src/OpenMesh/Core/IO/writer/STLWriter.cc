@@ -80,20 +80,20 @@ _STLWriter_::_STLWriter_() { IOManager().register_module(this); }
 
 bool
 _STLWriter_::
-write(const std::string& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
   // binary or ascii ?
-  if (_filename.rfind(".stla") != std::string::npos)
+  if (_filename.extension() == ".stla")
   {
     _opt -= Options::Binary;
   }
-  else if (_filename.rfind(".stlb") != std::string::npos)
+  else if (_filename.extension() == ".stlb")
   {
     _opt += Options::Binary;
   }
 
   // open file
-  std::fstream out(_filename.c_str(), (_opt.check(Options::Binary) ? std::ios_base::binary | std::ios_base::out
+  std::fstream out(_filename, (_opt.check(Options::Binary) ? std::ios_base::binary | std::ios_base::out
                                                                    : std::ios_base::out) );
 
   bool result = write(out, _be, _opt, _precision);
@@ -137,16 +137,20 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
 
 bool
 _STLWriter_::
-write_stla(const std::string& _filename, BaseExporter& _be, Options /* _opt */) const
+write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /* _opt */) const
 {
   omlog() << "[STLWriter] : write ascii file\n";
 
 
   // open file
+#ifdef _WIN32
+  FILE *out = _wfopen(_filename.c_str(), L"w");
+#else
   FILE* out = fopen(_filename.c_str(), "w");
+#endif
   if (!out)
   {
-    omerr() << "[STLWriter] : cannot open file " << _filename << std::endl;
+    omerr() << "[STLWriter] : cannot open file " << _filename.u8string() << std::endl;
     return false;
   }
 
@@ -254,16 +258,20 @@ write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
 
 bool
 _STLWriter_::
-write_stlb(const std::string& _filename, BaseExporter& _be, Options /* _opt */) const
+write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /* _opt */) const
 {
   omlog() << "[STLWriter] : write binary file\n";
 
 
   // open file
+#ifdef _WIN32
+  FILE *out = _wfopen(_filename.c_str(), L"wb");
+#else
   FILE* out = fopen(_filename.c_str(), "wb");
+#endif
   if (!out)
   {
-    omerr() << "[STLWriter] : cannot open file " << _filename << std::endl;
+    omerr() << "[STLWriter] : cannot open file " << _filename.u8string() << std::endl;
     return false;
   }
 

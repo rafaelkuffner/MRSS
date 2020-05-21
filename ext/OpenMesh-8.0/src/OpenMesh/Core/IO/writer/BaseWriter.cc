@@ -77,17 +77,17 @@ static inline char tolower(char c)
 
 bool 
 BaseWriter::
-can_u_write(const std::string& _filename) const 
+can_u_write(const std::filesystem::path& _filename) const 
 {
   // get file extension
-  std::string extension;
-  std::string::size_type pos(_filename.rfind("."));
-
-  if (pos != std::string::npos)
-    extension = _filename.substr(pos+1, _filename.length()-pos-1);
+  auto extension = _filename.extension().u8string();
+  
+  if (!extension.empty())
+    extension = extension.substr(1);
   else
-    extension = _filename; //check, if the whole filename defines the extension
+    extension = _filename.u8string(); //check, if the whole filename defines the extension
 
+  // NOT UNICODE SAFE
   std::transform( extension.begin(), extension.end(),
 	   extension.begin(), tolower );
 

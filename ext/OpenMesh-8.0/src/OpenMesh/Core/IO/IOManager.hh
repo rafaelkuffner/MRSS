@@ -122,7 +122,7 @@ public:
      of its reader modules. True is returned upon success, false if all
      reader modules failed to interprete _filename.
   */
-  bool read(const std::string& _filename,
+  bool read(const std::filesystem::path& _filename,
 	    BaseImporter& _bi,
 	    Options& _opt);
 
@@ -144,7 +144,7 @@ public:
       writer modules failed to write the requested format.
       Options is determined by _filename's extension.
   */
-  bool write(const std::string& _filename,
+  bool write(const std::filesystem::path& _filename,
 	     BaseExporter& _be,
 	     Options _opt=Options::Default,
              std::streamsize _precision = 6);

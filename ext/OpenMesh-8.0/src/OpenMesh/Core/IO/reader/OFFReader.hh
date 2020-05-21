@@ -122,11 +122,11 @@ public:
   std::string get_extensions()  const { return "off"; }
   std::string get_magic()       const { return "OFF"; }
 
-  bool read(const std::string& _filename,
+  bool read(const std::filesystem::path& _filename,
 	    BaseImporter& _bi,
 	    Options& _opt);
 
-  bool can_u_read(const std::string& _filename) const;
+  bool can_u_read(const std::filesystem::path& _filename) const;
 
   bool read(std::istream& _in, BaseImporter& _bi, Options& _opt );
 

@@ -92,7 +92,7 @@ _OMWriter_()
 
 
 bool
-_OMWriter_::write(const std::string& _filename, BaseExporter& _be,
+_OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
                    Options _opt, std::streamsize /*_precision*/) const
 {
   // check whether exporter can give us an OpenMesh BaseKernel
@@ -100,7 +100,7 @@ _OMWriter_::write(const std::string& _filename, BaseExporter& _be,
 
 
   // check for om extension in filename, we can only handle OM
-  if (_filename.rfind(".om") == std::string::npos)
+  if (_filename.extension() != ".om")
     return false;
 
   _opt += Options::Binary; // only binary format supported
@@ -110,7 +110,7 @@ _OMWriter_::write(const std::string& _filename, BaseExporter& _be,
   // check if file is open
   if (!ofs.is_open())
   {
-    omerr() << "[OMWriter] : cannot open file " << _filename << std::endl;
+    omerr() << "[OMWriter] : cannot open file " << _filename.u8string() << std::endl;
     return false;
   }
 

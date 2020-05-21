@@ -101,7 +101,7 @@ public:
   std::string get_extensions()  const { return "ply"; }
   std::string get_magic()       const { return "PLY"; }
 
-  bool read(const std::string& _filename,
+  bool read(const std::filesystem::path& _filename,
         BaseImporter& _bi,
         Options& _opt);
 
@@ -109,7 +109,7 @@ public:
             BaseImporter& _bi,
             Options& _opt);
 
-  bool can_u_read(const std::string& _filename) const;
+  bool can_u_read(const std::filesystem::path& _filename) const;
 
   enum ValueType {
     Unsupported,

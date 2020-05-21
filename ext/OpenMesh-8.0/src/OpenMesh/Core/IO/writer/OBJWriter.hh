@@ -91,7 +91,7 @@ public:
   std::string get_description() const  { return "Alias/Wavefront"; }
   std::string get_extensions()  const  { return "obj"; }
 
-  bool write(const std::string&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
 
   bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
 
@@ -99,8 +99,8 @@ public:
 
 private:
 
-  mutable std::string path_;
-  mutable std::string objName_;
+  mutable std::filesystem::path path_;
+  mutable std::filesystem::path objName_;
 
   mutable std::vector< OpenMesh::Vec3f > material_;
   mutable std::vector< OpenMesh::Vec4f > materialA_;

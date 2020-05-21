@@ -84,7 +84,7 @@ _IOManager_& IOManager()
 
 bool
 _IOManager_::
-read(const std::string& _filename, BaseImporter& _bi, Options& _opt)
+read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 {
   std::set<BaseReader*>::const_iterator it     =  reader_modules_.begin();
   std::set<BaseReader*>::const_iterator it_end =  reader_modules_.end();
@@ -140,7 +140,7 @@ read(std::istream& _is, const std::string& _ext, BaseImporter& _bi, Options& _op
 
 bool
 _IOManager_::
-write(const std::string& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision)
+write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision)
 {
   std::set<BaseWriter*>::const_iterator it     = writer_modules_.begin();
   std::set<BaseWriter*>::const_iterator it_end = writer_modules_.end();

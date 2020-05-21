@@ -87,7 +87,7 @@ _OMReader_::_OMReader_()
 //-----------------------------------------------------------------------------
 
 
-bool _OMReader_::read(const std::string& _filename, BaseImporter& _bi, Options& _opt)
+bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 {
   // check whether importer can give us an OpenMesh BaseKernel
   if (!_bi.kernel())
@@ -97,7 +97,7 @@ bool _OMReader_::read(const std::string& _filename, BaseImporter& _bi, Options& 
   fileOptions_ = Options::Binary;
 
   // Open file
-  std::ifstream ifs(_filename.c_str(), std::ios::binary);
+  std::ifstream ifs(_filename, std::ios::binary);
 
   /* Clear formatting flag skipws (Skip whitespaces). If set, operator>> will
    * skip bytes set to whitespace chars (e.g. 0x20 bytes) in
@@ -106,7 +106,7 @@ bool _OMReader_::read(const std::string& _filename, BaseImporter& _bi, Options& 
   ifs.unsetf(std::ios::skipws);
 
   if (!ifs.is_open() || !ifs.good()) {
-    omerr() << "[OMReader] : cannot not open file " << _filename << std::endl;
+    omerr() << "[OMReader] : cannot not open file " << _filename.u8string() << std::endl;
     return false;
   }
 
@@ -231,12 +231,12 @@ bool _OMReader_::read_binary(std::istream& _is, BaseImporter& _bi, Options& _opt
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::can_u_read(const std::string& _filename) const
+bool _OMReader_::can_u_read(const std::filesystem::path& _filename) const
 {
   // !!! Assuming BaseReader::can_u_parse( std::string& )
   // does not call BaseReader::read_magic()!!!
   if (this->BaseReader::can_u_read(_filename)) {
-    std::ifstream ifile(_filename.c_str());
+    std::ifstream ifile(_filename);
     if (ifile && can_u_read(ifile))
       return true;
   }

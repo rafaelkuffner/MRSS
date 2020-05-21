@@ -121,27 +121,28 @@ _OBJReader_()
 
 bool
 _OBJReader_::
-read(const std::string& _filename, BaseImporter& _bi, Options& _opt)
+read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 {
-  std::fstream in( _filename.c_str(), std::ios_base::in );
+  std::fstream in( _filename, std::ios_base::in );
 
   if (!in.is_open() || !in.good())
   {
     omerr() << "[OBJReader] : cannot not open file "
-          << _filename
+          << _filename.u8string()
           << std::endl;
     return false;
   }
 
   {
 #if defined(WIN32)
-    std::string::size_type dot = _filename.find_last_of("\\/");
+    //std::string::size_type dot = _filename.find_last_of("\\/");
 #else
-    std::string::size_type dot = _filename.rfind("/");
+    //std::string::size_type dot = _filename.rfind("/");
 #endif
-    path_ = (dot == std::string::npos)
-      ? "./"
-      : std::string(_filename.substr(0,dot+1));
+    path_ = _filename.parent_path();
+    //path_ = (dot == std::string::npos)
+    //  ? "./"
+    //  : std::string(_filename.substr(0,dot+1));
   }
 
   bool result = read(in, _bi, _opt);
@@ -474,11 +475,11 @@ read(std::istream& _in, BaseImporter& _bi, Options& _opt)
       std::getline(stream,matFile);
       trimString(matFile);
 
-      matFile = path_ + matFile;
+      auto matPath = path_ / std::filesystem::u8path(matFile);
 
       //omlog() << "Load material file " << matFile << std::endl;
 
-      std::fstream matStream( matFile.c_str(), std::ios_base::in );
+      std::fstream matStream( matPath, std::ios_base::in );
 
       if ( matStream ){
 

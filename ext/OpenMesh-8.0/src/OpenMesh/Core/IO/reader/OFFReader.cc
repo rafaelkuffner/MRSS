@@ -103,16 +103,16 @@ _OFFReader_::_OFFReader_()
 
 
 bool
-_OFFReader_::read(const std::string& _filename, BaseImporter& _bi,
+_OFFReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
                   Options& _opt)
 {
-  std::ifstream ifile(_filename.c_str(), (options_.is_binary() ? std::ios::binary | std::ios::in
+  std::ifstream ifile(_filename, (options_.is_binary() ? std::ios::binary | std::ios::in
                                                            : std::ios::in) );
 
   if (!ifile.is_open() || !ifile.good())
   {
     omerr() << "[OFFReader] : cannot not open file "
-	  << _filename
+	  << _filename.u8string()
 	  << std::endl;
 
     return false;
@@ -605,13 +605,13 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
 //-----------------------------------------------------------------------------
 
 
-bool _OFFReader_::can_u_read(const std::string& _filename) const
+bool _OFFReader_::can_u_read(const std::filesystem::path& _filename) const
 {
   // !!! Assuming BaseReader::can_u_parse( std::string& )
   // does not call BaseReader::read_magic()!!!
   if (BaseReader::can_u_read(_filename))
   {
-    std::ifstream ifs(_filename.c_str());
+    std::ifstream ifs(_filename);
     if (ifs.is_open() && can_u_read(ifs))
     {
       ifs.close();

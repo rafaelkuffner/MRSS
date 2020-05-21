@@ -24,12 +24,12 @@ _VTKWriter_::_VTKWriter_() { IOManager().register_module(this); }
 
 //-----------------------------------------------------------------------------
 
-bool _VTKWriter_::write(const std::string& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _VTKWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
-    std::ofstream out(_filename.c_str());
+    std::ofstream out(_filename);
 
     if (!out) {
-        omerr() << "[VTKWriter] : cannot open file " << _filename << std::endl;
+        omerr() << "[VTKWriter] : cannot open file " << _filename.u8string() << std::endl;
         return false;
     }
 

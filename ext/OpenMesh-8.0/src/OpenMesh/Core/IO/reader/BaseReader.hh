@@ -62,6 +62,7 @@
 #include <cctype>
 #include <functional>
 #include <algorithm>
+#include <filesystem>
 
 // OpenMesh
 #include <OpenMesh/Core/System/config.h>
@@ -112,7 +113,7 @@ public:
       Options can be passed via _opt. After execution _opt contains the Options
       that were available
   */
-  virtual bool read(const std::string& _filename, 
+  virtual bool read(const std::filesystem::path& _filename, 
 		    BaseImporter& _bi,
                     Options& _opt) = 0;
 		
@@ -132,14 +133,14 @@ public:
    * @param _filename complete name of a file or just the extension
    * @result true, if reader can read data with the given extension
    */
-  virtual bool can_u_read(const std::string& _filename) const;
+  virtual bool can_u_read(const std::filesystem::path& _filename) const;
 
 
 protected:
 
   // case insensitive search for _ext in _fname.
-  bool check_extension(const std::string& _fname, 
-		       const std::string& _ext) const;
+  bool check_extension(const std::filesystem::path& _fname, 
+		       const std::filesystem::path& _ext) const;
 };
 
 

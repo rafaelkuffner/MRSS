@@ -32,7 +32,7 @@ public:
     std::string get_description() const { return "VTK"; }
     std::string get_extensions()  const { return "vtk"; }
 
-    bool write(const std::string&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+    bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
     bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
 
     size_t binary_size(BaseExporter&, Options) const { return 0; }

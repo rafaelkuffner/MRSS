@@ -78,9 +78,9 @@ _OFFWriter_::_OFFWriter_() { IOManager().register_module(this); }
 
 bool
 _OFFWriter_::
-write(const std::string& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
-  std::ofstream out(_filename.c_str(), (_opt.check(Options::Binary) ? std::ios_base::binary | std::ios_base::out
+  std::ofstream out(_filename, (_opt.check(Options::Binary) ? std::ios_base::binary | std::ios_base::out
                                                            : std::ios_base::out) );
 
   return write(out, _be, _opt, _precision);

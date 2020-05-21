@@ -96,7 +96,7 @@ _STLReader_()
 
 bool
 _STLReader_::
-read(const std::string& _filename, BaseImporter& _bi, Options& _opt)
+read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 {
   bool result = false;
 
@@ -211,14 +211,14 @@ void trimStdString( std::string& _string) {
 
 bool
 _STLReader_::
-read_stla(const std::string& _filename, BaseImporter& _bi, Options& _opt) const
+read_stla(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const
 {
-  std::fstream in( _filename.c_str(), std::ios_base::in );
+  std::fstream in( _filename, std::ios_base::in );
 
   if (!in)
   {
     omerr() << "[STLReader] : cannot not open file "
-	  << _filename
+	  << _filename.u8string()
 	  << std::endl;
     return false;
   }
@@ -345,14 +345,14 @@ read_stla(std::istream& _in, BaseImporter& _bi, Options& _opt) const
 
 bool
 _STLReader_::
-read_stlb(const std::string& _filename, BaseImporter& _bi, Options& _opt) const
+read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const
 {
   std::fstream in( _filename.c_str(), std::ios_base::in | std::ios_base::binary);
 
   if (!in)
   {
     omerr() << "[STLReader] : cannot not open file "
-	  << _filename
+	  << _filename.u8string()
 	  << std::endl;
     return false;
   }
@@ -448,14 +448,14 @@ read_stlb(std::istream& _in, BaseImporter& _bi, Options& _opt) const
 
 _STLReader_::STL_Type
 _STLReader_::
-check_stl_type(const std::string& _filename) const
+check_stl_type(const std::filesystem::path& _filename) const
 {
 
    // open file
-   std::ifstream ifs (_filename.c_str(), std::ifstream::binary);
+   std::ifstream ifs (_filename, std::ifstream::binary);
    if(!ifs.good())
    {
-     omerr() << "could not open file" << _filename << std::endl;
+     omerr() << "could not open file" << _filename.u8string() << std::endl;
      return NONE;
    }
 
@@ -479,7 +479,11 @@ check_stl_type(const std::string& _filename) const
    //check the file size to verify it.
 
    //open the file
+#ifdef _WIN32
+   FILE *in = _wfopen(_filename.c_str(), L"rb");
+#else
    FILE* in = fopen(_filename.c_str(), "rb");
+#endif
    if (!in) return NONE;
 
    // determine endian mode

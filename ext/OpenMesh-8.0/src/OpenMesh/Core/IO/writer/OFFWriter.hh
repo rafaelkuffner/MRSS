@@ -100,7 +100,7 @@ public:
   std::string get_description() const { return "no description"; }
   std::string get_extensions() const  { return "off"; }
 
-  bool write(const std::string&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
 
   bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
 

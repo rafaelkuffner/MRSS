@@ -103,12 +103,12 @@ _PLYReader_::_PLYReader_() {
 //-----------------------------------------------------------------------------
 
 
-bool _PLYReader_::read(const std::string& _filename, BaseImporter& _bi, Options& _opt) {
+bool _PLYReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) {
 
-    std::fstream in(_filename.c_str(), (std::ios_base::binary | std::ios_base::in) );
+    std::fstream in(_filename, (std::ios_base::binary | std::ios_base::in) );
 
     if (!in.is_open() || !in.good()) {
-        omerr() << "[PLYReader] : cannot not open file " << _filename << std::endl;
+        omerr() << "[PLYReader] : cannot not open file " << _filename.u8string() << std::endl;
         return false;
     }
 
@@ -1085,13 +1085,13 @@ void _PLYReader_::readInteger(ValueType _type, std::istream& _in, unsigned int& 
 //------------------------------------------------------------------------------
 
 
-bool _PLYReader_::can_u_read(const std::string& _filename) const {
+bool _PLYReader_::can_u_read(const std::filesystem::path& _filename) const {
 
     // !!! Assuming BaseReader::can_u_parse( std::string& )
     // does not call BaseReader::read_magic()!!!
 
     if (BaseReader::can_u_read(_filename)) {
-        std::ifstream ifs(_filename.c_str());
+        std::ifstream ifs(_filename);
         if (ifs.is_open() && can_u_read(ifs)) {
             ifs.close();
             return true;
