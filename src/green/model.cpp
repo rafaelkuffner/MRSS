@@ -329,7 +329,7 @@ namespace green {
 				const auto v = OpenMesh::VertexHandle(i);
 				const float b = mesh.property(baseprop, v);
 				const float s = mesh.property(salprop, v);
-				const bool sampled = mesh.property(sampledprop, v);
+				const bool sampled = sampledprop.is_valid() && mesh.property(sampledprop, v);
 				const float e = s - b;
 				m_saliency_errors.min = std::min(m_saliency_errors.min, e);
 				m_saliency_errors.max = std::max(m_saliency_errors.max, e);
