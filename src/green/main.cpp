@@ -1,4 +1,4 @@
-
+﻿
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -36,6 +36,8 @@ namespace {
 	void focus_callback(GLFWwindow *win, int focused);
 	void APIENTRY gl_debug_callback(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar *, const GLvoid *);
 	void set_ui_thread_priority();
+	void init_console();
+	void init_fonts(ImGuiIO &io, ImFontConfig &fc);
 
 	const char *glsl_depth_env = R"(
 	#ifndef DEPTH_ENV
@@ -440,6 +442,8 @@ namespace {
 
 int main() {
 
+	init_console();
+	
 	if (!glfwInit()) {
 		cerr << "Error: Could not initialize GLFW" << endl;
 		abort();
@@ -505,8 +509,27 @@ int main() {
 	ImGui_ImplGlfw_InitForOpenGL(window, false);
 	ImGui_ImplOpenGL3_Init();
 
-	// disable imgui.ini
-	ImGui::GetIO().IniFilename = nullptr;
+	{
+		ImGuiIO& io = ImGui::GetIO();
+		// disable imgui.ini
+		io.IniFilename = nullptr;
+		// fonts
+		io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
+		ImFontConfig fc;
+		// dont oversample to save texture space
+		fc.PixelSnapH = true;
+		fc.OversampleH = 1;
+		// use imgui default font for ascii
+		io.Fonts->AddFontDefault(&fc);
+		// load other fonts
+		fc.MergeMode = true;
+		init_fonts(io, fc);
+		// NOTE we are not able to achieve full unicode rendering because
+		// a) iirc imgui only supports the BMP, and is certainly not capable of fancy layout
+		// b) the font texture atlas would be intractably large
+		io.Fonts->Build();
+		std::cout << "imgui font atlas " << io.Fonts->TexWidth << "x" << io.Fonts->TexHeight << std::endl;
+	}
 
 	// attach input callbacks to window
 	glfwSetCursorPosCallback(window, cursor_pos_callback);
@@ -788,6 +811,7 @@ namespace {
 	extern "C" {
 		__declspec(dllimport) void * __stdcall GetCurrentThread();
 		__declspec(dllimport) int __stdcall SetThreadPriority(void *hThread, int nPriority);
+		__declspec(dllimport) bool __stdcall SetConsoleOutputCP(unsigned int wCodePageID);
 	}
 
 	void set_ui_thread_priority() {
@@ -795,12 +819,41 @@ namespace {
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 	}
 
-#else
+	void init_console() {
+		if (!SetConsoleOutputCP(65001)) {
+			std::cerr << "failed to set utf8 console codepage" << std::endl;
+		}
+	}
 
+	void init_fonts(ImGuiIO &io, ImFontConfig &fc) {
+		// TODO font names on earlier windows versions
+		// japanese
+		fc.GlyphOffset = {0, 2};
+		fc.RasterizerMultiply = 2.0f;
+		io.Fonts->AddFontFromFileTTF("c:\\windows\\fonts\\yugothl.ttc", 18, &fc, io.Fonts->GetGlyphRangesJapanese());
+		io.Fonts->AddFontFromFileTTF("c:\\windows\\fonts\\yugothl.ttc", 18, &fc, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		// chinese (for characters not covered by japanese)
+		fc.GlyphOffset = {0, 1};
+		fc.RasterizerMultiply = 1.5f;
+		io.Fonts->AddFontFromFileTTF("c:\\windows\\fonts\\msyhl.ttc", 20, &fc, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		// korean
+		fc.GlyphOffset = {0, 1};
+		fc.RasterizerMultiply = 1.5f;
+		io.Fonts->AddFontFromFileTTF("c:\\windows\\fonts\\malgunsl.ttf", 18, &fc, io.Fonts->GetGlyphRangesKorean());
+	}
+
+#else
 	void set_ui_thread_priority() {
 
 	}
 
+	void init_console() {
+
+	}
+
+	void init_fonts(ImGuiIO &io, ImFontConfig &fc) {
+
+	}
 #endif
 
 }
