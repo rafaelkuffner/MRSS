@@ -211,7 +211,7 @@ namespace green {
 
 		virtual std::string name() const override {
 			// TODO unicode...
-			return m_fpath_load.filename().string();
+			return m_fpath_load.filename().u8string();
 		}
 
 		virtual void move_by(const glm::vec3 &d) override {
