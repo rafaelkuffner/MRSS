@@ -26,6 +26,9 @@ set(sources
 	Histogram.cpp
 	FloatHistogram.h
 	FloatHistogram.cpp
+	dialog.hpp
+	dialog_win32.cpp
+	dialog_simple.cpp
 	model.glsl
 	deferred.glsl
 )
@@ -37,6 +40,12 @@ target_compile_features(green PUBLIC cxx_std_17)
 target_link_libraries(green PRIVATE cgu assimp OpenMeshCore OpenMeshTools)
 cgu_target_default_build_options(green)
 cgu_target_source_group_tree(green)
+
+if(WIN32)
+	target_compile_definitions(green PRIVATE GREEN_DIALOG_WIN32)
+else()
+	target_compile_definitions(green PRIVATE GREEN_DIALOG_BASIC)
+endif()
 
 # shaders
 cgu_target_embed_string(green model.glsl glsl_green_model)

@@ -19,6 +19,7 @@
 #include <cgu/shader.hpp>
 
 #include "main.hpp"
+#include "dialog.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
 #include "deferred.glsl.hpp"
@@ -38,6 +39,7 @@ namespace {
 	void set_ui_thread_priority();
 	void init_console();
 	void init_fonts(ImGuiIO &io, ImFontConfig &fc);
+	void load_model(const std::filesystem::path &p);
 
 	const char *glsl_depth_env = R"(
 	#ifndef DEPTH_ENV
@@ -73,6 +75,9 @@ namespace {
 	};
 
 	std::vector<std::unique_ptr<Entity>> entities;
+
+	std::future<std::vector<std::filesystem::path>> open_paths_future;
+	std::future<std::filesystem::path> save_path_future;
 
 	enum class drag_mode {
 		plane, axis
@@ -245,8 +250,32 @@ namespace {
 			}
 		}
 
-		ImGui::SetNextWindowPos({10, 10}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({350, 250}, ImGuiCond_FirstUseEver);
+		// check for files to open
+		if (open_paths_future.valid()) {
+			if (open_paths_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				auto paths = open_paths_future.get();
+				for (auto &p : paths) {
+					load_model(p);
+				}
+			}
+		}
+
+		if (ImGui::BeginMainMenuBar()) {
+			if (ImGui::BeginMenu("File")) {
+				if (ImGui::Selectable("Open...")) {
+					open_paths_future = open_file_dialog(window, "", true);
+				}
+				if (ImGui::Selectable("Export...")) {
+					// TODO hook this up
+					save_path_future = save_file_dialog(window, "");
+				}
+				ImGui::EndMenu();
+			}
+			ImGui::EndMainMenuBar();
+		}
+
+		ImGui::SetNextWindowPos({10, 20}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({350, 240}, ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Models")) {
 			if (ImGui::Button(sal_future.valid() ? "Saliency... (running)" : "Saliency...", {-1, 0})) saliency_window_open = true;
 			ImGui::Separator();
@@ -555,6 +584,7 @@ int main() {
 
 		// frame rate limit
 		this_thread::sleep_until(time_next_frame);
+		// TODO fix this when running below limit
 		time_next_frame += frame_duration;
 
 		glfwPollEvents();
@@ -723,6 +753,12 @@ namespace ImGui {
 
 namespace {
 
+	void load_model(const std::filesystem::path &p) {
+		auto e = std::make_unique<ModelEntity>();
+		e->load(p);
+		entities.push_back(std::move(e));
+	}
+
 	void drop_callback(GLFWwindow *win, int count, const char **paths) {
 		for (int i = 0; i < count; i++) {
 			auto p = std::filesystem::u8path(paths[i]);
@@ -730,9 +766,7 @@ namespace {
 				std::cout << "chdir to " << p << std::endl;
 				std::filesystem::current_path(p);
 			} else {
-				auto e = std::make_unique<ModelEntity>();
-				e->load(std::move(p));
-				entities.push_back(std::move(e));
+				load_model(p);
 			}
 		}
 	}
