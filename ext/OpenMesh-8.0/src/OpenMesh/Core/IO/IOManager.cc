@@ -115,7 +115,7 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 
 bool
 _IOManager_::
-read(std::istream& _is, const std::string& _ext, BaseImporter& _bi, Options& _opt)
+read(std::istream& _is, const std::filesystem::path& _ext, BaseImporter& _bi, Options& _opt)
 {
   std::set<BaseReader*>::const_iterator it     =  reader_modules_.begin();
   std::set<BaseReader*>::const_iterator it_end =  reader_modules_.end();
@@ -169,7 +169,7 @@ write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, s
 
 bool
 _IOManager_::
-write(std::ostream& _os,const std::string &_ext, BaseExporter& _be, Options _opt, std::streamsize _precision)
+write(std::ostream& _os,const std::filesystem::path &_ext, BaseExporter& _be, Options _opt, std::streamsize _precision)
 {
   std::set<BaseWriter*>::const_iterator it     = writer_modules_.begin();
   std::set<BaseWriter*>::const_iterator it_end = writer_modules_.end();
@@ -198,11 +198,11 @@ write(std::ostream& _os,const std::string &_ext, BaseExporter& _be, Options _opt
 
 bool
 _IOManager_::
-can_read( const std::string& _format ) const
+can_read( const std::filesystem::path& _format ) const
 {
   std::set<BaseReader*>::const_iterator it     = reader_modules_.begin();
   std::set<BaseReader*>::const_iterator it_end = reader_modules_.end();
-  std::string filename = "dummy." + _format;
+  std::filesystem::path filename = std::filesystem::u8path("dummy." + _format.u8string());
 
   for(; it != it_end; ++it)
     if ((*it)->can_u_read(filename))
@@ -217,11 +217,11 @@ can_read( const std::string& _format ) const
 
 bool
 _IOManager_::
-can_write( const std::string& _format ) const
+can_write( const std::filesystem::path& _format ) const
 {
   std::set<BaseWriter*>::const_iterator it     = writer_modules_.begin();
   std::set<BaseWriter*>::const_iterator it_end = writer_modules_.end();
-  std::string filename = "dummy." + _format;
+  std::filesystem::path filename = std::filesystem::u8path("dummy." + _format.u8string());
 
   // Try all registered modules
   for(; it != it_end; ++it)
@@ -237,21 +237,23 @@ can_write( const std::string& _format ) const
 
 const BaseWriter*
 _IOManager_::
-find_writer(const std::string& _format)
+find_writer(const std::filesystem::path& _format)
 {
   using std::string;
 
-  string::size_type dot = _format.rfind('.');
+  //string::size_type dot = _format.rfind('.');
 
-  string ext;
-  if (dot == string::npos)
-    ext = _format;
-  else
-    ext = _format.substr(dot+1,_format.length()-(dot+1));
+  //string ext;
+  //if (dot == string::npos)
+  //  ext = _format;
+  //else
+  //  ext = _format.substr(dot+1,_format.length()-(dot+1));
 
+  string ext = _format.has_extension() ? _format.extension().u8string().substr(1) : _format.filename().u8string();
+  
   std::set<BaseWriter*>::const_iterator it     = writer_modules_.begin();
   std::set<BaseWriter*>::const_iterator it_end = writer_modules_.end();
-  std::string filename = "dummy." + ext;
+  std::filesystem::path filename = std::filesystem::u8path("dummy." + ext);
 
   // Try all registered modules
   for(; it != it_end; ++it)
