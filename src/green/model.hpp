@@ -190,9 +190,14 @@ namespace green {
 		bool m_show_edges = false;
 		bool m_show_verts = false;
 		
+		bool m_try_export = false;
+		bool m_try_kill = false;
 		bool m_dead = false;
 
 		void update_vbo();
+		void draw_window_models(bool selected);
+		void draw_window_selection();
+		void draw_window_export();
 
 	public:
 		ModelEntity();
@@ -209,6 +214,10 @@ namespace green {
 
 		void save(const std::filesystem::path &fpath);
 
+		void try_export() {
+			m_try_export = true;
+		}
+
 		virtual std::string name() const override {
 			// TODO unicode...
 			return m_fpath_load.filename().u8string();
@@ -216,6 +225,10 @@ namespace green {
 
 		virtual void move_by(const glm::vec3 &d) override {
 			m_translation += d;
+		}
+
+		virtual void try_kill() override {
+			m_try_kill = true;
 		}
 
 		virtual bool dead() const override {

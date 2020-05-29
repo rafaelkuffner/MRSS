@@ -63,7 +63,8 @@ namespace {
 	#endif
 	)";
 
-	ImGuiContext *imguictx;
+	GLFWwindow *window = nullptr;
+	ImGuiContext *imguictx = nullptr;
 
 	float zfar = 1000000;
 	cgu::orbital_camera cam;
@@ -75,6 +76,7 @@ namespace {
 	};
 
 	std::vector<std::unique_ptr<Entity>> entities;
+	ModelEntity *cur_model = nullptr;
 
 	std::future<std::vector<std::filesystem::path>> open_paths_future;
 	std::future<std::filesystem::path> save_path_future;
@@ -94,7 +96,11 @@ namespace {
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
 	bool maybe_dragging = false;
 	drag_mode cur_drag_mode = drag_mode::plane;
-	bool lost_focus = false;
+	bool focus_lost = false;
+	bool focus_gained = false;
+	bool show_grid = true;
+	bool show_axes = true;
+	int fps = 0;
 
 	bool saliency_window_open = false;
 	int sal_entity_id = -1;
@@ -234,10 +240,70 @@ namespace {
 		}
 	}
 
-	void render_main_ui(GLFWwindow *window) {
+	void draw_window_saliency() {
+		using namespace ImGui;
+		const auto winsize = GetIO().DisplaySize;
+		SetNextWindowBgAlpha(0.5f);
+		SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
+		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
+		if (Begin("Saliency", &saliency_window_open)) {
+			int eid = sal_entity_id >= 0 ? sal_entity_id : cur_sel.select_entity;
+			Entity *ep = nullptr;
+			for (auto &e : entities) {
+				if (e->id() == eid) ep = e.get();
+			}
+			if (!ep) sal_entity_id = -1;
+			if (ep) {
+				if (Button("Reselect")) {
+					cur_sel.select_entity = eid;
+					cur_sel.select_vertex = -1;
+				}
+				SameLine();
+				// TODO unicode...
+				Text("%s", ep->name().c_str());
+			}
+			sal_need_preview |= Checkbox("Preview", &sal_uparams.preview);
+			SameLine();
+			bool go = false;
+			if (sal_future.valid()) {
+				if (Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
+			} else {
+				if (ep) {
+					if (Button("GO", {-1, 0})) {
+						go = true;
+					}
+				} else {
+					TextDisabled("Select a model");
+				}
+			}
+			Separator();
+			sal_need_preview |= edit_saliency_params(sal_uparams);
+			Separator();
+			draw_saliency_progress(sal_progress);
+			if (Button("Clear", {-1, 0})) sal_progress = {};
+			if (sal_need_preview && sal_uparams.preview) {
+				// user params edited and preview enabled, try launch preview
+				if (sal_future.valid()) {
+					sal_progress.should_cancel = true;
+				} else {
+					go = true;
+					sal_need_preview = false;
+				}
+			}
+			if (go && ep) {
+				// launc calculation
+				sal_entity_id = eid;
+				sal_progress = {};
+				sal_progress.levels.resize(sal_uparams.levels);
+				sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
+			}
+		}
+		End();
+	}
 
-		glm::ivec2 winsize;
-		glfwGetWindowSize(window, &winsize.x, &winsize.y);
+	void render_main_ui() {
+
+		using namespace ImGui;
 
 		// check for saliency completion
 		if (sal_future.valid()) {
@@ -260,106 +326,94 @@ namespace {
 			}
 		}
 
-		if (ImGui::BeginMainMenuBar()) {
-			if (ImGui::BeginMenu("File")) {
-				if (ImGui::Selectable("Open...")) {
+		// main menu bar
+		const ImVec4 menubg{0.15f, 0.15f, 0.15f, 1};
+		const auto normal_frame_padding = GetStyle().FramePadding;
+		PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
+		PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 6));
+		PushStyleColor(ImGuiCol_MenuBarBg, menubg);
+		PushStyleColor(ImGuiCol_PopupBg, menubg);
+		if (BeginMainMenuBar()) {
+			SetCursorPosX(GetCursorPosX() + 30);
+			Separator();
+			SetNextWindowSizeConstraints({200, 0}, {9001, 9001});
+			if (BeginMenu("File")) {
+				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
+				if (Selectable("Open...")) {
 					open_paths_future = open_file_dialog(window, "", true);
 				}
-				if (ImGui::Selectable("Export...")) {
-					// TODO hook this up
-					save_path_future = save_file_dialog(window, "");
-				}
-				ImGui::EndMenu();
-			}
-			ImGui::EndMainMenuBar();
-		}
-
-		ImGui::SetNextWindowPos({10, 20}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({350, 240}, ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Models")) {
-			if (ImGui::Button(sal_future.valid() ? "Saliency... (running)" : "Saliency...", {-1, 0})) saliency_window_open = true;
-			ImGui::Separator();
-			ImGui::Text("Drag'n'Drop to load");
-		}
-		ImGui::End();
-
-		//if (ImGui::Begin("Hover")) {
-		//	ImGui::Text("Position x=%.2f y=%.2f z=%.2f", cur_world_pos.x, cur_world_pos.y, cur_world_pos.z);
-		//}
-		//ImGui::End();
-
-		ImGui::SetNextWindowPos({10, 270}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({350, 500}, ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Selection")) {
-			if (ImGui::RadioButton("Plane (XZ)", cur_drag_mode == drag_mode::plane)) cur_drag_mode = drag_mode::plane;
-			ImGui::SameLine();
-			if (ImGui::RadioButton("Axis (Y)", cur_drag_mode == drag_mode::axis)) cur_drag_mode = drag_mode::axis;
-			// TODO custom plane/axis
-			ImGui::SameLine();
-			ImGui::Text(" Drag Mode");
-			ImGui::Separator();
-		}
-		ImGui::End();
-
-		if (saliency_window_open) {
-			ImGui::SetNextWindowBgAlpha(0.5f);
-			ImGui::SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
-			ImGui::SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
-			if (ImGui::Begin("Saliency", &saliency_window_open)) {
-				int eid = sal_entity_id >= 0 ? sal_entity_id : cur_sel.select_entity;
-				Entity *ep = nullptr;
-				for (auto &e : entities) {
-					if (e->id() == eid) ep = e.get();
-				}
-				if (!ep) sal_entity_id = -1;
-				if (ep) {
-					if (ImGui::Button("Reselect")) {
-						cur_sel.select_entity = eid;
-						cur_sel.select_vertex = -1;
+				Separator();
+				if (cur_model) {
+					if (Selectable(("Close " + cur_model->name() + "...").c_str())) {
+						cur_model->try_kill();
 					}
-					ImGui::SameLine();
-					// TODO unicode...
-					ImGui::Text("%s", ep->name().c_str());
-				}
-				sal_need_preview |= ImGui::Checkbox("Preview", &sal_uparams.preview);
-				ImGui::SameLine();
-				bool go = false;
-				if (sal_future.valid()) {
-					if (ImGui::Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
+					if (Selectable(("Export " + cur_model->name() + "...").c_str())) {
+						cur_model->try_export();
+					}
 				} else {
-					if (ep) {
-						if (ImGui::Button("GO", {-1, 0})) {
-							go = true;
-						}
-					} else {
-						ImGui::TextDisabled("Select a model");
-					}
+					TextDisabled("Close");
+					TextDisabled("Export");
 				}
-				ImGui::Separator();
-				sal_need_preview |= ImGui::edit_saliency_params(sal_uparams);
-				ImGui::Separator();
-				ImGui::draw_saliency_progress(sal_progress);
-				if (ImGui::Button("Clear", {-1, 0})) sal_progress = {};
-				if (sal_need_preview && sal_uparams.preview) {
-					// user params edited and preview enabled, try launch preview
-					if (sal_future.valid()) {
-						sal_progress.should_cancel = true;
-					} else {
-						go = true;
-						sal_need_preview = false;
-					}
-				}
-				if (go && ep) {
-					// launc calculation
-					sal_entity_id = eid;
-					sal_progress = {};
-					sal_progress.levels.resize(sal_uparams.levels);
-					sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
-				}
+				Separator();
+				PopStyleVar();
+				EndMenu();
 			}
-			ImGui::End();
+			if (BeginMenu("View")) {
+				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
+				Checkbox("Show Grid", &show_grid);
+				Checkbox("Show Axes", &show_axes);
+				Separator();
+				PopStyleVar();
+				EndMenu();
+			}
+			if (BeginMenu("Window")) {
+				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
+				Checkbox(sal_future.valid() ? "Saliency (running)" : "Saliency", &saliency_window_open);
+				Separator();
+				PopStyleVar();
+				EndMenu();
+			}
+			if (BeginMenu(u8"助け")) {
+				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
+				Text("Not yet.");
+				// TODO about box with copyrights and license text for libraries etc
+				Separator();
+				PopStyleVar();
+				EndMenu();
+			}
+			// TODO maybe an actual status bar?
+			Separator();
+			TextDisabled("%3d FPS", fps);
+			Separator();
+			if (focus_lost) {
+				// doing this with a modal popup was kinda nice,
+				// but has the side effect of killing other popups
+				TextDisabled("Click to regain focus");
+				Separator();
+			}
+			EndMainMenuBar();
 		}
+		PopStyleColor(2);
+		PopStyleVar(2);
 
+		// NOTE BeginMenu respects constraints but doesnt consume them (bug?)
+		SetNextWindowSizeConstraints({0, 0}, {9001, 9001});
+
+		if (saliency_window_open) draw_window_saliency();
+
+		SetNextWindowPos({10, 30}, ImGuiCond_FirstUseEver);
+		SetNextWindowSize({350, 230}, ImGuiCond_FirstUseEver);
+		if (Begin("Models")) {
+			// ensure the window exists
+		}
+		End();
+
+		SetNextWindowPos({10, 270}, ImGuiCond_FirstUseEver);
+		SetNextWindowSize({350, 500}, ImGuiCond_FirstUseEver);
+		if (Begin("Selection")) {
+			// ensure the window exists
+		}
+		End();
 	}
 
 	void render_deferred() {
@@ -392,7 +446,9 @@ namespace {
 
 	}
 
-	void render(GLFWwindow *window) {
+	void render() {
+
+		// TODO dont redraw models when nothing has changed
 
 		glm::ivec2 fbsize;
 		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
@@ -426,6 +482,7 @@ namespace {
 		glCullFace(GL_BACK);
 		glPointSize(3);
 
+		cur_model = nullptr;
 		bool can_hover = false;
 		for (auto it = entities.begin(); it != entities.end(); ) {
 			can_hover = true;
@@ -437,7 +494,6 @@ namespace {
 				++it;
 			}
 		}
-
 
 		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 		glDisable(GL_CULL_FACE);
@@ -456,8 +512,8 @@ namespace {
 		glEnable(GL_BLEND);
 		glBlendEquation(GL_FUNC_ADD);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		cgu::draw_grid(view, proj, zfar);
-		cgu::draw_axes(view, proj, zfar);
+		if (show_grid) cgu::draw_grid(view, proj, zfar);
+		if (show_axes) cgu::draw_axes(view, proj, zfar);
 		glDisable(GL_BLEND);
 
 		glDisable(GL_DEPTH_TEST);
@@ -467,6 +523,24 @@ namespace {
 
 	}
 
+	void center_window(GLFWwindow *window, GLFWmonitor *monitor) {
+		if (!monitor) return;
+
+		const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+		if (!mode) return;
+
+		int monitorX, monitorY;
+		glfwGetMonitorPos(monitor, &monitorX, &monitorY);
+
+		int windowWidth, windowHeight;
+		glfwGetWindowSize(window, &windowWidth, &windowHeight);
+
+		glfwSetWindowPos(
+			window,
+			monitorX + (mode->width - windowWidth) / 2,
+			monitorY + (mode->height - windowHeight) / 2
+		);
+	}
 }
 
 int main() {
@@ -495,11 +569,13 @@ int main() {
 	// request a window that can perform gamma correction
 	glfwWindowHint(GLFW_SRGB_CAPABLE, true);
 
-	GLFWwindow *window = glfwCreateWindow(800, 600, "GREEN Mesh Saliency", nullptr, nullptr);
+	window = glfwCreateWindow(1280, 720, "GREEN Mesh Saliency", nullptr, nullptr);
 	if (!window) {
 		cerr << "Error: Could not create GLFW window" << endl;
 		abort();
 	}
+
+	center_window(window, glfwGetPrimaryMonitor());
 
 	glfwMakeContextCurrent(window);
 
@@ -539,6 +615,14 @@ int main() {
 	ImGui_ImplOpenGL3_Init();
 
 	{
+		ImGuiStyle &sty = ImGui::GetStyle();
+		// adjustments to make japanese etc text easier
+		sty.FramePadding.x += 1;
+		sty.FramePadding.y += 1;
+		sty.SelectableTextAlign.y = 0.5f;
+	}
+
+	{
 		ImGuiIO& io = ImGui::GetIO();
 		// disable imgui.ini
 		io.IniFilename = nullptr;
@@ -571,34 +655,54 @@ int main() {
 
 	cgu::glsl_frag_depth_source = glsl_depth_env;
 
-	auto frame_duration = 8ms;
 	auto time_next_frame = chrono::steady_clock::now();
+	auto time_last_fps = time_next_frame;
+	int fps_counter = 0;
 
 	cam.cam_yaw = -glm::pi<float>() / 4;
 	cam.cam_pitch = glm::pi<float>() / 8;
 
 	glDisable(GL_DITHER);
 
+	const auto poll_events = []() {
+		glfwPollEvents();
+		if (focus_gained) {
+			focus_lost = false;
+			focus_gained = false;
+		}
+	};
+
 	// loop until the user closes the window
 	while (!glfwWindowShouldClose(window)) {
 
-		// frame rate limit
-		this_thread::sleep_until(time_next_frame);
-		// TODO fix this when running below limit
-		time_next_frame += frame_duration;
+		poll_events();
 
-		glfwPollEvents();
-		
+		// frame rate limiter and counter
+		auto now = chrono::steady_clock::now();
+		while (time_next_frame - now >= 1ms) {
+			this_thread::sleep_for(1ms);
+			// keep polling events when limiting frame rate to ensure responsiveness with e.g. win32 dialogs
+			poll_events();
+			now = chrono::steady_clock::now();
+		}
+		const auto frame_duration = focus_lost ? 100ms : 6ms;
+		time_next_frame = max(time_next_frame, now - frame_duration) + frame_duration;
+		fps_counter++;
+		if (now - time_last_fps >= 1s) {
+			fps = fps_counter;
+			fps_counter = 0;
+			time_last_fps = now;
+		}
+
 		//if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		render_main_ui(window);
-		render(window);
-
-		//ImGui::ShowMetricsWindow();
+		// render scene before ui so that current model can be determined
+		render();
+		render_main_ui();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -626,6 +730,26 @@ namespace green {
 		return sal_progress;
 	}
 
+	void ui_current_model(ModelEntity *e) {
+		cur_model = e;
+	}
+
+	ModelEntity * ui_current_model() {
+		return cur_model;
+	}
+
+	std::future<std::filesystem::path> & ui_save_path(const std::filesystem::path &hint, bool prompt) {
+		if (save_path_future.valid()) {
+			if (prompt && save_path_future.wait_for(0s) == future_status::ready) {
+				// discard existing save path
+				save_path_future.get();
+			} else {
+				return save_path_future;
+			}
+		}
+		if (prompt) save_path_future = save_file_dialog(window, hint);
+		return save_path_future;
+	}
 }
 
 namespace ImGui {
@@ -781,9 +905,9 @@ namespace {
 	}
 
 	void mouse_button_callback(GLFWwindow *win, int button, int action, int mods) {
-		if (lost_focus) {
+		if (focus_lost) {
 			// prevent mouse clicks that refocus the window from doing anything
-			lost_focus = false;
+			focus_lost = false;
 			return;
 		}
 		ImGui_ImplGlfw_MouseButtonCallback(win, button, action, mods);
@@ -796,6 +920,7 @@ namespace {
 			drag_world_origin = cur_world_pos;
 			drag_world_pos = cur_world_pos;
 			maybe_dragging = true;
+			cur_drag_mode = (mods & GLFW_MOD_SHIFT) ? drag_mode::axis : drag_mode::plane;
 			time_drag_start = chrono::steady_clock::now();
 		} else {
 			maybe_dragging = false;
@@ -825,7 +950,11 @@ namespace {
 	}
 
 	void focus_callback(GLFWwindow *win, int focused) {
-		if (!focused) lost_focus = true;
+		if (focused) {
+			focus_gained = true;
+		} else {
+			focus_lost = true;
+		}
 	}
 
 	void APIENTRY gl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei, const GLchar *message, const GLvoid *) {

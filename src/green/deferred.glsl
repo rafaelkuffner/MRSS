@@ -29,6 +29,7 @@ void main() {
 	vec4 dist = vec4(9001);
 	bvec4 selmask = greaterThanEqual(u_selection, ivec4(0));
 	if (any(selmask)) {
+		// TODO this is kinda slow
 		for (float x = -searchpx * dtx.x; x <= searchpx * dtx.x; x += dtx.x) {
 			for (float y = -searchpx * dtx.y; y <= searchpx * dtx.y; y += dtx.y) {
 				ivec2 id = texture(u_sampler_id, v_tex_coord + vec2(x, y)).xy;

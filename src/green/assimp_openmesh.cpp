@@ -117,8 +117,10 @@ namespace green {
 			// skip formats that openmesh can already load
 			if (ext == e) return false;
 		}
+		// TODO check if assimp knows the extension?
 		// this function is seemingly supposed to inspect the file contents
 		// but we don't have a way to do that with assimp
+		// we are supposed to check if we can open the file, see PLYReader.cc
 		std::ifstream ifs(_filename);
 		return ifs.is_open();
 	}

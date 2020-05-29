@@ -1,4 +1,4 @@
-
+﻿
 #include "model.hpp"
 
 #include <stdexcept>
@@ -45,18 +45,26 @@ namespace green {
 		// FIXME what else do we need to ask for and preserve on export? texcoords?
 		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom | OpenMesh::IO::Options::VertexColor;
 
-		// TODO unicode filenames...
 		std::cerr << "Loading model " << fpath.u8string() << std::endl;
+		if (!std::filesystem::is_regular_file(fpath)) {
+			throw std::runtime_error("file does not exist");
+		}
+
 		if (OpenMesh::IO::read_mesh(m_trimesh, fpath, readOptions)) {
 			std::cerr << "Loaded" << std::endl;
 		} else {
 			std::cerr << "Failed" << std::endl;
 			throw std::runtime_error("failed to load model");
 		}
+
+		// TODO necessary? optional?
+		// NOTE currently done by assimp too
 		m_trimesh.triangulate();
+
 		// calculate normals if missing (note: need face normals to calc vertex normals)
 		if (!readOptions.face_has_normal()) m_trimesh.update_face_normals();
 		if (!readOptions.vertex_has_normal()) m_trimesh.update_vertex_normals();
+
 		// bounding box
 		for (auto vit = m_trimesh.vertices_begin(); vit != m_trimesh.vertices_end(); ++vit) {
 			m_bound_min = min(m_bound_min, om2glm(m_trimesh.point(*vit)));
@@ -351,6 +359,294 @@ namespace green {
 		m_saliency_vbo_dirty = false;
 	}
 
+	void ModelEntity::draw_window_models(bool selected) {
+		using namespace ImGui;
+		if (Begin("Models")) {
+			PushID(this);
+			PushStyleColor(ImGuiCol_Header, selected ? ImVec4{0.7f, 0.4f, 0.1f, 1} : GetStyle().Colors[ImGuiCol_Button]);
+			// hack - selectable is always 'selected' in order to show highlight, it just changes colour
+			if (Selectable(m_fpath_load.filename().u8string().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()})) {
+				auto &sel = ui_selection();
+				sel.select_entity = id();
+				sel.select_vertex = -1;
+			}
+			PopStyleColor();
+			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+			if (m_pending_load.valid()) {
+				Text("Loading...");
+			} else if (m_model) {
+				// ok
+			} else {
+				Text("Failed to load model");
+			}
+			Checkbox("Faces", &m_show_faces);
+			SameLine();
+			Checkbox("Edges", &m_show_edges);
+			SameLine();
+			Checkbox("Verts", &m_show_verts);
+			SameLine();
+			SetCursorPosX(GetCursorPosX() + std::max(0.f, GetContentRegionAvail().x - 20));
+			PushStyleColor(ImGuiCol_Button, ImVec4{0.6f, 0.3f, 0.3f, 1});
+			if (Button("X", {-1, 0}) || m_try_kill) {
+				OpenPopup("##close");
+				m_try_kill = false;
+			}
+			if (IsItemHovered()) SetTooltip("Close model");
+			PopStyleColor();
+			if (BeginPopupModal("##close", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration)) {
+				Text("Close model \"%s\" ?", m_fpath_load.filename().u8string().c_str());
+				if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+				if (Button("Close")) {
+					m_dead = true;
+					CloseCurrentPopup();
+				}
+				SameLine();
+				if (Button("Cancel")) {
+					CloseCurrentPopup();
+				}
+				EndPopup();
+			}
+			Separator();
+			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+			PopID();
+		}
+		End();
+	}
+
+	void ModelEntity::draw_window_selection() {
+		using namespace ImGui;
+		if (Begin("Selection")) {
+			PushID(this);
+			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
+			Selectable(m_fpath_load.filename().u8string().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()});
+			PopStyleColor();
+			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+
+			TextDisabled("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
+
+			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
+			if (m_pending_save.valid()) {
+				if (m_pending_save.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+					try {
+						m_save_ok = m_pending_save.get();
+					} catch (std::exception &e) {
+						std::cerr << "failed to save model: " << e.what() << std::endl;
+						m_save_ok = false;
+					} catch (...) {
+						std::cerr << "failed to save model" << std::endl;
+						m_save_ok = false;
+					}
+				} else {
+					TextDisabled("Exporting %s...", m_fpath_save.filename().u8string().c_str());
+				}
+			} else if (m_save_ok) {
+				TextDisabled("Export %s succeeded", m_fpath_save.filename().u8string().c_str());
+			} else if (!m_fpath_save.empty()) {
+				TextColored(badcol, "Export %s failed", m_fpath_save.filename().u8string().c_str());
+			} else {
+				TextDisabled("Not exported");
+			}
+			if (IsItemHovered() && !m_fpath_save.empty()) SetTooltip("%s", m_fpath_save.u8string().c_str());
+
+			if (CollapsingHeader("Transform")) {
+				auto pick_basis = [&](const char *label, int *basis) {
+					SetNextItemWidth(GetTextLineHeight() * 3.5f);
+					Combo(
+						label, basis,
+						[](void *data, int item, const char **out_text) {
+							auto vs = reinterpret_cast<basis_vector *>(data);
+							*out_text = vs[item].name;
+							return true;
+						}, m_basis_vectors, 6
+					);
+				};
+				pick_basis("Right", &basis_right);
+				SameLine();
+				pick_basis("Up", &basis_up);
+				SameLine();
+				pick_basis("Back", &basis_back);
+				if (Button("Reset##scale")) m_scale = m_model->unit_bound_scale() * 4;
+				SameLine();
+				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
+				if (Button("Reset##translation")) m_translation = glm::vec3{0};
+				SameLine();
+				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				InputFloat3("Translation", value_ptr(m_translation));
+			}
+
+			Separator();
+
+			//SetNextItemWidth(GetContentRegionAvail().x);
+			int cur_color_mode = int(m_color_mode);
+			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
+				m_color_mode = color_mode(cur_color_mode);
+				if (m_color_mode != color_mode::none) m_saliency_vbo_dirty = true;
+			}
+
+			if (Combo(
+				"Saliency", &m_saliency_index,
+				[](void *data, int item, const char **out_text) {
+					auto ds = reinterpret_cast<model_saliency_data *>(data);
+					const auto &so = ds[item];
+					// TODO better?
+					static std::string str;
+					str = std::string(so);
+					*out_text = str.c_str();
+					return true;
+				}, m_saliency_outputs.data(), m_saliency_outputs.size()
+					)) {
+				m_saliency_vbo_dirty = true;
+			}
+
+			if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index < m_saliency_outputs.size()) {
+				Text("Baseline: %s", m_saliency_outputs[m_saliency_baseline_index].str().c_str());
+				if (m_saliency_index < m_saliency_outputs.size()) {
+					auto &err = m_saliency_errors;
+					Text("Errors: min=%.3f, max=%.3f, rmse=%.3f", err.min, err.max, err.rms);
+					if (SliderFloat("Error Scale", &m_saliency_error_scale, 1, 100, "%.3f", 2)) {
+						m_saliency_vbo_dirty = true;
+					}
+				}
+			}
+
+			if (Button("Paste")) {
+				auto &clip = saliency_clipboard();
+				if (clip.data.size() == m_model->trimesh().n_vertices()) {
+					model_saliency_data sd = std::move(clip.sd);
+					m_model->trimesh().add_property(sd.prop_saliency);
+					m_model->trimesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
+					clip.sd = {};
+					clip.data.clear();
+					m_saliency_outputs.push_back(std::move(sd));
+					m_saliency_vbo_dirty = true;
+					// references/iterators into saliency outputs are invalidated
+				} else {
+					OpenPopup("Paste Error##pasteerror");
+				}
+			}
+
+			if (m_saliency_index < m_saliency_outputs.size()) {
+				auto &salout = m_saliency_outputs[m_saliency_index];
+				SameLine();
+				if (Button("Copy")) {
+					auto &clip = saliency_clipboard();
+					clip.sd = salout;
+					clip.sd.prop_saliency.reset();
+					clip.data = m_model->trimesh().property(salout.prop_saliency).data_vector();
+				}
+				SameLine();
+				if (Button("Remove")) OpenPopup("##remove");
+				SameLine();
+				if (Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
+				if (salout.filename.empty()) {
+					draw_saliency_params(salout.uparams);
+					draw_saliency_progress(salout.progress);
+					if (Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
+				}
+				if (BeginPopupModal("Paste Error##pasteerror")) {
+					auto &clip = saliency_clipboard();
+					if (clip.data.size() == m_model->trimesh().n_vertices()) {
+						CloseCurrentPopup();
+					} else {
+						Text("Can't paste saliency for %d vertices into model with %d vertices", clip.data.size(), m_model->trimesh().n_vertices());
+						if (Button("OK")) CloseCurrentPopup();
+					}
+				}
+				if (BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
+					Text("Remove saliency result?");
+					if (Button("Remove")) {
+						auto it = m_saliency_outputs.begin() + m_saliency_index;
+						m_model->trimesh().remove_property(it->prop_saliency);
+						m_saliency_outputs.erase(it);
+						// references/iterators into saliency outputs are invalidated
+						if (m_saliency_index >= m_saliency_outputs.size()) {
+							m_saliency_index = std::max(0, m_saliency_index - 1);
+							m_saliency_vbo_dirty = true;
+						}
+						CloseCurrentPopup();
+					}
+					SameLine();
+					if (Button("Cancel")) CloseCurrentPopup();
+					EndPopup();
+				}
+			}
+			PopID();
+		}
+		End();
+	}
+
+	void ModelEntity::draw_window_export() {
+		using namespace ImGui;
+		if (m_try_export) OpenPopup("Export##export");
+		SetNextWindowSize({500, 160}, ImGuiCond_Appearing);
+		if (BeginPopupModal("Export##export")) {
+			PushID(this);
+			m_try_export = false;
+			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
+			Selectable(m_fpath_load.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
+			PopStyleColor();
+			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+			if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) {
+				auto &salout = m_saliency_outputs[m_saliency_index];
+				Text("Saliency: %s", std::string(salout).c_str());
+			} else {
+				Text("No saliency will be exported");
+				//Text(u8"セイリエンシーを書き出しません");
+			}
+			const auto &pathhint = m_fpath_save.empty() ? m_fpath_load : m_fpath_save;
+			// TODO better?
+			static char buf[1024];
+			if (IsWindowAppearing()) snprintf(buf, sizeof(buf), "%s", pathhint.u8string().c_str());
+			auto &fpath_save_fut = ui_save_path(pathhint, Button("Browse"));
+			if (fpath_save_fut.valid() && fpath_save_fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				auto s = fpath_save_fut.get().u8string();
+				if (!s.empty()) snprintf(buf, sizeof(buf), "%s", s.c_str());
+			}
+			SameLine();
+			InputText("Path", buf, sizeof(buf));
+			auto fpath = std::filesystem::u8path(buf);
+			auto stat = std::filesystem::status(fpath);
+			bool cansave = !fpath.empty();
+			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
+			const char *badchars = "\\/:*?\"<>|";
+			if (fpath.is_relative()) {
+				TextColored(badcol, "Path must be absolute");
+				cansave = false;
+			} else if (std::filesystem::is_directory(stat)) {
+				TextColored(badcol, "Path is a directory");
+				cansave = false;
+			} else if (!std::filesystem::is_directory(fpath.parent_path())) {
+				TextColored(badcol, "Directory does not exist");
+				cansave = false;
+			} else if (fpath.filename().u8string().find_first_of(badchars) != std::string::npos) {
+				TextColored(badcol, "File name must not contain any of: %s", badchars);
+				cansave = false;
+			} else if (std::filesystem::exists(stat)) {
+				TextColored(badcol, "Path exists! Save will overwrite");
+				//TextColored(badcol, u8"保存先が存在します！保存したら上書きします");
+			}
+			if (Button("Save") && cansave && !m_pending_save.valid()) {
+				save(std::filesystem::absolute(fpath));
+				CloseCurrentPopup();
+			}
+			if (IsItemHovered()) {
+				if (m_pending_save.valid()) {
+					SetTooltip("Export already in progress");
+				} else if (!cansave) {
+					SetTooltip("Can't save to this path");
+				}
+			}
+			SameLine();
+			if (Button("Cancel")) CloseCurrentPopup();
+			PopID();
+			EndPopup();
+		}
+	}
+
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
 		if (m_pending_load.valid() && m_pending_load.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
@@ -374,252 +670,11 @@ namespace green {
 		}
 		auto &sel = ui_selection();
 		const bool selected = sel.select_entity == id();
-		if (ImGui::Begin("Models")) {
-			// TODO unicode...
-			if (selected) ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-			if (ImGui::CollapsingHeader(m_fpath_load.filename().u8string().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
-				ImGui::PushID(m_model.get());
-				if (m_pending_load.valid()) {
-					ImGui::Text("Loading...");
-				} else if (m_model) {
-					ImGui::Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
-				} else {
-					ImGui::Text("Failed to load model");
-				}
-				ImGui::Checkbox("Faces", &m_show_faces);
-				ImGui::SameLine();
-				ImGui::Checkbox("Edges", &m_show_edges);
-				ImGui::SameLine();
-				ImGui::Checkbox("Verts", &m_show_verts);
-				ImGui::SameLine();
-				if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
-				ImGui::SameLine();
-				if (ImGui::Button("Select")) {
-					sel.select_entity = id();
-					sel.select_vertex = -1;
-				}
-				if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
-					ImGui::Text("Remove model \"%s\" ?", m_fpath_load.filename().u8string().c_str());
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
-					if (ImGui::Button("Remove")) {
-						m_dead = true;
-						ImGui::CloseCurrentPopup();
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-					ImGui::EndPopup();
-				}
-				ImGui::PopID();
-			}
-			if (selected) ImGui::PopStyleColor();
-		}
-		ImGui::End();
-		if (ImGui::Begin("Selection")) {
-			if (selected) {
-				
-				ImGui::PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-				// TODO unicode?
-				ImGui::Selectable(m_fpath_load.filename().u8string().c_str(), true);
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
-				ImGui::PushID(m_model.get());
-
-				if (ImGui::Button("Export...")) ImGui::OpenPopup("Export##export");
-				ImGui::SameLine();
-				if (m_pending_save.valid()) {
-					if (m_pending_save.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-						try {
-							m_save_ok = m_pending_save.get();
-						} catch (std::exception &e) {
-							std::cerr << "failed to save model: " << e.what() << std::endl;
-							m_save_ok = false;
-						} catch (...) {
-							std::cerr << "failed to save model" << std::endl;
-							m_save_ok = false;
-						}
-					} else {
-						// TODO unicode?
-						ImGui::Text("Exporting %s...", m_fpath_save.filename().u8string().c_str());
-					}
-				} else if (!m_fpath_save.empty()) {
-					ImGui::Text("Export %s %s", m_fpath_save.filename().u8string().c_str(), m_save_ok ? "succeeded" : "failed");
-				} else {
-					ImGui::Text("");
-				}
-				// TODO unicode?
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_save.u8string().c_str());
-
-				auto pick_basis = [&](const char *label, int *basis) {
-					ImGui::SetNextItemWidth(ImGui::GetTextLineHeight() * 3.5f);
-					ImGui::Combo(
-						label, basis,
-						[](void *data, int item, const char **out_text) {
-							auto vs = reinterpret_cast<basis_vector *>(data);
-							*out_text = vs[item].name;
-							return true;
-						}, m_basis_vectors, 6
-					);
-				};
-				pick_basis("Right", &basis_right);
-				ImGui::SameLine();
-				pick_basis("Up", &basis_up);
-				ImGui::SameLine();
-				pick_basis("Back", &basis_back);
-				if (ImGui::Button("Reset##scale")) m_scale = m_model->unit_bound_scale() * 4;
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
-				ImGui::SliderFloat("Scale", &m_scale, 0, 1000, "%.4f", 8);
-				if (ImGui::Button("Reset##translation")) m_translation = glm::vec3{0};
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
-				ImGui::InputFloat3("Translation", value_ptr(m_translation));
-
-				ImGui::SetNextWindowSize({400, 150}, ImGuiCond_Appearing);
-				if (ImGui::BeginPopupModal("Export##export")) {
-					ImGui::Selectable(m_fpath_load.filename().u8string().c_str());
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_fpath_load.u8string().c_str());
-					if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) {
-						auto &salout = m_saliency_outputs[m_saliency_index];
-						ImGui::Text("Saliency: %s", std::string(salout).c_str());
-					} else {
-						ImGui::Text("No saliency will be exported");
-					}
-					auto cwd = std::filesystem::current_path();
-					ImGui::Text("CWD: %s", cwd.u8string().c_str());
-					// TODO better?
-					static char buf[1024];
-					if (ImGui::IsWindowAppearing()) {
-						snprintf(buf, sizeof(buf), "%s", m_fpath_save.u8string().c_str());
-					}
-					ImGui::InputText("Path", buf, sizeof(buf));
-					// TODO unicode?
-					auto fpath = std::filesystem::u8path(buf);
-					auto stat = std::filesystem::status(fpath);
-					bool cansave = !fpath.empty();
-					if (std::filesystem::is_directory(stat)) {
-						ImGui::Text("Path is a directory");
-						cansave = false;
-					} else if (std::filesystem::exists(stat)) {
-						ImGui::Text("Path exists! Save will overwrite.");
-					}
-					if (ImGui::Button("Save") && cansave && !m_pending_save.valid()) {
-						save(std::filesystem::absolute(fpath));
-						ImGui::CloseCurrentPopup();
-					}
-					if (ImGui::IsItemHovered()) {
-						if (m_pending_save.valid()) {
-							ImGui::SetTooltip("Export already in progress");
-						} else if (!cansave) {
-							ImGui::SetTooltip("Can't save to this path");
-						}
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-					ImGui::EndPopup();
-				}
-				
-				ImGui::Separator();
-
-				//ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-				int cur_color_mode = int(m_color_mode);
-				if (ImGui::Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
-					m_color_mode = color_mode(cur_color_mode);
-					if (m_color_mode != color_mode::none) m_saliency_vbo_dirty = true;
-				}
-				
-				if (ImGui::Combo(
-					"Saliency", &m_saliency_index,
-					[](void *data, int item, const char **out_text) {
-						auto ds = reinterpret_cast<model_saliency_data *>(data);
-						const auto &so = ds[item];
-						// TODO better?
-						static std::string str;
-						str = std::string(so);
-						*out_text = str.c_str();
-						return true;
-					}, m_saliency_outputs.data(), m_saliency_outputs.size()
-				)) {
-					m_saliency_vbo_dirty = true;
-				}
-
-				if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index < m_saliency_outputs.size()) {
-					ImGui::Text("Baseline: %s", m_saliency_outputs[m_saliency_baseline_index].str().c_str());
-					if (m_saliency_index < m_saliency_outputs.size()) {
-						auto &err = m_saliency_errors;
-						ImGui::Text("Errors: min=%.3f, max=%.3f, rmse=%.3f", err.min, err.max, err.rms);
-						if (ImGui::SliderFloat("Error Scale", &m_saliency_error_scale, 1, 100, "%.3f", 2)) {
-							m_saliency_vbo_dirty = true;
-						}
-					}
-				}
-
-				if (ImGui::Button("Paste")) {
-					auto &clip = saliency_clipboard();
-					if (clip.data.size() == m_model->trimesh().n_vertices()) {
-						model_saliency_data sd = std::move(clip.sd);
-						m_model->trimesh().add_property(sd.prop_saliency);
-						m_model->trimesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
-						clip.sd = {};
-						clip.data.clear();
-						m_saliency_outputs.push_back(std::move(sd));
-						m_saliency_vbo_dirty = true;
-						// references/iterators into saliency outputs are invalidated
-					} else {
-						ImGui::OpenPopup("Paste Error##pasteerror");
-					}
-				}
-
-				if (m_saliency_index < m_saliency_outputs.size()) {
-					auto &salout = m_saliency_outputs[m_saliency_index];
-					ImGui::SameLine();
-					if (ImGui::Button("Copy")) {
-						auto &clip = saliency_clipboard();
-						clip.sd = salout;
-						clip.sd.prop_saliency.reset();
-						clip.data = m_model->trimesh().property(salout.prop_saliency).data_vector();
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Remove")) ImGui::OpenPopup("##remove");
-					ImGui::SameLine();
-					if (ImGui::Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
-					if (salout.filename.empty()) {
-						ImGui::draw_saliency_params(salout.uparams);
-						ImGui::draw_saliency_progress(salout.progress);
-						if (ImGui::Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
-					}
-					if (ImGui::BeginPopupModal("Paste Error##pasteerror")) {
-						auto &clip = saliency_clipboard();
-						if (clip.data.size() == m_model->trimesh().n_vertices()) {
-							ImGui::CloseCurrentPopup();
-						} else {
-							ImGui::Text("Can't paste saliency for %d vertices into model with %d vertices", clip.data.size(), m_model->trimesh().n_vertices());
-							if (ImGui::Button("OK")) ImGui::CloseCurrentPopup();
-						}
-					}
-					if (ImGui::BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
-						ImGui::Text("Remove saliency result?");
-						if (ImGui::Button("Remove")) {
-							auto it = m_saliency_outputs.begin() + m_saliency_index;
-							m_model->trimesh().remove_property(it->prop_saliency);
-							m_saliency_outputs.erase(it);
-							// references/iterators into saliency outputs are invalidated
-							if (m_saliency_index >= m_saliency_outputs.size()) {
-								m_saliency_index = std::max(0, m_saliency_index - 1);
-								m_saliency_vbo_dirty = true;
-							}
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-						ImGui::EndPopup();
-					}
-				}
-				ImGui::PopID();
-			}
-		}
-		ImGui::End();
+		if (!dead() && selected) ui_current_model(this);
+		draw_window_models(selected);
 		if (m_model) {
+			if (selected) draw_window_selection();
+			if (selected) draw_window_export();
 			update_vbo();
 			model_draw_params params;
 			params.sel = sel;

@@ -33,6 +33,8 @@ namespace green {
 
 		virtual std::string name() const = 0;
 
+		virtual void try_kill() = 0;
+
 		virtual bool dead() const = 0;
 
 		virtual void move_by(const glm::vec3 &d) {}
