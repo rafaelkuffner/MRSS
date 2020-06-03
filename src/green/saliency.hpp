@@ -135,11 +135,19 @@ namespace green {
 		std::function<void(bool)> cleanup;
 	};
 
+	enum class saliency_computation_state {
+		idle, curv, area, cand, run_full, run_sub, merge, norm, done
+	};
+
 	struct saliency_progress {
 		struct per_level {
-			int completed_vertices = 0;
-			int desired_subsampling = 1;
+			// progress in [0,1]
+			float completion = 0;
+			// number of samples taken
+			int completed_samples = 0;
+			// was (is) subsampling active?
 			bool subsampled = false;
+			// was (is) the normalmap filter active?
 			bool normalmap_filter = false;
 		};
 
@@ -149,6 +157,7 @@ namespace green {
 		int completed_levels = 0;		
 		int total_vertices = 0;
 		bool should_cancel = false;
+		saliency_computation_state state = saliency_computation_state::idle;
 	};
 
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);

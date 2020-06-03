@@ -14,6 +14,7 @@
 
 #include <imgui.h>
 
+#include "imguiex.hpp"
 #include "main.hpp"
 #include "model.glsl.hpp"
 
@@ -486,6 +487,8 @@ namespace green {
 				if (m_color_mode != color_mode::none) m_saliency_vbo_dirty = true;
 			}
 
+			Separator();
+
 			if (Combo(
 				"Saliency", &m_saliency_index,
 				[](void *data, int item, const char **out_text) {
@@ -541,10 +544,15 @@ namespace green {
 				if (Button("Remove")) OpenPopup("##remove");
 				SameLine();
 				if (Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
+				Separator();
 				if (salout.filename.empty()) {
-					draw_saliency_params(salout.uparams);
-					draw_saliency_progress(salout.progress);
-					if (Button("Reload Parameters")) ui_saliency_user_params() = salout.uparams;
+					if (CollapsingHeader("Saliency Parameters")) {
+						draw_saliency_params(salout.uparams);
+						if (Button("Reload")) ui_saliency_user_params() = salout.uparams;
+					}
+					if (CollapsingHeader("Saliency Progress")) {
+						draw_saliency_progress(salout.progress);
+					}
 				}
 				if (BeginPopupModal("Paste Error##pasteerror")) {
 					auto &clip = saliency_clipboard();
@@ -572,7 +580,15 @@ namespace green {
 					if (Button("Cancel")) CloseCurrentPopup();
 					EndPopup();
 				}
+			} else {
+				SameLine();
+				ButtonDisabled("Copy");
+				SameLine();
+				ButtonDisabled("Remove");
+				SameLine();
+				ButtonDisabled("Baseline");
 			}
+			Separator();
 			PopID();
 		}
 		End();

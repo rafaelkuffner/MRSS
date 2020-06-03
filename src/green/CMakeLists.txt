@@ -29,6 +29,8 @@ set(sources
 	dialog.hpp
 	dialog_win32.cpp
 	dialog_simple.cpp
+	imguiex.hpp
+	imguiex.cpp
 	model.glsl
 	deferred.glsl
 )

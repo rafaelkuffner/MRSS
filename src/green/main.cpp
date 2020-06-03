@@ -750,6 +750,31 @@ namespace green {
 		if (prompt) save_path_future = save_file_dialog(window, hint);
 		return save_path_future;
 	}
+
+	const char * saliency_state_str(saliency_computation_state s) {
+		switch (s) {
+		case saliency_computation_state::idle:
+			return "Idle";
+		case saliency_computation_state::curv:
+			return "Computing curvature";
+		case saliency_computation_state::area:
+			return "Computing surface area";
+		case saliency_computation_state::cand:
+			return "Preparing subsampling candidates";
+		case saliency_computation_state::run_full:
+			return "Running (full)";
+		case saliency_computation_state::run_sub:
+			return "Running (subsampled)";
+		case saliency_computation_state::merge:
+			return "Merging saliency levels";
+		case saliency_computation_state::norm:
+			return "Normalizing saliency";
+		case saliency_computation_state::done:
+			return "Done";
+		default:
+			return "???";
+		}
+	}
 }
 
 namespace ImGui {
@@ -757,20 +782,20 @@ namespace ImGui {
 	void draw_saliency_progress(const green::saliency_progress &progress) {
 		for (int i = 0; i < std::min<int>(progress.completed_levels + 1, progress.levels.size()); i++) {
 			const auto &level = progress.levels[i];
-			const float frac = float(level.completed_vertices) / progress.total_vertices;
-			ImGui::Text("%2d/%zu", i + 1, progress.levels.size());
-			ImGui::SameLine();
+			Text("%2d/%zu", i + 1, progress.levels.size());
+			SameLine();
 			char buf[1024];
-			const char *normalmap_filter_str = level.normalmap_filter ? "; normalmap-filter" : "";
+			const char *normalmap_filter_str = level.normalmap_filter ? "\nNormalmap filter active" : "";
 			if (level.subsampled) {
-				std::snprintf(buf, sizeof(buf), "%.0f%% [subsampled ~%dx]", frac * 100, level.desired_subsampling);
+				const float actual_subsampling = progress.total_vertices / float(level.completed_samples);
+				std::snprintf(buf, sizeof(buf), "%.0f%% [subsampled %.1fx]", level.completion * 100, actual_subsampling);
 			} else {
-				std::snprintf(buf, sizeof(buf), "%.0f%% [full]", frac * 100);
+				std::snprintf(buf, sizeof(buf), "%.0f%% [full]", level.completion * 100);
 			}
-			ImGui::ProgressBar(frac, {-1, 0}, buf);
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d / %d vertices%s", level.completed_vertices, progress.total_vertices, normalmap_filter_str);
+			ProgressBar(level.completion, {-1, 0}, buf);
+			if (IsItemHovered()) SetTooltip("%d samples / %d vertices%s", level.completed_samples, progress.total_vertices, normalmap_filter_str);
 		}
-		ImGui::Text("Elapsed %.3fs", progress.elapsed_time / std::chrono::duration<double>(1.0));
+		Text("%s [%.3fs]", saliency_state_str(progress.state), progress.elapsed_time / std::chrono::duration<double>(1.0));
 	}
 
 	bool SliderAny(const char *label, int *v, int v_min, int v_max, const char *format = "%d") {

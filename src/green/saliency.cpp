@@ -64,21 +64,26 @@ namespace green {
 			lce::Histogram curvhist;
 
 			// note: we can't cache the curvature because we couldn't adjust the normal power etc
+			m_progress.state = saliency_computation_state::curv;
 			std::cout << "Computing curvature" << std::endl;
 			// TODO curv selection param
 			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, m_uparams.normal_power);
+			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
 
 			m_hMin = curvhist.getMin();
 			m_hMax = curvhist.getMax();
 
+			m_progress.state = saliency_computation_state::area;
 			std::cout << "Computing surface area" << std::endl;
 			m_surfaceArea = surfaceArea(*m_mparams.mesh);
+			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
 
 			m_real_noise_height = m_uparams.noise_height * sqrt(m_surfaceArea);
 
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
 			//m_meshcache.dump_to_file();
 
+			m_progress.state = saliency_computation_state::cand;
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());
 			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return sample_candidate{vdi}; });
@@ -104,6 +109,8 @@ namespace green {
 					cand.summedarea /= aa;
 				}
 			}
+
+			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
 		}
 
 		bool run() {
@@ -136,14 +143,15 @@ namespace green {
 				// && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
 				m_progress.levels[currentLevel].normalmap_filter = normalmap_filter;
 				
-				m_progress.levels[currentLevel].desired_subsampling = subsampling;
 				std::cout << "Desired saliency subsampling ~" << (100.f / subsampling) << "% (~" << subsampling << "x)" << std::endl;
 
 				if (subsampling >= 5 && samples_per_neighbourhood > 0) {
 					m_progress.levels[currentLevel].subsampled = true;
+					m_progress.state = saliency_computation_state::run_sub;
 					run_level_subsampled(currentLevel, currentRadius, subsampling, normalmap_filter);
 				} else {
 					m_progress.levels[currentLevel].subsampled = false;
+					m_progress.state = saliency_computation_state::run_full;
 					run_level_full(currentLevel, currentRadius, normalmap_filter);
 				}
 
@@ -158,6 +166,7 @@ namespace green {
 			stats.dump_stats(omp_get_max_threads());
 
 			// merge saliency values to a single score / property
+			m_progress.state = saliency_computation_state::merge;
 			std::cout << "Merging saliency values" << std::endl;
 			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
@@ -174,6 +183,7 @@ namespace green {
 			}
 
 			// normalize saliency and add curvature
+			m_progress.state = saliency_computation_state::norm;
 			std::cout << "Normalizing saliency values" << std::endl;
 			float sMin =  FLT_MAX;
 			float sMax = -FLT_MAX;
@@ -198,8 +208,7 @@ namespace green {
 			std::cout << "Saliency computation finished" << std::endl;
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(now - m_time_start);
 			std::cout << "Overall: " << (m_progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
-
-			// TODO colorization
+			m_progress.state = saliency_computation_state::done;
 
 			return true;
 		}
@@ -256,12 +265,14 @@ namespace green {
 					m_time_last_percent = stats.time0;
 					auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
 					std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
-					m_progress.levels[currentLevel].completed_vertices = completion1;
+					m_progress.levels[currentLevel].completed_samples = completion1;
+					m_progress.levels[currentLevel].completion = float(completion1) / m_mparams.mesh->n_vertices();
 					m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
 				}
 			}
 
-			m_progress.levels[currentLevel].completed_vertices = completion;
+			m_progress.levels[currentLevel].completed_samples = completion;
+			m_progress.levels[currentLevel].completion = 1;
 			std::printf("\rSaliency computation [full] (lv %u/%d): %7.3f%%\n", currentLevel + 1, m_uparams.levels, 100.0f * (float(completion) / m_mparams.mesh->n_vertices()));
 			std::cout << "Actual saliency subsampling: 100% (1x)" << std::endl;
 
@@ -446,21 +457,12 @@ namespace green {
 
 					// could be up to exclusion_radius * 2 distance between samples, so distribute over that to ensure coverage
 					// need to go slightly more to avoid problems due to vertex discretization (to allow weight to reach zero)
-					// note: show_samples needs to be single threaded or else the lack of computation time can affect the sampling
 					subsampleGeodesicNeighborhoodSaliency(m_meshcache, stats, rootvdi, currentRadius, m_hMin, m_hMax, normalmap_filter * m_real_noise_height, exclusion_radius * 2.1f, visitor);
 
 					stats.nh_timer_end();
 
-					// TODO ? completion is approximate when subsampling
-					const int completion1 = completion.fetch_add(subsampling);
-
-					if (m_uparams.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
-						m_time_last_percent = stats.time0;
-						auto pc = 100.0f * (float(completion1) / m_mparams.mesh->n_vertices());
-						std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%", currentLevel + 1, m_uparams.levels, pc);
-						m_progress.levels[currentLevel].completed_vertices = completion1;
-						m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
-					}
+					// TODO not actually completion, just num samples
+					const int completion1 = completion.fetch_add(1);
 				}
 
 				// make thread candidate iterators point to non-deleted candidates
@@ -486,10 +488,22 @@ namespace green {
 					}
 				}
 
+				// need to do progress outside inner loop to access remaining area
+				if (m_uparams.show_progress && (m_thread_stats[0].time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
+					m_time_last_percent = m_thread_stats[0].time0;
+					const int completion1 = completion;
+					m_progress.levels[currentLevel].completion = 1 - remaining_area;
+					m_progress.levels[currentLevel].completed_samples = completion1;
+					m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(m_thread_stats[0].time0 - m_time_start);
+					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%, %d samples", currentLevel + 1, m_uparams.levels, (1 - remaining_area) * 100, completion1);
+				}
+
 				if (candidates.empty()) {
-					m_progress.levels[currentLevel].completed_vertices = completion;
-					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%% : no more sample candidates\n", currentLevel + 1, m_uparams.levels, 100.0f * (float(completion) / m_mparams.mesh->n_vertices()));
-					const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion / subsampling);
+					const int completion1 = completion;
+					m_progress.levels[currentLevel].completion = 1;
+					m_progress.levels[currentLevel].completed_samples = completion1;
+					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%, %d samples : no more sample candidates\n", currentLevel + 1, m_uparams.levels, 100.f, completion1);
+					const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion1);
 					std::cout << "Actual saliency subsampling: " << (100.f / actual_subsampling) << "% (" << actual_subsampling << "x)" << std::endl;
 					break;
 				}
