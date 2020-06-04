@@ -716,7 +716,7 @@ namespace green {
 			params.color = {0.5f, 0, 0, 1};
 			params.sel.hover_entity = -1;
 			params.sel.select_entity = -1;
-			params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);
+			//params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);
 			glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
 			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
 			glEnable(GL_CULL_FACE);
