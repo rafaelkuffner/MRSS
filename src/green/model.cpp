@@ -62,9 +62,10 @@ namespace green {
 		// NOTE currently done by assimp too
 		m_trimesh.triangulate();
 
-		// calculate normals if missing (note: need face normals to calc vertex normals)
-		if (!readOptions.face_has_normal()) m_trimesh.update_face_normals();
-		if (!readOptions.vertex_has_normal()) m_trimesh.update_vertex_normals();
+		// calculate normals always
+		std::cout << "Computing vertex normals" << std::endl;
+		m_trimesh.update_face_normals();
+		m_trimesh.update_vertex_normals();
 
 		// bounding box
 		for (auto vit = m_trimesh.vertices_begin(); vit != m_trimesh.vertices_end(); ++vit) {
