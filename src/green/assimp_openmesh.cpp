@@ -49,13 +49,19 @@ namespace green {
 		// NOTE assimp appears to support utf8 filenames; see assimp-5.0.1\code\Common\DefaultIOSystem.cpp
 		Assimp::Importer importer;
 		//importer.SetProgressHandler
-		//importer.SetPropertyFloat(AI_CONFIG_PP_GSN_MAX_SMOOTHING_ANGLE, 70.f);
+		// we need to fuse colocated vertices so the topology works
+		// TODO what is the best way of achieving this?
+		// what is the runtime cost of using assimp's join identical?
+		// remove components that could prevent colocated vertices from being identical for joining purposes
+		// NOTE we want to load vertex colors
+		importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, aiComponent_TEXCOORDS | aiComponent_NORMALS | aiComponent_TANGENTS_AND_BITANGENTS);
 		// scene is owned by the importer
 		const aiScene *scene = importer.ReadFile(
 			_filename.u8string(),
-			aiProcess_Triangulate
-			//| aiProcess_JoinIdenticalVertices
-			//| aiProcess_GenSmoothNormals
+			aiProcess_PreTransformVertices
+			| aiProcess_Triangulate
+			| aiProcess_JoinIdenticalVertices
+			| aiProcess_RemoveComponent
 		);
 		if (!scene) {
 			omerr() << "[Assimp] : failed to load " << _filename.u8string() << ": " << importer.GetErrorString() << std::endl;
