@@ -25,6 +25,20 @@
 
 namespace green {
 
+	void saliency_user_params::sanitize() {
+		using std::clamp;
+		using std::min;
+		using std::max;
+		levels = clamp(levels, 1, 10);
+		area = clamp(area, 0.f, 1.f);
+		curv_weight = max(curv_weight, 0.f);
+		normal_power = clamp(normal_power, 0.f, 10.f);
+		subsampling_rate = max(subsampling_rate, 1.f);
+		samples_per_neighborhood = max(samples_per_neighborhood, 1.f);
+		noise_height = clamp(noise_height, 0.f, 1.f);
+		thread_count = max(thread_count, 0);
+	}
+	
 	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
 		return std::async([=, &progress]() { return compute_saliency(mparams, uparams, progress); });
 	}
@@ -58,6 +72,9 @@ namespace green {
 			, m_uparams(uparams_)
 			, m_progress(progress_)
 		{
+			// ensure params are valid
+			m_uparams.sanitize();
+			
 			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
 			m_thread_stats.assign(omp_get_max_threads(), {});
 

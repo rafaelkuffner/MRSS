@@ -19,6 +19,7 @@
 #include <cgu/shader.hpp>
 
 #include "main.hpp"
+#include "imguiex.hpp"
 #include "dialog.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
@@ -108,6 +109,7 @@ namespace {
 	saliency_progress sal_progress;
 	std::future<saliency_result> sal_future;
 	bool sal_need_preview = false;
+	float sal_preview_spn = 10;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -263,14 +265,17 @@ namespace {
 				Text("%s", ep->name().c_str());
 			}
 			sal_need_preview |= Checkbox("Preview", &sal_uparams.preview);
+			SetHoveredTooltip("Enable interactive preview\nUse on small models only! (< ~500k vertices)\nCoarse subsampling will be activated.");
 			SameLine();
 			bool go = false;
 			if (sal_future.valid()) {
 				if (Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
 			} else {
 				if (ep) {
-					if (Button("GO", {-1, 0})) {
-						go = true;
+					if (sal_uparams.preview) {
+						ButtonDisabled("GO", {-1, 0});
+					} else {
+						if (Button("GO", {-1, 0})) go = true;
 					}
 				} else {
 					TextDisabled("Select a model");
@@ -292,10 +297,16 @@ namespace {
 			}
 			if (go && ep) {
 				// launc calculation
+				auto real_uparams = sal_uparams;
+				if (real_uparams.preview) {
+					real_uparams.subsample_auto = true;
+					real_uparams.subsample_manual = false;
+					real_uparams.samples_per_neighborhood = sal_preview_spn;
+				}
 				sal_entity_id = eid;
 				sal_progress = {};
-				sal_progress.levels.resize(sal_uparams.levels);
-				sal_future = ep->compute_saliency_async(sal_uparams, sal_progress);
+				sal_progress.levels.resize(real_uparams.levels);
+				sal_future = ep->compute_saliency_async(real_uparams, sal_progress);
 			}
 		}
 		End();
@@ -616,9 +627,8 @@ int main() {
 
 	{
 		ImGuiStyle &sty = ImGui::GetStyle();
-		// adjustments to make japanese etc text easier
-		sty.FramePadding.x += 1;
-		sty.FramePadding.y += 1;
+		//sty.FramePadding.x += 1;
+		//sty.FramePadding.y += 1;
 		sty.SelectableTextAlign.y = 0.5f;
 	}
 
@@ -641,6 +651,9 @@ int main() {
 		// a) iirc imgui only supports the BMP, and is certainly not capable of fancy layout
 		// b) the font texture atlas would be intractably large
 		io.Fonts->Build();
+		// hacks to increase line height to make japanese etc text easier
+		io.Fonts->Fonts[0]->FontSize += 3;
+		io.Fonts->Fonts[0]->DisplayOffset.y += 1;
 		std::cout << "imgui font atlas " << io.Fonts->TexWidth << "x" << io.Fonts->TexHeight << std::endl;
 	}
 
@@ -815,10 +828,22 @@ namespace ImGui {
 		defparams.thread_count = defthreads;
 		if (!uparams.thread_count) uparams.thread_count = defthreads;
 		auto slider = [&](const char *label, auto param, auto vmin, auto vmax, auto ...args) {
+			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
+			const ImVec4 badcolhov{badcol.x, badcol.y, badcol.z, GetStyle().Colors[ImGuiCol_FrameBg].w};
+			const ImVec4 badcolbg{badcol.x * 0.7f, badcol.y * 0.7f, badcol.z * 0.7f, badcolhov.w};
 			ImGui::PushID(label);
 			if (ImGui::Button("Reset")) uparams.*param = defparams.*param;
 			ImGui::SameLine();
-			bool r = ImGui::SliderAny(label, &(uparams.*param), vmin, vmax, args...);
+			auto &val = uparams.*param;
+			const bool oor = !(val >= vmin && val <= vmax);
+			if (oor) {
+				PushStyleColor(ImGuiCol_FrameBg, badcolbg);
+				PushStyleColor(ImGuiCol_FrameBgHovered, badcolhov);
+				PushStyleColor(ImGuiCol_SliderGrab, badcol);
+				// can't be out-of-range and active at the same time
+			}
+			bool r = ImGui::SliderAny(label, &val, vmin, vmax, args...);
+			if (oor) PopStyleColor(3);
 			ImGui::PopID();
 			return r;
 		};
@@ -826,60 +851,36 @@ namespace ImGui {
 			ImGui::PushID(label);
 			if (ImGui::Button("Reset")) uparams.*param = defparams.*param;
 			ImGui::SameLine();
-			bool r = ImGui::Checkbox("Normalmap Filter", &(uparams.*param));
+			bool r = ImGui::Checkbox(label, &(uparams.*param));
 			ImGui::PopID();
 			return r;
 		};
-		slider("Levels", &saliency_user_params::levels, 1, 10);
-		slider("Area", &saliency_user_params::area, 0.f, 0.5f, "%.4f", 3.f);
+		TextDisabled("Ctrl-click sliders to enter values directly");
+		slider("Levels", &saliency_user_params::levels, 1, 6);
+		slider("Area", &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
 		slider("Curv Weight", &saliency_user_params::curv_weight, 0.f, 1.f);
 		slider("Normal Power", &saliency_user_params::normal_power, 0.f, 2.f);
 		checkbox("Normalmap Filter", &saliency_user_params::normalmap_filter);
-		slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
-		if (ImGui::Button("Reset##subsample")) {
-			uparams.subsample_auto = defparams.subsample_auto;
-			uparams.subsample_manual = defparams.subsample_manual;
+		if (uparams.normalmap_filter) {
+			slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
 		}
-		ImGui::SameLine();
-		if (ImGui::RadioButton("None", !uparams.subsample_auto && !uparams.subsample_manual)) {
-			uparams.subsample_auto = false;
-			uparams.subsample_manual = false;
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Full sampling (slow)");
-		ImGui::SameLine();
-		if (ImGui::RadioButton("Auto", uparams.subsample_auto && !uparams.subsample_manual)) {
-			uparams.subsample_auto = true;
-			uparams.subsample_manual = false;
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Automatic subsampling (fast, recommended)");
-		ImGui::SameLine();
-		if (ImGui::RadioButton("Manual", uparams.subsample_manual)) {
-			uparams.subsample_manual = true;
-			uparams.subsample_auto = false;
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Manual subsampling (not recommended)");
-		ImGui::SameLine();
-		ImGui::Text(" Subsample");
-		if (uparams.subsample_manual) {
-			slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
-			if (ImGui::IsItemHovered()) {
-				ImGui::BeginTooltip();
-				ImGui::Text("Subsampling Rate");
-				ImGui::Text("Must be tuned for each model.");
-				ImGui::Text("Higher: fewer samples, less accurate results.");
-				ImGui::EndTooltip();
-			}
-		} else if (uparams.subsample_auto) {
-			slider("S/N", &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
-			if (ImGui::IsItemHovered()) {
-				ImGui::BeginTooltip();
-				ImGui::Text("Samples per Neighbourhood");
-				ImGui::Text("Does not usually need tuning per model.");
-				ImGui::Text("Higher: more samples, more accurate results.");
-				ImGui::EndTooltip();
+		if (uparams.preview) {
+			Text("Preview mode: subsampling at %.1f S/N", sal_preview_spn);
+		} else {
+			checkbox("Subsample", &saliency_user_params::subsample_auto);
+			SetHoveredTooltip("Enable automatic subsampling (fast, recommended)");	
+			if (uparams.subsample_manual) {
+				// no longer exposing this mode of subsampling in the ui
+				slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
+				SetHoveredTooltip("Subsampling Rate\nMust be tuned for each model.\nHigher: fewer samples, less accurate results.");
+			} else if (uparams.subsample_auto) {
+				slider("S/N", &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
+				SetHoveredTooltip("Samples per Neighbourhood\nDoes not usually need tuning per model.\nHigher: more samples, more accurate results.");
 			}
 		}
 		slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
+		// ensure params are valid
+		uparams.sanitize();
 		return uparams != uparams0;
 	}
 

@@ -114,6 +114,9 @@ namespace green {
 			return !(*this == other);
 		}
 
+		// clamp parameters to valid ranges
+		void sanitize();
+
 	};
 
 	struct saliency_mesh_params {
