@@ -101,6 +101,7 @@ namespace {
 	bool focus_gained = false;
 	bool show_grid = true;
 	bool show_axes = true;
+	bool about_window_open = false;
 	int fps = 0;
 
 	bool saliency_window_open = false;
@@ -332,6 +333,7 @@ namespace {
 	void render_main_ui() {
 
 		using namespace ImGui;
+		const auto winsize = GetIO().DisplaySize;
 
 		// check for saliency completion
 		if (sal_future.valid()) {
@@ -401,10 +403,9 @@ namespace {
 				PopStyleVar();
 				EndMenu();
 			}
-			if (BeginMenu(u8"助け")) {
+			if (BeginMenu("Help")) {
 				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
-				Text("Not yet.");
-				// TODO about box with copyrights and license text for libraries etc
+				if (Selectable("About")) about_window_open = true;
 				Separator();
 				PopStyleVar();
 				EndMenu();
@@ -428,6 +429,17 @@ namespace {
 		SetNextWindowSizeConstraints({0, 0}, {9001, 9001});
 
 		if (saliency_window_open) draw_window_saliency();
+
+		if (about_window_open) {
+			SetNextWindowPos({winsize.x / 2, winsize.y / 2}, ImGuiCond_Appearing, {0.5f, 0.5f});
+			if (Begin("About", &about_window_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+				Text("Multi-Resolution Subsampled Saliency");
+				Separator();
+				Text("Copyright 2020\nVictoria University of Wellington\nComputational Media Innovation Centre\nAll rights reserved.");
+				// TODO copyrights and license text for libraries etc
+			}
+			End();
+		}
 
 		if (Begin("Models")) {
 			TextDisabled("Open with [File > Open] or drag-and-drop");
