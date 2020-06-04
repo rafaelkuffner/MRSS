@@ -312,6 +312,23 @@ namespace {
 		End();
 	}
 
+	void render_early_ui() {
+		using namespace ImGui;
+		SetNextWindowPos({10, 30}, ImGuiCond_FirstUseEver);
+		SetNextWindowSize({350, 250}, ImGuiCond_FirstUseEver);
+		if (Begin("Models", nullptr, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+			// ensure the window exists			
+		}
+		End();
+
+		SetNextWindowPos({10, 290}, ImGuiCond_FirstUseEver);
+		SetNextWindowSize({350, 500}, ImGuiCond_FirstUseEver);
+		if (Begin("Selection", nullptr, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+			// ensure the window exists
+		}
+		End();
+	}
+
 	void render_main_ui() {
 
 		using namespace ImGui;
@@ -412,17 +429,8 @@ namespace {
 
 		if (saliency_window_open) draw_window_saliency();
 
-		SetNextWindowPos({10, 30}, ImGuiCond_FirstUseEver);
-		SetNextWindowSize({350, 230}, ImGuiCond_FirstUseEver);
 		if (Begin("Models")) {
-			// ensure the window exists
-		}
-		End();
-
-		SetNextWindowPos({10, 270}, ImGuiCond_FirstUseEver);
-		SetNextWindowSize({350, 500}, ImGuiCond_FirstUseEver);
-		if (Begin("Selection")) {
-			// ensure the window exists
+			TextDisabled("Open with [File > Open] or drag-and-drop");
 		}
 		End();
 	}
@@ -580,7 +588,7 @@ int main() {
 	// request a window that can perform gamma correction
 	glfwWindowHint(GLFW_SRGB_CAPABLE, true);
 
-	window = glfwCreateWindow(1280, 720, "GREEN Mesh Saliency", nullptr, nullptr);
+	window = glfwCreateWindow(1280, 800, "GREEN Mesh Saliency", nullptr, nullptr);
 	if (!window) {
 		cerr << "Error: Could not create GLFW window" << endl;
 		abort();
@@ -630,6 +638,9 @@ int main() {
 		//sty.FramePadding.x += 1;
 		//sty.FramePadding.y += 1;
 		sty.SelectableTextAlign.y = 0.5f;
+		sty.Colors[ImGuiCol_WindowBg].w = 0.6f;
+		sty.Colors[ImGuiCol_ScrollbarBg].w = 0.6f;
+		sty.Colors[ImGuiCol_ScrollbarGrab].w = 0.6f;
 	}
 
 	{
@@ -713,7 +724,8 @@ int main() {
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		// render scene before ui so that current model can be determined
+		// render scene before main ui so that current model can be determined
+		render_early_ui();
 		render();
 		render_main_ui();
 
