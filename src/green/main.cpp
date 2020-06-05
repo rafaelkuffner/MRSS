@@ -69,6 +69,7 @@ namespace {
 
 	float zfar = 1000000;
 	cgu::orbital_camera cam;
+	float cam_fov = 1.f;
 	
 	cgu::gl_framebuffer fb_scene{
 		cgu::gl_rendertarget_params{GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_FLOAT},
@@ -92,16 +93,20 @@ namespace {
 	const int size_read_ids = 64;
 	entity_selection cur_sel;
 	float cur_depth = zfar;
-	glm::vec3 cur_world_pos{0};
+	glm::vec3 cur_world_pos{0}, cur_camdrag_pos{0};
 	glm::vec3 drag_world_origin{0}, drag_world_pos{0};
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
-	bool maybe_dragging = false;
 	drag_mode cur_drag_mode = drag_mode::plane;
+	bool maybe_dragging = false;
+	bool dragging_camera = false;
+	bool drag_skip_next = false;
 	bool focus_lost = false;
 	bool focus_gained = false;
 	bool show_grid = true;
 	bool show_axes = true;
+	bool show_focus = false;
 	bool about_window_open = false;
+	bool controlhelp_window_open = true;
 	int fps = 0;
 
 	bool saliency_window_open = false;
@@ -148,7 +153,7 @@ namespace {
 	}
 
 	bool is_dragging() {
-		return maybe_dragging && cur_sel.select_entity >= 0 && (chrono::steady_clock::now() - time_drag_start > chrono::milliseconds(100));
+		return maybe_dragging && (cur_sel.select_entity >= 0 || dragging_camera) && (chrono::steady_clock::now() - time_drag_start > chrono::milliseconds(100));
 	}
 
 	float ray_plane_intersect(const glm::vec3 &ray_origin, const glm::vec3 &ray_dir, const glm::vec3 &plane_norm, float plane_d) {
@@ -157,19 +162,36 @@ namespace {
 		return (plane_d - d0) / dd;
 	}
 
+	glm::vec3 drag_plane_normal(const glm::vec3 &raydir, const glm::vec3 &axis, drag_mode mode) {
+		return mode == drag_mode::plane ? axis : normalize(cross(cross(raydir, axis), axis));
+	}
+
 	void update_dragging(const unproject_result &world_ray, const glm::vec3 &axis, drag_mode mode) {
-		const glm::vec3 plane_norm = mode == drag_mode::plane ? axis : normalize(cross(cross(world_ray.dir, axis), axis));
+		const glm::vec3 plane_norm = drag_plane_normal(world_ray.dir, axis, mode);
 		const float plane_d = dot(plane_norm, drag_world_origin);
 		const float k = ray_plane_intersect(world_ray.origin, world_ray.dir, plane_norm, plane_d);
-		// inverted check for nan safety
-		if (!(k > 1 && k < 100)) return;
+		if (!isfinite(k) || k < 0.1f || abs(dot(plane_norm, world_ray.dir)) < 0.05f) {
+			// -ve k would mean we were dragging on the 'other side' of the drag place (which works but is not nice to use)
+			// skip next drag (but update position!) to avoid sudden jumps when returning to the draggable zone
+			drag_skip_next = true;
+			return;
+		}
 		const auto p = world_ray.origin + k * world_ray.dir;
 		auto delta = p - drag_world_pos;
 		if (mode == drag_mode::axis) delta = axis * dot(delta, axis);
 		drag_world_pos = p;
-		for (auto &e : entities) {
-			if (e->id() == cur_sel.select_entity) {
-				e->move_by(delta);
+		if (drag_skip_next) {
+			drag_skip_next = false;
+			return;
+		}
+		if (dragging_camera) {
+			cam.focus -= delta;
+			drag_world_pos -= delta;
+		} else {
+			for (auto &e : entities) {
+				if (e->id() == cur_sel.select_entity) {
+					e->move_by(delta);
+				}
 			}
 		}
 	}
@@ -359,6 +381,7 @@ namespace {
 		// main menu bar
 		const ImVec4 menubg{0.15f, 0.15f, 0.15f, 1};
 		const auto normal_frame_padding = GetStyle().FramePadding;
+		const auto normal_item_spacing = GetStyle().ItemSpacing;
 		PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
 		PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 6));
 		PushStyleColor(ImGuiCol_MenuBarBg, menubg);
@@ -392,6 +415,16 @@ namespace {
 				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
 				Checkbox("Show Grid", &show_grid);
 				Checkbox("Show Axes", &show_axes);
+				Checkbox("Show Focus", &show_focus);
+				Separator();
+				PushStyleVar(ImGuiStyleVar_ItemSpacing, normal_item_spacing);
+				Text("Camera");
+				InputFloat3("Focus", value_ptr(cam.focus));
+				SliderAngle("Yaw", &cam.cam_yaw, -180, 180);
+				SliderAngle("Pitch", &cam.cam_pitch, -90, 90);
+				SliderFloat("Distance", &cam.cam_distance, 0, 10);
+				SliderAngle("Vertical FoV", &cam_fov, 0, 170);
+				PopStyleVar();
 				Separator();
 				PopStyleVar();
 				EndMenu();
@@ -399,6 +432,7 @@ namespace {
 			if (BeginMenu("Window")) {
 				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
 				Checkbox(sal_future.valid() ? "Saliency (running)" : "Saliency", &saliency_window_open);
+				Checkbox("Control Help", &controlhelp_window_open);
 				Separator();
 				PopStyleVar();
 				EndMenu();
@@ -445,6 +479,18 @@ namespace {
 			TextDisabled("Open with [File > Open] or drag-and-drop");
 		}
 		End();
+
+		if (controlhelp_window_open) {
+			SetNextWindowPos({winsize.x - 20, 30}, ImGuiCond_Always, {1.f, 0.f});
+			if (Begin("ControlHelp", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing)) {
+				PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+				Text("Left Mouse: Move\n [Object, Horizontal]\n + Shift: Vertical\n + Alt: Camera");
+				Text("Right Mouse: Rotate camera");
+				Text("Scroll: Zoom");
+				PopStyleVar();
+			}
+			End();
+		}
 	}
 
 	void render_deferred() {
@@ -498,14 +544,34 @@ namespace {
 		glClearBufferiv(GL_COLOR, 1, value_ptr(glm::ivec4{-1}));
 		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-		glm::mat4 proj = glm::perspective(1.f, float(fbsize.x) / fbsize.y, 0.1f, zfar);
+		glm::mat4 proj = glm::perspective(cam_fov, float(fbsize.x) / fbsize.y, 0.1f, zfar);
 		glm::mat4 view = cam.view();
 		auto proj_inv = inverse(proj);
 		auto view_inv = inverse(view);
 		auto world_ray = view_inv * unproject(proj_inv, glm::vec2(mouse_pos_fb) / glm::vec2(fbsize) * 2.f - 1.f, cur_depth);
 		cur_world_pos = world_ray.hitpos;
+		// TODO dragging on cam.focus (instead of y=0) is more generic but unintuitive to use
+		// forcing y=0 assumes the plane is y=0 or parallel to the y axis
+		// NOTE when dragging vertically, the point being dragged is on the focus plane not the ground plane,
+		// so the apparent movement of the ground plane can seem incorrect (in magnitude)
+		auto camdrag_norm = drag_plane_normal(world_ray.dir, {0, 1, 0}, cur_drag_mode);
+		cur_camdrag_pos = world_ray.origin + world_ray.dir * ray_plane_intersect(world_ray.origin, world_ray.dir, camdrag_norm, dot(camdrag_norm, {cam.focus.x, 0, cam.focus.z}));
 
-		if (is_dragging()) update_dragging(world_ray, {0, 1, 0}, cur_drag_mode);
+		if (is_dragging()) {
+			update_dragging(world_ray, {0, 1, 0}, cur_drag_mode);
+		} else if (maybe_dragging) {
+			// about to start dragging
+			// need to delay setting origin until cur_camdrag_pos is set with the correct drag mode!
+			if (dragging_camera) {
+				// drag camera
+				drag_world_origin = cur_camdrag_pos;
+				drag_world_pos = cur_camdrag_pos;
+			} else {
+				// drag entity
+				drag_world_origin = cur_world_pos;
+				drag_world_pos = cur_world_pos;
+			}
+		}
 
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
@@ -521,6 +587,7 @@ namespace {
 			e->draw(view, proj, zfar);
 			if (e->dead()) {
 				it = entities.erase(it);
+				if (static_cast<Entity *>(cur_model) == e.get()) cur_model = nullptr;
 			} else {
 				++it;
 			}
@@ -545,6 +612,17 @@ namespace {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		if (show_grid) cgu::draw_grid(view, proj, zfar);
 		if (show_axes) cgu::draw_axes(view, proj, zfar);
+		if (show_focus) {
+			cgu::draw_axes_params axp;
+			for (int i = 0; i < 3; i++) {
+				axp.color_pos[i].a = 0.5f;
+				axp.color_neg[i].a = 0.5f;
+			}
+			axp.axislength = 1;
+			auto m = view;
+			m = glm::translate(m, cam.focus);
+			cgu::draw_axes(m, proj, zfar, axp);
+		}
 		glDisable(GL_BLEND);
 
 		glDisable(GL_DEPTH_TEST);
@@ -695,6 +773,7 @@ int main() {
 	auto time_last_fps = time_next_frame;
 	int fps_counter = 0;
 
+	cam.focus.y = 1;
 	cam.cam_yaw = -glm::pi<float>() / 4;
 	cam.cam_pitch = glm::pi<float>() / 8;
 
@@ -967,9 +1046,8 @@ namespace {
 		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
 			cur_sel.select_entity = cur_sel.hover_entity;
 			cur_sel.select_vertex = cur_sel.hover_vertex;
-			drag_world_origin = cur_world_pos;
-			drag_world_pos = cur_world_pos;
 			maybe_dragging = true;
+			dragging_camera = mods & GLFW_MOD_ALT;
 			cur_drag_mode = (mods & GLFW_MOD_SHIFT) ? drag_mode::axis : drag_mode::plane;
 			time_drag_start = chrono::steady_clock::now();
 		} else {
