@@ -164,6 +164,8 @@ namespace green {
 
 		float m_scale = 1;
 		glm::vec3 m_translation{0};
+		// TODO store as quat, only use euler for editing?
+		glm::vec3 m_rotation_euler_yxz{0};
 
 		struct basis_vector {
 			glm::vec3 v;

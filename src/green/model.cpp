@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 #include <cgu/shader.hpp>
 
@@ -297,9 +298,8 @@ namespace green {
 		if (!m_model) return glm::mat4(1);
 		glm::mat4 transform(1);
 		transform = glm::translate(transform, m_translation);
+		transform *= glm::eulerAngleYXZ(m_rotation_euler_yxz.y, m_rotation_euler_yxz.x, m_rotation_euler_yxz.z);
 		transform = glm::scale(transform, glm::vec3(m_scale));
-		// TODO rotation
-
 		glm::mat3 basis(m_basis_vectors[basis_right].v, m_basis_vectors[basis_up].v, m_basis_vectors[basis_back].v);
 		return transform * glm::mat4(transpose(basis));
 	}
@@ -477,6 +477,18 @@ namespace green {
 				SameLine();
 				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
 				InputFloat3("Translation", value_ptr(m_translation));
+				if (Button("Reset##roty")) m_rotation_euler_yxz.y = 0;
+				SameLine();
+				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				SliderAngle("Yaw", &m_rotation_euler_yxz.y, -180, 180);
+				if (Button("Reset##rotx")) m_rotation_euler_yxz.x = 0;
+				SameLine();
+				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				SliderAngle("Pitch", &m_rotation_euler_yxz.x, -180, 180);
+				if (Button("Reset##rotz")) m_rotation_euler_yxz.z = 0;
+				SameLine();
+				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				SliderAngle("Roll", &m_rotation_euler_yxz.z, -180, 180);
 			}
 
 			Separator();
