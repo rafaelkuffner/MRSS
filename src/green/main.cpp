@@ -488,7 +488,8 @@ namespace {
 				Separator();
 				// using a text field instead of Text() because the latter seems to have an insufficient length limit.
 				// imgui wants a non-const pointer (because its a text edit field, just in readonly mode)
-				static std::string text = cgu::strings::about_licences;
+				// +3 to skip BOM (because VS likes to use it for utf8 files)
+				static std::string text = cgu::strings::about_licences + 3;
 				InputTextMultiline("", text.data(), text.size(), {-1, -1}, ImGuiInputTextFlags_ReadOnly);
 			}
 			End();
