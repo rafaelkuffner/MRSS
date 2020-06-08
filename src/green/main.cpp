@@ -981,18 +981,24 @@ namespace ImGui {
 		};
 		TextDisabled("Ctrl-click sliders to enter values directly");
 		slider("Levels", &saliency_user_params::levels, 1, 6);
+		SetHoveredTooltip("Using more levels allows increasingly local features to become visible.");
 		slider("Area", &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
-		slider("Curv Weight", &saliency_user_params::curv_weight, 0.f, 1.f);
-		slider("Normal Power", &saliency_user_params::normal_power, 0.f, 2.f);
-		checkbox("Normalmap Filter", &saliency_user_params::normalmap_filter);
+		SetHoveredTooltip("Size of the largest salient features.\nSpecified as a fraction of the surface area.");
+		slider("Contour", &saliency_user_params::curv_weight, 0.f, 1.f);
+		SetHoveredTooltip("Additional visibility for immediate local features of high curvature.");
+		slider("Contrast", &saliency_user_params::normal_power, 0.f, 2.f);
+		SetHoveredTooltip("Controls how quickly saliency tends towards extreme values.");
+		checkbox("Noise Filter", &saliency_user_params::normalmap_filter);
+		SetHoveredTooltip("Filter out noise from otherwise smooth surfaces.\nEnable to access noise parameters.");
 		if (uparams.normalmap_filter) {
 			slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
+			SetHoveredTooltip("Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area.");
 		}
 		if (uparams.preview) {
 			Text("Preview mode: subsampling at %.1f S/N", sal_preview_spn);
 		} else {
 			checkbox("Subsample", &saliency_user_params::subsample_auto);
-			SetHoveredTooltip("Enable automatic subsampling (fast, recommended)");	
+			SetHoveredTooltip("Apply automatic subsampling (fast, recommended).\nEnable to access sampling parameters.");	
 			if (uparams.subsample_manual) {
 				// no longer exposing this mode of subsampling in the ui
 				slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
@@ -1003,6 +1009,7 @@ namespace ImGui {
 			}
 		}
 		slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
+		SetHoveredTooltip("Number of computation threads to use.");
 		// ensure params are valid
 		uparams.sanitize();
 		return uparams != uparams0;
