@@ -1018,9 +1018,9 @@ namespace ImGui {
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
 		ImGui::Text("Levels: %d", uparams.levels);
 		ImGui::Text("Area: %.3f", uparams.area);
-		ImGui::Text("Curv Weight: %.3f", uparams.curv_weight);
-		ImGui::Text("Normal Power: %.3f", uparams.normal_power);
-		ImGui::Text("Normalmap Filter: %s", uparams.normalmap_filter ? "true" : "false");
+		ImGui::Text("Contour: %.3f", uparams.curv_weight);
+		ImGui::Text("Contrast: %.3f", uparams.normal_power);
+		ImGui::Text("Noise Filter: %s", uparams.normalmap_filter ? "true" : "false");
 		ImGui::Text("Noise Height: %f", uparams.noise_height);
 		ImGui::Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
 		if (uparams.subsample_manual) {
