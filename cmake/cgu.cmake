@@ -163,9 +163,11 @@ function(cgu_target_embed_string target input name)
 	get_filename_component(fpath ${input} ABSOLUTE)
 	set(fpath2 "${CMAKE_CURRENT_BINARY_DIR}/${fname}.hpp")
 	set(gencmd "${CMAKE_CURRENT_BINARY_DIR}/${fname}.cmake")
+	# probably dont need this: \\\"#line 1\\\\n\\\"
+	# and it breaks things that aren't glsl, duh.
 	file(WRITE ${gencmd} "
 		file(READ \"${fpath}\" text)
-		file(WRITE \"${fpath2}\" \"namespace cgu { namespace strings { static const char *${name} = \\\"#line 1\\\\n\\\" R\\\"be3b8bb9686d4d32(\")
+		file(WRITE \"${fpath2}\" \"namespace cgu { namespace strings { static const char *${name} = R\\\"be3b8bb9686d4d32(\")
 		file(APPEND \"${fpath2}\" \"\${text}\")
 		file(APPEND \"${fpath2}\" \")be3b8bb9686d4d32\\\"; } }\")
 	")
