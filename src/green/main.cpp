@@ -23,7 +23,10 @@
 #include "dialog.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
+
 #include "deferred.glsl.hpp"
+
+#include "about_licences.txt.hpp"
 
 using namespace std;
 using namespace green;
@@ -106,6 +109,7 @@ namespace {
 	bool show_axes = true;
 	bool show_focus = false;
 	bool about_window_open = false;
+	bool about_licences_window_open = false;
 	bool controlhelp_window_open = true;
 	int fps = 0;
 
@@ -470,15 +474,25 @@ namespace {
 				Text("Multi-Resolution Subsampled Saliency");
 				Separator();
 				Text("Copyright 2020\nVictoria University of Wellington\nComputational Media Innovation Centre\nAll rights reserved.");
-				// TODO copyrights and license text for libraries etc
+				Separator();
+				if (Button("Library Licenses")) about_licences_window_open = true;
 			}
 			End();
 		}
 
-		if (Begin("Models")) {
-			TextDisabled("Open with [File > Open] or drag-and-drop");
+		if (about_licences_window_open) {
+			SetNextWindowPos({winsize.x / 2, winsize.y / 2}, ImGuiCond_Appearing, {0.5f, 0.5f});
+			SetNextWindowSize({winsize.x / 2, 2 * winsize.y / 3}, ImGuiCond_Appearing);
+			if (Begin("Library Licences", &about_licences_window_open)) {
+				Text("This program uses libraries released under the following licenses:");
+				Separator();
+				// using a text field instead of Text() because the latter seems to have an insufficient length limit.
+				// imgui wants a non-const pointer (because its a text edit field, just in readonly mode)
+				static std::string text = cgu::strings::about_licences;
+				InputTextMultiline("", text.data(), text.size(), {-1, -1}, ImGuiInputTextFlags_ReadOnly);
+			}
+			End();
 		}
-		End();
 
 		if (controlhelp_window_open) {
 			SetNextWindowPos({winsize.x - 20, 30}, ImGuiCond_Always, {1.f, 0.f});
@@ -491,6 +505,12 @@ namespace {
 			}
 			End();
 		}
+
+		if (Begin("Models")) {
+			TextDisabled("Open with [File > Open] or drag-and-drop");
+		}
+		End();
+
 	}
 
 	void render_deferred() {

@@ -33,6 +33,7 @@ set(sources
 	imguiex.cpp
 	model.glsl
 	deferred.glsl
+	about_licences.txt
 )
 
 cgu_create_missing(${sources})
@@ -52,6 +53,9 @@ endif()
 # shaders
 cgu_target_embed_string(green model.glsl glsl_green_model)
 cgu_target_embed_string(green deferred.glsl glsl_green_deferred)
+
+# other strings
+cgu_target_embed_string(green about_licences.txt about_licences)
 
 # for openmesh
 target_compile_definitions(green PUBLIC _USE_MATH_DEFINES)
