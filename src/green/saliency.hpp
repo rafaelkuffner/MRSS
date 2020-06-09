@@ -139,7 +139,7 @@ namespace green {
 	};
 
 	enum class saliency_computation_state {
-		idle, curv, area, cand, run_full, run_sub, merge, norm, done
+		idle, curv, area, nhprep, cand, run_full, run_sub, merge, norm, done
 	};
 
 	struct saliency_progress {

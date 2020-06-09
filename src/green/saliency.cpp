@@ -97,7 +97,9 @@ namespace green {
 
 			m_real_noise_height = m_uparams.noise_height * sqrt(m_surfaceArea);
 
+			m_progress.state = saliency_computation_state::nhprep;
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
+			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
 			//m_meshcache.dump_to_file();
 
 			m_progress.state = saliency_computation_state::cand;
@@ -241,7 +243,10 @@ namespace green {
 			for (int i = 0; i < m_mparams.mesh->n_vertices(); i += simd_traits::simd_size)
 			{
 				// can't break openmp loop, spin instead
-				if (m_progress.should_cancel) continue;
+				if (m_progress.should_cancel) {
+					std::this_thread::yield();
+					continue;
+				}
 				
 				auto &stats = m_thread_stats[omp_get_thread_num()];
 				stats.timer_begin();
@@ -300,8 +305,9 @@ namespace green {
 			std::atomic<int> completion{0};
 
 			// should subsample
-			std::cout << "Saliency computation [subsampled] (lv " << (currentLevel + 1) << "/" << m_uparams.levels << "): 0%";
+			//std::cout << "Saliency computation [subsampled] @%8.2fs (lv " << (currentLevel + 1) << "/" << m_uparams.levels << "): 0%";
 			std::cout.flush();
+			std::printf("Saliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, 0);
 
 			struct weighted_saliency {
 				std::atomic<float> s{0.f};
@@ -414,14 +420,24 @@ namespace green {
 				// radius within which to prevent future samples
 				const float exclusion_radius = subsampling_radius * sampling_correction;
 
+				// adjust samples per spit based on vertices covered per sample
+				const float vertices_per_spit_per_thread = 1000000;
+				const float vertices_per_sample = m_mparams.mesh->n_vertices() * currentRadius * currentRadius * 3.14159265f / m_surfaceArea;
+
 				// specifying dynamic scheduling seems very important for this to perform well
 				// note: too few samples per thread per will hurt performance (with openmp overhead)
 				// while too many samples per thread will also hurt performance due to lazy candidate
 				// deletion and may result in worse sampling characteristics.
-				const int samples_per_spit = 50 * omp_get_max_threads();
+				const int samples_per_spit = omp_get_max_threads() * (int(vertices_per_spit_per_thread / vertices_per_sample) + 1);
 #pragma omp parallel for schedule(dynamic)
 				for (int i = 0; i < samples_per_spit; i++)
 				{
+					if (m_progress.should_cancel) {
+						// can't break an openmp loop, so we have to spin
+						std::this_thread::yield();
+						continue;
+					}
+					
 					auto &stats = m_thread_stats[omp_get_thread_num()];
 					stats.timer_begin();
 
@@ -480,6 +496,14 @@ namespace green {
 
 					// TODO not actually completion, just num samples
 					const int completion1 = completion.fetch_add(1);
+
+					// update progress to some extent to show activity
+					if (m_uparams.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(110)) {
+						m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
+						m_time_last_percent = stats.time0 - std::chrono::milliseconds(60);
+						m_progress.levels[currentLevel].completed_samples = completion1;
+						std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1);
+					}
 				}
 
 				// make thread candidate iterators point to non-deleted candidates
@@ -512,14 +536,14 @@ namespace green {
 					m_progress.levels[currentLevel].completion = 1 - remaining_area;
 					m_progress.levels[currentLevel].completed_samples = completion1;
 					m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(m_thread_stats[0].time0 - m_time_start);
-					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%, %d samples", currentLevel + 1, m_uparams.levels, (1 - remaining_area) * 100, completion1);
+					std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples, %7.3f%%", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1, (1 - remaining_area) * 100);
 				}
 
 				if (candidates.empty()) {
 					const int completion1 = completion;
 					m_progress.levels[currentLevel].completion = 1;
 					m_progress.levels[currentLevel].completed_samples = completion1;
-					std::printf("\rSaliency computation [subsampled] (lv %u/%d): %7.3f%%, %d samples : no more sample candidates\n", currentLevel + 1, m_uparams.levels, 100.f, completion1);
+					std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples, %7.3f%% : no more sample candidates\n", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1, 100.f);
 					const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion1);
 					std::cout << "Actual saliency subsampling: " << (100.f / actual_subsampling) << "% (" << actual_subsampling << "x)" << std::endl;
 					break;

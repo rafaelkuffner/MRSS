@@ -896,6 +896,8 @@ namespace green {
 			return "Computing curvature";
 		case saliency_computation_state::area:
 			return "Computing surface area";
+		case saliency_computation_state::nhprep:
+			return "Preparing mesh data for neighborhood search";
 		case saliency_computation_state::cand:
 			return "Preparing subsampling candidates";
 		case saliency_computation_state::run_full:
