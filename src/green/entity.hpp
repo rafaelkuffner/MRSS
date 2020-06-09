@@ -15,6 +15,8 @@ namespace green {
 		int hover_vertex = -1;
 		int select_entity = -1;
 		int select_vertex = -1;
+		float hover_entity_dist = 0;
+		float hover_vertex_dist = 0;
 	};
 
 	class Entity {

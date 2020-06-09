@@ -100,6 +100,7 @@ namespace {
 	glm::vec3 drag_world_origin{0}, drag_world_pos{0};
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
 	drag_mode cur_drag_mode = drag_mode::plane;
+	bool need_select = false;
 	bool maybe_dragging = false;
 	bool dragging_camera = false;
 	bool drag_skip_next = false;
@@ -176,18 +177,18 @@ namespace {
 		const float k = ray_plane_intersect(world_ray.origin, world_ray.dir, plane_norm, plane_d);
 		if (!isfinite(k) || k < 0.1f || abs(dot(plane_norm, world_ray.dir)) < 0.05f) {
 			// -ve k would mean we were dragging on the 'other side' of the drag place (which works but is not nice to use)
-			// skip next drag (but update position!) to avoid sudden jumps when returning to the draggable zone
+			// skip next drag to avoid sudden jumps when returning to the draggable zone
 			drag_skip_next = true;
+			return;
+		}
+		if (drag_skip_next) {
+			drag_skip_next = false;
 			return;
 		}
 		const auto p = world_ray.origin + k * world_ray.dir;
 		auto delta = p - drag_world_pos;
 		if (mode == drag_mode::axis) delta = axis * dot(delta, axis);
 		drag_world_pos = p;
-		if (drag_skip_next) {
-			drag_skip_next = false;
-			return;
-		}
 		if (dragging_camera) {
 			cam.focus -= delta;
 			drag_world_pos -= delta;
@@ -211,8 +212,8 @@ namespace {
 				auto *iddata = reinterpret_cast<glm::ivec2 *>(
 					glMapBufferRange(GL_ARRAY_BUFFER, 0, sizeof(glm::ivec2) * size_read_ids * size_read_ids, GL_MAP_READ_BIT)
 				);
-				float best_entity_dist = 9001;
-				float best_vertex_dist = 9001;
+				cur_sel.hover_entity_dist = 9001;
+				cur_sel.hover_vertex_dist = 9001;
 				cur_sel.hover_entity = -1;
 				cur_sel.hover_vertex = -1;
 				for (int y = 0; y < size_read_ids; y++) {
@@ -220,19 +221,22 @@ namespace {
 						glm::ivec2 ids = iddata[size_read_ids * y + x];
 						if (ids.x != -1) {
 							float dist = glm::length(glm::vec2{pos_read_ids} + glm::vec2{x, y} - glm::vec2{mouse_pos_fb});
-							if (dist < best_entity_dist && cur_sel.hover_vertex == -1) {
-								best_entity_dist = dist;
+							if (dist < cur_sel.hover_entity_dist && cur_sel.hover_vertex == -1) {
+								cur_sel.hover_entity_dist = dist;
 								cur_sel.hover_entity = ids.x;
 							}
-							if (dist < best_vertex_dist && ids.y != -1) {
-								best_entity_dist = dist;
-								best_vertex_dist = dist;
+							if (dist < cur_sel.hover_vertex_dist && ids.y != -1) {
+								cur_sel.hover_entity_dist = dist;
+								cur_sel.hover_vertex_dist = dist;
 								cur_sel.hover_entity = ids.x;
 								cur_sel.hover_vertex = ids.y;
 							}
 						}
 					}
 				}
+				// ensure dist 0 when not hovering anything (nice for camera drag)
+				if (cur_sel.hover_entity < 0) cur_sel.hover_entity_dist = 0;
+				if (cur_sel.hover_vertex < 0) cur_sel.hover_vertex_dist = 0;
 				glUnmapBuffer(GL_ARRAY_BUFFER);
 				glBindBuffer(GL_ARRAY_BUFFER, buf_read_depths);
 				auto *depthdata = reinterpret_cast<float *>(
@@ -578,20 +582,33 @@ namespace {
 		auto camdrag_norm = drag_plane_normal(world_ray.dir, {0, 1, 0}, cur_drag_mode);
 		cur_camdrag_pos = world_ray.origin + world_ray.dir * ray_plane_intersect(world_ray.origin, world_ray.dir, camdrag_norm, dot(camdrag_norm, {cam.focus.x, 0, cam.focus.z}));
 
+		if (need_select) {
+			// select entity/vertex
+			// NOTE the event handler runs before we've updated the selected entity
+			// so we delay actually doing the selection until here
+			need_select = false;
+			cur_sel.select_entity = cur_sel.hover_entity;
+			cur_sel.select_vertex = cur_sel.hover_vertex;
+			if (cur_sel.hover_entity_dist == 0) {
+				// begin maybe dragging; dist 0 to ensure click was actually on the entity,
+				// because we rely on the click position on the entity for dragging
+				maybe_dragging = true;				
+				time_drag_start = chrono::steady_clock::now();
+				// need to delay setting origin until cur_camdrag_pos is set with the correct drag mode!
+				if (dragging_camera) {
+					// drag camera
+					drag_world_origin = cur_camdrag_pos;
+					drag_world_pos = cur_camdrag_pos;
+				} else {
+					// drag entity
+					drag_world_origin = cur_world_pos;
+					drag_world_pos = cur_world_pos;
+				}
+			}
+		}
+
 		if (is_dragging()) {
 			update_dragging(world_ray, {0, 1, 0}, cur_drag_mode);
-		} else if (maybe_dragging) {
-			// about to start dragging
-			// need to delay setting origin until cur_camdrag_pos is set with the correct drag mode!
-			if (dragging_camera) {
-				// drag camera
-				drag_world_origin = cur_camdrag_pos;
-				drag_world_pos = cur_camdrag_pos;
-			} else {
-				// drag entity
-				drag_world_origin = cur_world_pos;
-				drag_world_pos = cur_world_pos;
-			}
 		}
 
 		glEnable(GL_DEPTH_TEST);
@@ -1073,15 +1090,11 @@ namespace {
 		// if not captured then foward to application
 		ImGuiIO& io = ImGui::GetIO();
 		if (io.WantCaptureMouse) return;
+		maybe_dragging = false;
 		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-			cur_sel.select_entity = cur_sel.hover_entity;
-			cur_sel.select_vertex = cur_sel.hover_vertex;
-			maybe_dragging = true;
+			need_select = true;
 			dragging_camera = mods & GLFW_MOD_ALT;
 			cur_drag_mode = (mods & GLFW_MOD_SHIFT) ? drag_mode::axis : drag_mode::plane;
-			time_drag_start = chrono::steady_clock::now();
-		} else {
-			maybe_dragging = false;
 		}
 	}
 
