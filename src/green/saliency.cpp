@@ -428,7 +428,7 @@ namespace green {
 				// note: too few samples per thread per will hurt performance (with openmp overhead)
 				// while too many samples per thread will also hurt performance due to lazy candidate
 				// deletion and may result in worse sampling characteristics.
-				const int samples_per_spit = omp_get_max_threads() * (int(vertices_per_spit_per_thread / vertices_per_sample) + 1);
+				const int samples_per_spit = std::min<int>(omp_get_max_threads() * vertices_per_spit_per_thread / vertices_per_sample, m_mparams.mesh->n_vertices() / float(subsampling) * 0.5f) + 1;
 #pragma omp parallel for schedule(dynamic)
 				for (int i = 0; i < samples_per_spit; i++)
 				{
