@@ -565,6 +565,12 @@ namespace {
 
 		fb_scene.bind(GL_DRAW_FRAMEBUFFER, fbsize);
 
+		if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			// nvidia: fbo is incomplete when window is minimized
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			return;
+		}
+
 		glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glClearBufferfv(GL_DEPTH, 0, value_ptr(glm::vec4{1.f}));
 		glClearBufferfv(GL_COLOR, 0, value_ptr(glm::vec4{0.1f, 0.1f, 0.2f, 1.0f}));
