@@ -101,7 +101,10 @@ namespace green {
 
 		explicit operator std::string() const {
 			char buf[128];
-			snprintf(buf, sizeof(buf), "l=%d,a=%.3f,w=%.2f,p=%.2f,n=%d", levels, area, curv_weight, normal_power, normalmap_filter);
+			char *end = buf + sizeof(buf);
+			char *p = buf;
+			p += snprintf(p, end - p, "l=%d,a=%.3f,w=%.2f,p=%.2f", levels, area, curv_weight, normal_power);
+			if (normalmap_filter) p += snprintf(p, end - p, ",N,h=%.3f", noise_height);
 			return {buf};
 		}
 
