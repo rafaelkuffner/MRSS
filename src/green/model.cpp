@@ -7,6 +7,7 @@
 #include <chrono>
 #include <mutex>
 #include <algorithm>
+#include <memory>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -35,6 +36,7 @@ namespace {
 		static saliency_clipboard_data d;
 		return d;
 	}
+
 }
 
 namespace green {
@@ -271,24 +273,36 @@ namespace green {
 	}
 
 	void ModelEntity::load(const std::filesystem::path &fpath) {
+		// lock in case of premature closure
+		// mainly because the pending_load future's dtor will block otherwise
+		std::unique_lock lock(m_modelmtx, std::defer_lock);
+		if (!lock.try_lock()) {
+			spawn_locked_notification();
+			return;
+		}
 		m_model.reset();
 		m_fpath_load = fpath;
-		m_pending_load = std::async([=]() {
+		m_pending_load = std::async([=, lock=std::move(lock)]() {
 			// apparently openmesh load is not threadsafe?
 			// TODO check assimp too
-			std::lock_guard lock(mesh_io_mutex());
+			std::lock_guard iolock(mesh_io_mutex());
 			return std::make_unique<Model>(fpath);
 		});
 	}
 
 	void ModelEntity::save(const std::filesystem::path &fpath) {
+		std::unique_lock lock(m_modelmtx, std::defer_lock);
+		if (!lock.try_lock()) {
+			spawn_locked_notification();
+			return;
+		}
 		const auto salout = m_saliency_index < m_saliency_outputs.size() ? m_saliency_outputs[m_saliency_index] : model_saliency_data{};
 		if (salout.prop_saliency.is_valid()) m_model->trimesh().request_vertex_colors();
 		m_fpath_save = fpath;
-		m_pending_save = std::async([=]() {
+		m_pending_save = std::async([=, lock=std::move(lock)]() {
 			// TODO is this also not threadsafe? idk
 			// ... can it run parallel with load?
-			std::lock_guard lock(mesh_io_mutex());
+			std::lock_guard iolock(mesh_io_mutex());
 			m_model->save(fpath, salout.prop_saliency);
 			return true;
 		});
@@ -307,6 +321,8 @@ namespace green {
 	void ModelEntity::update_vbo() {
 		if (!m_model) return;
 		if (!m_saliency_vbo_dirty) return;
+		std::shared_lock lock(m_modelmtx, std::defer_lock);
+		if (!lock.try_lock()) return;
 		if (m_color_mode == color_mode::saliency && m_saliency_index >= m_saliency_outputs.size()) return;
 		if (m_color_mode == color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
 		if (m_color_mode == color_mode::saliency_comparison && m_saliency_index >= m_saliency_outputs.size()) return;
@@ -400,7 +416,12 @@ namespace green {
 				Text("Close model \"%s\" ?", m_fpath_load.filename().u8string().c_str());
 				if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
 				if (Button("Close")) {
-					m_dead = true;
+					std::unique_lock lock(m_modelmtx, std::defer_lock);
+					if (lock.try_lock()) {
+						m_dead = true;
+					} else {
+						spawn_locked_notification();
+					}
 					CloseCurrentPopup();
 				}
 				SameLine();
@@ -530,7 +551,10 @@ namespace green {
 
 			if (Button("Paste")) {
 				auto &clip = saliency_clipboard();
-				if (clip.data.size() == m_model->trimesh().n_vertices()) {
+				std::unique_lock lock(m_modelmtx, std::defer_lock);
+				if (!lock.try_lock()) {
+					spawn_locked_notification();
+				} else if (clip.data.size() == m_model->trimesh().n_vertices()) {
 					model_saliency_data sd = std::move(clip.sd);
 					m_model->trimesh().add_property(sd.prop_saliency);
 					m_model->trimesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
@@ -548,10 +572,15 @@ namespace green {
 				auto &salout = m_saliency_outputs[m_saliency_index];
 				SameLine();
 				if (Button("Copy")) {
-					auto &clip = saliency_clipboard();
-					clip.sd = salout;
-					clip.sd.prop_saliency.reset();
-					clip.data = m_model->trimesh().property(salout.prop_saliency).data_vector();
+					std::shared_lock lock(m_modelmtx, std::defer_lock);
+					if (!lock.try_lock()) {
+						spawn_locked_notification();
+					} else {
+						auto &clip = saliency_clipboard();
+						clip.sd = salout;
+						clip.sd.prop_saliency.reset();
+						clip.data = m_model->trimesh().property(salout.prop_saliency).data_vector();
+					}
 				}
 				SameLine();
 				if (Button("Remove")) OpenPopup("##remove");
@@ -579,13 +608,18 @@ namespace green {
 				if (BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
 					Text("Remove saliency result?");
 					if (Button("Remove")) {
-						auto it = m_saliency_outputs.begin() + m_saliency_index;
-						m_model->trimesh().remove_property(it->prop_saliency);
-						m_saliency_outputs.erase(it);
-						// references/iterators into saliency outputs are invalidated
-						if (m_saliency_index >= m_saliency_outputs.size()) {
-							m_saliency_index = std::max(0, m_saliency_index - 1);
-							m_saliency_vbo_dirty = true;
+						std::unique_lock lock(m_modelmtx, std::defer_lock);
+						if (!lock.try_lock()) {
+							spawn_locked_notification();
+						} else {
+							auto it = m_saliency_outputs.begin() + m_saliency_index;
+							m_model->trimesh().remove_property(it->prop_saliency);
+							m_saliency_outputs.erase(it);
+							// references/iterators into saliency outputs are invalidated
+							if (m_saliency_index >= m_saliency_outputs.size()) {
+								m_saliency_index = std::max(0, m_saliency_index - 1);
+								m_saliency_vbo_dirty = true;
+							}
 						}
 						CloseCurrentPopup();
 					}
@@ -676,6 +710,24 @@ namespace green {
 		}
 	}
 
+	void ModelEntity::spawn_locked_notification() {
+		using namespace ImGui;
+		ui_spawn([p=m_fpath_load](bool *p_open) {
+			if (*p_open) OpenPopup("Model in use");
+			if (BeginPopupModal("Model in use", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+				Selectable(p.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
+				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+				if (IsItemHovered()) SetTooltip("%s", p.u8string().c_str());
+				Text("The operation cannot be performed because\nthe model is currently in use.");
+				if (Button("  OK  ")) {
+					*p_open = false;
+					CloseCurrentPopup();
+				}
+				EndPopup();
+			}
+		});
+	}
+
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
 		if (m_pending_load.valid() && m_pending_load.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
@@ -737,6 +789,11 @@ namespace green {
 
 	std::future<saliency_result> ModelEntity::compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) {
 		if (!m_model) return {};
+		std::unique_lock lock(m_modelmtx, std::defer_lock);
+		if (!lock.try_lock()) {
+			spawn_locked_notification();
+			return {};
+		}
 		saliency_mesh_params mparams;
 		mparams.mesh = &m_model->trimesh();
 		mparams.prop_vertex_area = m_model->prop_vertex_area();
@@ -750,7 +807,13 @@ namespace green {
 			mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
 		}
 		// cleanup will be run when the result is received from the future
-		mparams.cleanup = [=, pprogress=&progress](bool r) mutable noexcept {
+		// can use shared lock for actual computation because only property contents are being used
+		// HACK make_shared is an ugly workaround for std::function needing to be copyable
+		lock.unlock();
+		mparams.cleanup = [=, pprogress=&progress, slock=std::make_shared<std::shared_lock<std::shared_mutex>>(m_modelmtx)](bool r) mutable noexcept {
+			// now need to upgrade to unique lock
+			slock->unlock();
+			std::unique_lock lock(m_modelmtx);
 			// destroy temp properties
 			mparams.mesh->remove_property(mparams.prop_curvature);
 			for (int i = 0; i < uparams.levels; i++) {

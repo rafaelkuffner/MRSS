@@ -83,6 +83,8 @@ namespace {
 	std::vector<std::unique_ptr<Entity>> entities;
 	ModelEntity *cur_model = nullptr;
 
+	std::vector<std::function<void(bool *p_open)>> persistent_ui;
+
 	std::future<std::vector<std::filesystem::path>> open_paths_future;
 	std::future<std::filesystem::path> save_path_future;
 
@@ -858,6 +860,16 @@ int main() {
 		render();
 		render_main_ui();
 
+		for (auto it = persistent_ui.begin(); it != persistent_ui.end(); ) {
+			bool r = true;
+			(*it)(&r);
+			if (r) {
+				++it;
+			} else {
+				it = persistent_ui.erase(it);
+			}
+		}
+
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -905,6 +917,10 @@ namespace green {
 		return save_path_future;
 	}
 
+	void ui_spawn(std::function<void(bool *p_open)> f) {
+		persistent_ui.push_back(std::move(f));
+	}
+
 	const char * saliency_state_str(saliency_computation_state s) {
 		switch (s) {
 		case saliency_computation_state::idle:
@@ -927,6 +943,8 @@ namespace green {
 			return "Normalizing saliency";
 		case saliency_computation_state::done:
 			return "Done";
+		case saliency_computation_state::cancelled:
+			return "Cancelled";
 		default:
 			return "???";
 		}

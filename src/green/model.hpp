@@ -9,6 +9,7 @@
 #include <memory>
 #include <algorithm>
 #include <future>
+#include <shared_mutex>
 
 #include <cgu/opengl.hpp>
 
@@ -140,8 +141,12 @@ namespace green {
 
 	class ModelEntity : public Entity {
 	private:
-		std::filesystem::path m_fpath_load;
+		// unique: adding/removing properties, vertices etc
+		// shared: reading/writing contents of existing properties
+		std::shared_mutex m_modelmtx;
 		std::unique_ptr<Model> m_model;
+
+		std::filesystem::path m_fpath_load;
 		std::future<std::unique_ptr<Model>> m_pending_load;
 
 		std::filesystem::path m_fpath_save;
@@ -200,6 +205,7 @@ namespace green {
 		void draw_window_models(bool selected);
 		void draw_window_selection();
 		void draw_window_export();
+		void spawn_locked_notification();
 
 	public:
 		ModelEntity();

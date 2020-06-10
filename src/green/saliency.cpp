@@ -570,6 +570,7 @@ namespace green {
 		if (uparams.thread_count) omp_set_num_threads(uparams.thread_count);
 		SaliencyComputation s(mparams, uparams, progress);
 		bool r = s.run() && !progress.should_cancel;
+		if (!r) progress.state = saliency_computation_state::cancelled;
 		omp_set_num_threads(prev_max_threads);
 		return saliency_result(mparams.cleanup, r);
 	}

@@ -6,6 +6,7 @@
 
 #include <future>
 #include <filesystem>
+#include <functional>
 
 #include "entity.hpp"
 #include "model.hpp"
@@ -24,6 +25,9 @@ namespace green {
 	ModelEntity * ui_current_model();
 
 	std::future<std::filesystem::path> & ui_save_path(const std::filesystem::path &hint, bool prompt);
+
+	// spawn persistent ui component. persists until *p_open is set to false.
+	void ui_spawn(std::function<void(bool *p_open)>);
 
 }
 
