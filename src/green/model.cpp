@@ -125,7 +125,7 @@ namespace green {
 
 	}
 
-	void Model::save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency) {
+	void Model::save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency, bool binary) {
 
 		if (m_trimesh.has_vertex_colors() && prop_saliency.is_valid()) {
 			std::cout << "Colorizing saliency" << std::endl;
@@ -152,6 +152,7 @@ namespace green {
 
 		OpenMesh::IO::Options opts = OpenMesh::IO::Options::Custom;
 		if (m_trimesh.has_vertex_colors()) opts = opts | OpenMesh::IO::Options::VertexColor;
+		if (binary) opts = opts | OpenMesh::IO::Options::Binary;
 
 		// TODO unicode filenames...
 		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath, opts);
@@ -290,7 +291,7 @@ namespace green {
 		});
 	}
 
-	void ModelEntity::save(const std::filesystem::path &fpath) {
+	void ModelEntity::save(const std::filesystem::path &fpath, bool binary) {
 		std::unique_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) {
 			spawn_locked_notification();
@@ -303,7 +304,7 @@ namespace green {
 			// TODO is this also not threadsafe? idk
 			// ... can it run parallel with load?
 			std::lock_guard iolock(mesh_io_mutex());
-			m_model->save(fpath, salout.prop_saliency);
+			m_model->save(fpath, salout.prop_saliency, binary);
 			return true;
 		});
 	}
@@ -644,7 +645,7 @@ namespace green {
 	void ModelEntity::draw_window_export() {
 		using namespace ImGui;
 		if (m_try_export) OpenPopup("Export##export");
-		SetNextWindowSize({500, 160}, ImGuiCond_Appearing);
+		SetNextWindowSize({500, 180}, ImGuiCond_Appearing);
 		if (BeginPopupModal("Export##export")) {
 			PushID(this);
 			m_try_export = false;
@@ -671,6 +672,8 @@ namespace green {
 			}
 			SameLine();
 			InputText("Path", buf, sizeof(buf));
+			Checkbox("Binary", &m_save_binary);
+			SetHoveredTooltip("Save file as binary if supported");
 			auto fpath = std::filesystem::u8path(buf);
 			auto stat = std::filesystem::status(fpath);
 			bool cansave = !fpath.empty();
@@ -693,7 +696,7 @@ namespace green {
 				//TextColored(badcol, u8"保存先が存在します！保存したら上書きします");
 			}
 			if (Button("Save") && cansave && !m_pending_save.valid()) {
-				save(std::filesystem::absolute(fpath));
+				save(std::filesystem::absolute(fpath), m_save_binary);
 				CloseCurrentPopup();
 			}
 			if (IsItemHovered()) {
