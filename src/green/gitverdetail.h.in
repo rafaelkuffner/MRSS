@@ -1,0 +1,4 @@
+#pragma once
+#define GREEN_GIT_REV "@git_rev@"
+#define GREEN_GIT_DESCRIBE "@git_describe@"
+#define GREEN_GIT_TIMESTAMP "@git_timestamp@"

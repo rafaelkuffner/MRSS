@@ -4,6 +4,10 @@ cmake_minimum_required(VERSION 3.9)
 
 set(sources
 	CMakeLists.txt
+	"${PROJECT_SOURCE_DIR}/cmake/gitver.cmake"
+	gitverdetail.h.in
+	gitver.hpp
+	gitver.cpp
 	main.hpp
 	main.cpp
 	model.hpp
@@ -70,3 +74,17 @@ find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
 	target_link_libraries(green PRIVATE OpenMP::OpenMP_CXX)
 endif()
+
+set(gitversrc "${CMAKE_CURRENT_SOURCE_DIR}/gitverdetail.h.in")
+set(gitverdst "${CMAKE_CURRENT_BINARY_DIR}/gitverdetail.h")
+
+add_custom_target(
+	green_gitver
+	"${CMAKE_COMMAND}" "-Dsrc=${gitversrc}" "-Ddst=${gitverdst}" -P "${PROJECT_SOURCE_DIR}/cmake/gitver.cmake"
+	DEPENDS "${gitversrc}"
+	BYPRODUCTS "${gitverdst}"
+	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+	VERBATIM
+)
+
+add_dependencies(green green_gitver)

@@ -26,6 +26,7 @@
 
 #include "deferred.glsl.hpp"
 
+#include "gitver.hpp"
 #include "about_licences.txt.hpp"
 
 using namespace std;
@@ -481,6 +482,8 @@ namespace {
 				Separator();
 				Text("Copyright 2020\nVictoria University of Wellington\nComputational Media Innovation Centre\nAll rights reserved.");
 				Separator();
+				Text("Revision:\n%s (%s)\n%s", git_revision(), git_describe(), git_timestamp());
+				Separator();
 				if (Button("Library Licenses")) about_licences_window_open = true;
 			}
 			End();
@@ -492,7 +495,6 @@ namespace {
 			if (Begin("Library Licences", &about_licences_window_open)) {
 				Text("This program uses libraries released under the following licenses:");
 				Separator();
-				// using a text field instead of Text() because the latter seems to have an insufficient length limit.
 				// imgui wants a non-const pointer (because its a text edit field, just in readonly mode)
 				// +3 to skip BOM (because VS likes to use it for utf8 files)
 				static std::string text = cgu::strings::about_licences + 3;
