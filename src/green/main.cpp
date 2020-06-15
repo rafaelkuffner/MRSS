@@ -734,7 +734,7 @@ int main() {
 	// request a window that can perform gamma correction
 	glfwWindowHint(GLFW_SRGB_CAPABLE, true);
 
-	window = glfwCreateWindow(1280, 800, "Multi-Resolution Subsampled Saliency", nullptr, nullptr);
+	window = glfwCreateWindow(1280, 800, (std::string("Multi-Resolution Subsampled Saliency (") + git_describe() + ")").c_str(), nullptr, nullptr);
 	if (!window) {
 		cerr << "Error: Could not create GLFW window" << endl;
 		abort();
