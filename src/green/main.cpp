@@ -98,8 +98,6 @@ namespace {
 	cgu::gl_object buf_read_ids, buf_read_depths;
 	glm::ivec2 pos_read_ids{0};
 	const int size_read_ids = 64;
-	int render_point_size = 3;
-	bool render_cull_face = true;
 
 	entity_selection cur_sel;
 	float cur_depth = zfar;
@@ -434,11 +432,6 @@ namespace {
 				Checkbox("Show Focus", &show_focus);
 				Separator();
 				PushStyleVar(ImGuiStyleVar_ItemSpacing, normal_item_spacing);
-				Text("Rendering");
-				Checkbox("Backface Culling", &render_cull_face);
-				SliderInt("Point Size", &render_point_size, 1, 5);
-				render_point_size = std::max(render_point_size, 1);
-				Separator();
 				Text("Camera");
 				InputFloat3("Focus", value_ptr(cam.focus));
 				SliderAngle("Yaw", &cam.cam_yaw, -180, 180);
@@ -634,9 +627,7 @@ namespace {
 
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
-		if (render_cull_face) glEnable(GL_CULL_FACE);
-		glCullFace(GL_BACK);
-		glPointSize(render_point_size);
+		glPointSize(1);
 
 		select_model = nullptr;
 		hover_model = nullptr;

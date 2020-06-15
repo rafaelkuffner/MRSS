@@ -513,11 +513,20 @@ namespace green {
 				SliderAngle("Roll", &m_rotation_euler_yxz.z, -180, 180);
 			}
 
-			Separator();
+			if (CollapsingHeader("Rendering")) {
+				Checkbox("Color Faces", &m_color_faces);
+				SetHoveredTooltip("Apply color mode to faces");
+				SameLine();
+				Checkbox("Color Verts", &m_color_verts);
+				SetHoveredTooltip("Apply color mode to vertices");
+				Checkbox("Cull Faces", &m_cull_faces);
+				SameLine();
+				Checkbox("Cull Edges", &m_cull_edges);
+				SliderInt("Point Size", &m_vert_point_size, 1, 5);
+				m_vert_point_size = std::max(1, m_vert_point_size);
+			}
 
-			Checkbox("Color Faces", &m_color_faces);
-			SameLine();
-			Checkbox("Color Verts", &m_color_verts);
+			Separator();
 
 			//SetNextItemWidth(GetContentRegionAvail().x);
 			int cur_color_mode = int(m_color_mode);
@@ -775,17 +784,25 @@ namespace green {
 			model_draw_params params;
 			params.sel = sel;
 			params.entity_id = id();
+			auto set_cull_faces = [](bool b) {
+				if (b) {
+					glEnable(GL_CULL_FACE);
+					glCullFace(GL_BACK);
+				} else {
+					glDisable(GL_CULL_FACE);
+				}
+			};
 			// faces
 			params.color = {0.6f, 0.6f, 0.5f, 1};
 			params.vert_color_map = m_color_faces ? color_map : 0;
-			glEnable(GL_CULL_FACE);
+			set_cull_faces(m_cull_faces);
 			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
 			// edges
 			params.shading = 0;
 			params.color = {0.03f, 0.03f, 0.03f, 1};
 			params.vert_color_map = 0;
-			glDisable(GL_CULL_FACE);
+			set_cull_faces(m_cull_edges);
 			glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
 			// verts
@@ -794,9 +811,10 @@ namespace green {
 			params.sel.hover_entity = -1;
 			params.sel.select_entity = -1;
 			//params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);
+			glDisable(GL_CULL_FACE);
+			glPointSize(m_vert_point_size);
 			glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
 			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
-			glEnable(GL_CULL_FACE);
 		}
 	}
 

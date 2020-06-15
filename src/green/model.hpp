@@ -193,12 +193,15 @@ namespace green {
 			none, vcolor, saliency, saliency_comparison
 		};
 
+		int m_vert_point_size = 3;
 		color_mode m_color_mode = color_mode::saliency;
 		bool m_color_faces = true;
 		bool m_color_verts = false;
 		bool m_show_faces = true;
 		bool m_show_edges = false;
 		bool m_show_verts = false;
+		bool m_cull_faces = true;
+		bool m_cull_edges = true;
 		
 		bool m_try_export = false;
 		bool m_try_kill = false;
