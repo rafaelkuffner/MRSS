@@ -25,7 +25,7 @@ bvec4 bvec_and(bvec4 a, bvec4 b) {
 void main() {
 	gl_FragDepth = texture(u_sampler_depth, v_tex_coord).r;
 	vec2 dtx = vec2(dFdx(v_tex_coord.x), dFdy(v_tex_coord.y));
-	const int searchpx = 4;
+	const int searchpx = 2;
 	vec4 dist = vec4(9001);
 	bvec4 selmask = greaterThanEqual(u_selection, ivec4(0));
 	if (any(selmask)) {
