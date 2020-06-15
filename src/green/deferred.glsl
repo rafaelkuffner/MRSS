@@ -9,12 +9,15 @@ uniform isampler2D u_sampler_id;
 
 // hover entity, hover vertex, select entity, select vertex
 uniform ivec4 u_selection;
+uniform bvec4 u_show_selection;
 
 // these colors are linear, not srgb
 uniform vec4 u_hover_entity_color = vec4(0.8, 0.8, 0, 1);
-uniform vec4 u_hover_vertex_color = vec4(1, 0.3, 0.3, 1);
-uniform vec4 u_select_entity_color = vec4(1, 0.3, 0, 1);
-uniform vec4 u_select_vertex_color = vec4(0, 1, 0, 1);
+uniform vec4 u_hover_vertex_color = vec4(0.8, 0.8, 0, 1);
+//uniform vec4 u_hover_vertex_color = vec4(1, 0.3, 0.3, 1);
+uniform vec4 u_select_entity_color = vec4(1, 0.4, 0, 1);
+uniform vec4 u_select_vertex_color = vec4(0.2, 0.8, 0, 1);
+//uniform vec4 u_select_vertex_color = vec4(0, 1, 0, 1);
 
 // && doesn't operator on vectors, & only operates on integers (+vectors)
 // AMD is strict on this, NVidia is more relaxed. the GLSL spec is silly.
@@ -39,10 +42,10 @@ void main() {
 	}
 	vec4 color0 = texture(u_sampler_color, v_tex_coord);
 	f_color = color0;
-	f_color = mix(f_color, color0 * 0.5 + u_select_entity_color, bvec4(dist.z > 0 && dist.z < 1));
-	f_color = mix(f_color, color0 * 0.5 + u_hover_entity_color, bvec4(dist.x > 0 && dist.x < 1));
-	f_color = mix(f_color, color0 * 0.5 + u_select_vertex_color, bvec4(dist.w > 0 && dist.w < 1));
-	f_color = mix(f_color, color0 * 0.5 + u_hover_vertex_color, bvec4(dist.y > 0 && dist.y < 1));
+	f_color = mix(f_color, color0 * 0.5 + u_select_entity_color, bvec4(u_show_selection.z && dist.z > 0 && dist.z < 1));
+	f_color = mix(f_color, color0 * 0.5 + u_hover_entity_color, bvec4(u_show_selection.x && dist.x > 0 && dist.x < 1));
+	f_color = mix(f_color, color0 * 0.5 + u_select_vertex_color, bvec4(u_show_selection.w && dist.w >= 0 && dist.w < 1));
+	f_color = mix(f_color, color0 * 0.5 + u_hover_vertex_color, bvec4(u_show_selection.y && dist.y >= 0 && dist.y < 1));
 }
 
 #endif

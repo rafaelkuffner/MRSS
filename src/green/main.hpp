@@ -20,9 +20,13 @@ namespace green {
 
 	const saliency_progress & ui_saliency_progress();
 
-	void ui_current_model(ModelEntity *);
+	void ui_select_model(ModelEntity *);
 
-	ModelEntity * ui_current_model();
+	ModelEntity * ui_select_model();
+
+	void ui_hover_model(ModelEntity *);
+
+	ModelEntity * ui_hover_model();
 
 	std::future<std::filesystem::path> & ui_save_path(const std::filesystem::path &hint, bool prompt);
 

@@ -758,7 +758,8 @@ namespace green {
 		}
 		auto &sel = ui_selection();
 		const bool selected = sel.select_entity == id();
-		if (!dead() && selected) ui_current_model(this);
+		if (!dead() && selected) ui_select_model(this);
+		if (!dead() && sel.hover_entity == id()) ui_hover_model(this);
 		draw_window_models(selected);
 		if (m_model) {
 			if (selected) draw_window_selection();

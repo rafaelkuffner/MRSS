@@ -82,7 +82,8 @@ namespace {
 	};
 
 	std::vector<std::unique_ptr<Entity>> entities;
-	ModelEntity *cur_model = nullptr;
+	ModelEntity *select_model = nullptr;
+	ModelEntity *hover_model = nullptr;
 
 	std::vector<std::function<void(bool *p_open)>> persistent_ui;
 
@@ -411,12 +412,12 @@ namespace {
 					open_paths_future = open_file_dialog(window, "", true);
 				}
 				Separator();
-				if (cur_model) {
-					if (Selectable(("Close " + cur_model->name() + "...").c_str())) {
-						cur_model->try_kill();
+				if (select_model) {
+					if (Selectable(("Close " + select_model->name() + "...").c_str())) {
+						select_model->try_kill();
 					}
-					if (Selectable(("Export " + cur_model->name() + "...").c_str())) {
-						cur_model->try_export();
+					if (Selectable(("Export " + select_model->name() + "...").c_str())) {
+						select_model->try_export();
 					}
 				} else {
 					TextDisabled("Close");
@@ -555,6 +556,8 @@ namespace {
 		glUniform1i(glGetUniformLocation(prog, "u_sampler_depth"), 1);
 		glUniform1i(glGetUniformLocation(prog, "u_sampler_id"), 2);
 		glUniform4iv(glGetUniformLocation(prog, "u_selection"), 1, (GLint *) &cur_sel);
+		glm::ivec4 show_sel{hover_model && hover_model->show_entity_outline(), 1, select_model && select_model->show_entity_outline(), 1};
+		glUniform4iv(glGetUniformLocation(prog, "u_show_selection"), 1, value_ptr(show_sel));
 
 		cgu::draw_dummy();
 
@@ -635,7 +638,8 @@ namespace {
 		glCullFace(GL_BACK);
 		glPointSize(render_point_size);
 
-		cur_model = nullptr;
+		select_model = nullptr;
+		hover_model = nullptr;
 		bool can_hover = false;
 		for (auto it = entities.begin(); it != entities.end(); ) {
 			can_hover = true;
@@ -643,7 +647,8 @@ namespace {
 			e->draw(view, proj, zfar);
 			if (e->dead()) {
 				it = entities.erase(it);
-				if (static_cast<Entity *>(cur_model) == e.get()) cur_model = nullptr;
+				if (static_cast<Entity *>(select_model) == e.get()) select_model = nullptr;
+				if (static_cast<Entity *>(hover_model) == e.get()) hover_model = nullptr;
 			} else {
 				++it;
 			}
@@ -912,12 +917,20 @@ namespace green {
 		return sal_progress;
 	}
 
-	void ui_current_model(ModelEntity *e) {
-		cur_model = e;
+	void ui_select_model(ModelEntity *e) {
+		select_model = e;
 	}
 
-	ModelEntity * ui_current_model() {
-		return cur_model;
+	ModelEntity * ui_select_model() {
+		return select_model;
+	}
+
+	void ui_hover_model(ModelEntity *e) {
+		hover_model = e;
+	}
+
+	ModelEntity * ui_hover_model() {
+		return hover_model;
 	}
 
 	std::future<std::filesystem::path> & ui_save_path(const std::filesystem::path &hint, bool prompt) {

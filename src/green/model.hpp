@@ -229,6 +229,10 @@ namespace green {
 			m_try_export = true;
 		}
 
+		bool show_entity_outline() const {
+			return m_show_faces;
+		}
+
 		virtual std::string name() const override {
 			// TODO unicode...
 			return m_fpath_load.filename().u8string();
