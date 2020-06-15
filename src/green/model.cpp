@@ -515,6 +515,10 @@ namespace green {
 
 			Separator();
 
+			Checkbox("Color Faces", &m_color_faces);
+			SameLine();
+			Checkbox("Color Verts", &m_color_verts);
+
 			//SetNextItemWidth(GetContentRegionAvail().x);
 			int cur_color_mode = int(m_color_mode);
 			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
@@ -760,27 +764,32 @@ namespace green {
 			if (selected) draw_window_selection();
 			if (selected) draw_window_export();
 			update_vbo();
+			// determine color map to apply in shader
+			int color_map = 0;
+			const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
+			if (m_color_mode == color_mode::saliency && sal_valid) color_map = 3;
+			if (m_color_mode == color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < m_saliency_outputs.size()) color_map = 4;
+			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
+			// prepare to draw
 			model_draw_params params;
 			params.sel = sel;
 			params.entity_id = id();
 			// faces
 			params.color = {0.6f, 0.6f, 0.5f, 1};
-			const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
-			if (m_color_mode == color_mode::saliency && sal_valid) params.vert_color_map = 3;
-			if (m_color_mode == color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < m_saliency_outputs.size()) params.vert_color_map = 4;
-			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) params.vert_color_map = 1;
+			params.vert_color_map = m_color_faces ? color_map : 0;
 			glEnable(GL_CULL_FACE);
 			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
 			// edges
-			params.vert_color_map = 0;
 			params.shading = 0;
 			params.color = {0.03f, 0.03f, 0.03f, 1};
+			params.vert_color_map = 0;
 			glDisable(GL_CULL_FACE);
 			glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
 			// verts
 			params.color = {0.5f, 0, 0, 1};
+			params.vert_color_map = m_color_verts ? color_map : 0;
 			params.sel.hover_entity = -1;
 			params.sel.select_entity = -1;
 			//params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);

@@ -194,6 +194,8 @@ namespace green {
 		};
 
 		color_mode m_color_mode = color_mode::saliency;
+		bool m_color_faces = true;
+		bool m_color_verts = false;
 		bool m_show_faces = true;
 		bool m_show_edges = false;
 		bool m_show_verts = false;
