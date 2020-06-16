@@ -227,21 +227,32 @@ namespace {
 				cur_sel.hover_vertex_dist = 9001;
 				cur_sel.hover_entity = -1;
 				cur_sel.hover_vertex = -1;
+				// first find hovered vertex
 				for (int y = 0; y < size_read_ids; y++) {
 					for (int x = 0; x < size_read_ids; x++) {
 						glm::ivec2 ids = iddata[size_read_ids * y + x];
-						if (ids.x != -1) {
+						if (ids.x != -1 && ids.y != -1) {
 							float dist = glm::length(glm::vec2{pos_read_ids} + glm::vec2{x, y} - glm::vec2{mouse_pos_fb});
-							if (dist < cur_sel.hover_entity_dist && cur_sel.hover_vertex == -1) {
-								cur_sel.hover_entity_dist = dist;
-								cur_sel.hover_entity = ids.x;
-							}
-							if (dist < cur_sel.hover_vertex_dist && ids.y != -1) {
+							if (dist < cur_sel.hover_vertex_dist) {
 								cur_sel.hover_entity_dist = dist;
 								cur_sel.hover_vertex_dist = dist;
 								cur_sel.hover_entity = ids.x;
 								cur_sel.hover_vertex = ids.y;
 							}
+						}
+					}
+				}
+				// then find hovered entity, constrained to match hovered vertex
+				for (int y = 0; y < size_read_ids; y++) {
+					for (int x = 0; x < size_read_ids; x++) {
+						glm::ivec2 ids = iddata[size_read_ids * y + x];
+						if (ids.x != -1 && (ids.x == cur_sel.hover_entity || cur_sel.hover_vertex == -1)) {
+							float dist = glm::length(glm::vec2{pos_read_ids} + glm::vec2{x, y} - glm::vec2{mouse_pos_fb});
+							if (dist < cur_sel.hover_entity_dist) {
+								cur_sel.hover_entity_dist = dist;
+								cur_sel.hover_entity = ids.x;
+							}
+							
 						}
 					}
 				}
