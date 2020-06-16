@@ -25,6 +25,10 @@ bvec4 bvec_and(bvec4 a, bvec4 b) {
 	return bvec4(a.x && b.x, a.y && b.y, a.z && b.z, a.w && b.w);
 }
 
+bvec4 bvec_and(bvec4 a, bvec4 b, bvec4 c) {
+	return bvec_and(a, bvec_and(b, c));
+}
+
 void main() {
 	gl_FragDepth = texture(u_sampler_depth, v_tex_coord).r;
 	vec2 dtx = vec2(dFdx(v_tex_coord.x), dFdy(v_tex_coord.y));
@@ -36,7 +40,7 @@ void main() {
 		for (float x = -searchpx * dtx.x; x <= searchpx * dtx.x; x += dtx.x) {
 			for (float y = -searchpx * dtx.y; y <= searchpx * dtx.y; y += dtx.y) {
 				ivec2 id = texture(u_sampler_id, v_tex_coord + vec2(x, y)).xy;
-				dist = mix(dist, min(dist, vec4(length(vec2(x, y)))), bvec_and(equal(id.xyxy, u_selection), selmask));
+				dist = mix(dist, min(dist, vec4(length(vec2(x, y)))), bvec_and(equal(id.xyxy, u_selection), equal(id.xxxx, u_selection.xxzz), selmask));
 			}
 		}
 	}
