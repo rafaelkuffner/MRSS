@@ -11,6 +11,7 @@
 #include "entity.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
+#include "decimate.hpp"
 
 namespace green {
 
@@ -19,6 +20,8 @@ namespace green {
 	saliency_user_params & ui_saliency_user_params();
 
 	const saliency_progress & ui_saliency_progress();
+
+	decimate_user_params & ui_decimate_user_params();
 
 	void ui_select_model(ModelEntity *);
 
@@ -33,6 +36,10 @@ namespace green {
 	// spawn persistent ui component. persists until *p_open is set to false.
 	void ui_spawn(std::function<void(bool *p_open)>);
 
+	bool ui_saliency_window_open();
+
+	bool ui_decimation_window_open();
+
 }
 
 namespace ImGui {
@@ -42,6 +49,10 @@ namespace ImGui {
 	bool edit_saliency_params(green::saliency_user_params &uparams);
 
 	void draw_saliency_params(const green::saliency_user_params &uparams);
+
+	void draw_decimate_progress(green::decimate_progress &progress);
+
+	bool edit_decimate_params(green::decimate_user_params &uparams);
 
 }
 

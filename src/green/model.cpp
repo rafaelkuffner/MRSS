@@ -6,6 +6,7 @@
 #include <sstream>
 #include <chrono>
 #include <mutex>
+#include <thread>
 #include <algorithm>
 #include <memory>
 
@@ -18,6 +19,7 @@
 
 #include "imguiex.hpp"
 #include "main.hpp"
+
 #include "model.glsl.hpp"
 
 namespace {
@@ -163,6 +165,43 @@ namespace green {
 			std::cerr << "Could not write mesh file " << fpath.u8string() << std::endl;
 			throw std::runtime_error("failed to save model");
 		}
+	}
+
+	Model Model::prepare_decimate(const model_saliency_data &sd) const {
+		Model m;
+		m.m_bound_min = m_bound_min;
+		m.m_bound_max = m_bound_max;
+		// copy vertex positions, connectivity, and probably colors and normals?
+		m.m_trimesh.assign(m_trimesh, true);
+		// copy (specified) saliency property
+		model_saliency_data sd2 = sd;
+		sd2.prop_saliency.invalidate();
+		sd2.prop_sampled.invalidate();
+		sd2.decimated = true;
+		m.m_trimesh.add_property(sd2.prop_saliency);
+		m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
+		m.m_original_saliency.push_back(sd2);
+		return m;
+	}
+
+	bool Model::decimate(const decimate_user_params &uparams, decimate_progress &progress) {
+		auto &sd = m_original_saliency[0];
+		// decimate!
+		std::cout << "Decimating model" << std::endl;
+		decimate_mesh_params mparams;
+		mparams.mesh = &m_trimesh;
+		mparams.prop_saliency = sd.prop_saliency;
+		if (!green::decimate(mparams, uparams, progress)) return false;
+		// recompute normals
+		std::cout << "Computing vertex normals" << std::endl;
+		m_trimesh.update_face_normals();
+		m_trimesh.update_vertex_normals();
+		// recompute vertex areas and edge length
+		std::cout << "Computing vertex areas" << std::endl;
+		m_prop_vertex_area = computeVertexAreas(m_trimesh);
+		std::cout << "Computing edge lengths" << std::endl;
+		m_prop_edge_length = computeEdgeLengths(m_trimesh);
+		return true;
 	}
 
 	void Model::update_vao() {
@@ -384,7 +423,7 @@ namespace green {
 			PushID(this);
 			PushStyleColor(ImGuiCol_Header, selected ? ImVec4{0.7f, 0.4f, 0.1f, 1} : GetStyle().Colors[ImGuiCol_Button]);
 			// hack - selectable is always 'selected' in order to show highlight, it just changes colour
-			if (Selectable(m_fpath_load.filename().u8string().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()})) {
+			if (Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()})) {
 				auto &sel = ui_selection();
 				sel.select_entity = id();
 				sel.select_vertex = -1;
@@ -443,7 +482,7 @@ namespace green {
 		if (Begin("Selection")) {
 			PushID(this);
 			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-			Selectable(m_fpath_load.filename().u8string().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()});
+			Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()});
 			PopStyleColor();
 			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
@@ -726,14 +765,26 @@ namespace green {
 		}
 	}
 
-	void ModelEntity::spawn_locked_notification() {
+	void ModelEntity::draw_window_decimation(bool selected) {
 		using namespace ImGui;
-		ui_spawn([p=m_fpath_load](bool *p_open) {
+		if (m_decimated && ui_decimation_window_open() && (m_dec_progress.state < decimation_state::done || selected)) {
+			if (Begin("Decimation")) {
+				if (CollapsingHeader(name().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+					draw_decimate_progress(m_dec_progress);
+					Separator();
+				}
+			}
+		}
+	}
+
+	void ModelEntity::spawn_locked_notification() const {
+		using namespace ImGui;
+		ui_spawn([fpath=m_fpath_load, name=name()](bool *p_open) {
 			if (*p_open) OpenPopup("Model in use");
 			if (BeginPopupModal("Model in use", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
-				Selectable(p.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
+				Selectable(name.c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
 				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
-				if (IsItemHovered()) SetTooltip("%s", p.u8string().c_str());
+				if (IsItemHovered()) SetTooltip("%s", fpath.u8string().c_str());
 				Text("The operation cannot be performed because\nthe model is currently in use.");
 				if (Button("  OK  ")) {
 					*p_open = false;
@@ -770,6 +821,7 @@ namespace green {
 		if (!dead() && selected) ui_select_model(this);
 		if (!dead() && sel.hover_entity == id()) ui_hover_model(this);
 		draw_window_models(selected);
+		draw_window_decimation(selected);
 		if (m_model) {
 			if (selected) draw_window_selection();
 			if (selected) draw_window_export();
@@ -865,6 +917,29 @@ namespace green {
 			}
 		};
 		return green::compute_saliency_async(mparams, uparams, progress);
+	}
+
+	std::unique_ptr<ModelEntity> ModelEntity::decimate_async(const decimate_user_params &uparams) {
+		// this function can't be const because it needs to lock the mutex
+		const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
+		if (!sal_valid) return {};
+		std::shared_lock lock1(m_modelmtx, std::defer_lock);
+		if (!lock1.try_lock()) {
+			spawn_locked_notification();
+			return {};
+		}
+		auto e = std::make_unique<ModelEntity>();
+		std::unique_lock lock2(e->m_modelmtx);
+		e->m_fpath_load = m_fpath_load;
+		e->m_decimated = true;
+		e->m_dec_uparams = uparams;
+		// TODO maybe move prepare to async?
+		auto m = m_model->prepare_decimate(m_saliency_outputs[m_saliency_index]);
+		e->m_pending_load = std::async([=, e=e.get(), m=std::move(m), lock2=std::move(lock2)]() mutable {
+			if (!m.decimate(uparams, e->m_dec_progress)) throw std::runtime_error("decimation was cancelled");
+			return std::make_unique<Model>(std::move(m));
+		});
+		return e;
 	}
 
 	ModelEntity::~ModelEntity() {

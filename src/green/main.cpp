@@ -123,10 +123,15 @@ namespace {
 	bool saliency_window_open = false;
 	int sal_entity_id = -1;
 	saliency_user_params sal_uparams;
+	// TODO saliency progress object could (should?) be moved into the model entity
+	// TODO and then progress reporting should be done as with decimation
 	saliency_progress sal_progress;
 	std::future<saliency_result> sal_future;
 	bool sal_need_preview = false;
 	float sal_preview_spn = 10;
+
+	bool decimation_window_open = false;
+	decimate_user_params dec_uparams;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -281,6 +286,7 @@ namespace {
 
 	void draw_window_saliency() {
 		using namespace ImGui;
+		if (!saliency_window_open) return;
 		const auto winsize = GetIO().DisplaySize;
 		SetNextWindowBgAlpha(0.5f);
 		SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
@@ -349,6 +355,36 @@ namespace {
 		End();
 	}
 
+	void draw_window_decimation() {
+		using namespace ImGui;
+		if (!decimation_window_open) return;
+		const auto winsize = GetIO().DisplaySize;
+		SetNextWindowBgAlpha(0.5f);
+		SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
+		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
+		if (Begin("Decimation", &decimation_window_open)) {
+			PushStyleColor(ImGuiCol_Text, {0.9f, 0.4f, 0.4f, 1});
+			Text("-- Work in Progress --");
+			PopStyleColor();
+			if (select_model) {
+				auto *sd = select_model->selected_saliency();
+				if (sd) {
+					Text("Using saliency: %s", sd->str().c_str());
+					if (Button("GO", {-1, 0})) {
+						auto e = select_model->decimate_async(dec_uparams);
+						if (e) entities.push_back(std::move(e));
+					}
+				} else {
+					TextDisabled("Select a saliency result");
+				}
+			} else {
+				TextDisabled("Select a model");
+			}
+			edit_decimate_params(dec_uparams);
+			Separator();
+		}
+	}
+
 	void render_early_ui() {
 		using namespace ImGui;
 		SetNextWindowPos({10, 30}, ImGuiCond_FirstUseEver);
@@ -364,6 +400,9 @@ namespace {
 			// ensure the window exists
 		}
 		End();
+
+		// draw main decimation window before models add progress to it
+		draw_window_decimation();
 	}
 
 	void render_main_ui() {
@@ -444,7 +483,8 @@ namespace {
 			}
 			if (BeginMenu("Window")) {
 				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
-				Checkbox(sal_future.valid() ? "Saliency (running)" : "Saliency", &saliency_window_open);
+				Checkbox("Saliency", &saliency_window_open);
+				Checkbox("Decimation", &decimation_window_open);
 				Checkbox("Control Help", &controlhelp_window_open);
 				Separator();
 				PopStyleVar();
@@ -475,7 +515,7 @@ namespace {
 		// NOTE BeginMenu respects constraints but doesnt consume them (bug?)
 		SetNextWindowSizeConstraints({0, 0}, {9001, 9001});
 
-		if (saliency_window_open) draw_window_saliency();
+		draw_window_saliency();
 
 		if (about_window_open) {
 			SetNextWindowPos({winsize.x / 2, winsize.y / 2}, ImGuiCond_Appearing, {0.5f, 0.5f});
@@ -908,6 +948,10 @@ namespace green {
 		return sal_progress;
 	}
 
+	decimate_user_params & ui_decimate_user_params() {
+		return dec_uparams;
+	}
+
 	void ui_select_model(ModelEntity *e) {
 		select_model = e;
 	}
@@ -941,6 +985,14 @@ namespace green {
 		persistent_ui.push_back(std::move(f));
 	}
 
+	bool ui_saliency_window_open() {
+		return saliency_window_open;
+	}
+
+	bool ui_decimation_window_open() {
+		return decimation_window_open;
+	}
+
 	const char * saliency_state_str(saliency_computation_state s) {
 		switch (s) {
 		case saliency_computation_state::idle:
@@ -969,6 +1021,21 @@ namespace green {
 			return "???";
 		}
 	}
+
+	const char * decimation_state_str(decimation_state s) {
+		switch (s) {
+		case decimation_state::idle:
+			return "Idle";
+		case decimation_state::run:
+			return "Running";
+		case decimation_state::done:
+			return "Done";
+		case decimation_state::cancelled:
+			return "Cancelled";
+		default:
+			return "???";
+		}
+	}
 }
 
 namespace ImGui {
@@ -989,6 +1056,7 @@ namespace ImGui {
 			ProgressBar(level.completion, {-1, 0}, buf);
 			if (IsItemHovered()) SetTooltip("%d samples / %d vertices%s", level.completed_samples, progress.total_vertices, normalmap_filter_str);
 		}
+		// TODO cancel button here
 		Text("%s [%.3fs]", saliency_state_str(progress.state), progress.elapsed_time / std::chrono::duration<double>(1.0));
 	}
 
@@ -1085,6 +1153,25 @@ namespace ImGui {
 		} else if (uparams.subsample_auto) {
 			ImGui::Text("Samples per Neighbourhood: %.1f", uparams.samples_per_neighborhood);
 		}
+	}
+
+	void draw_decimate_progress(green::decimate_progress &progress) {
+		// TODO progress bar
+		TextDisabled("Progress indicator not implemented yet");
+		if (progress.state < decimation_state::done) {
+			if (Button("Cancel")) progress.should_cancel = true;
+			SameLine();
+		}
+		Text("%s [%.3fs]", decimation_state_str(progress.state), progress.elapsed_time / std::chrono::duration<double>(1.0));
+	}
+
+	bool edit_decimate_params(green::decimate_user_params &uparams) {
+		TextDisabled("Ctrl-click sliders to enter values directly");
+		InputInt("Target Vertices", &uparams.targetverts);
+		// ensure params are valid
+		uparams.sanitize();
+		// TODO return true if modified?
+		return true;
 	}
 
 }

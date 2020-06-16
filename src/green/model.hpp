@@ -18,6 +18,7 @@
 
 #include "meshutils.hpp"
 #include "entity.hpp"
+#include "decimate.hpp"
 
 namespace green {
 
@@ -37,11 +38,23 @@ namespace green {
 		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency{};
 		OpenMesh::VPropHandleT<unsigned char> prop_sampled{};
+		bool decimated = false;
 
 		std::string str() const {
-			if (uparams.preview) return "<preview>";
-			if (filename.empty()) return std::string(uparams);
-			return filename + "?" + propname;
+			std::string s;
+			if (decimated) {
+				s += "<decimated> ";
+			} else if (uparams.preview) {
+				s += "<preview> ";
+			}
+			if (filename.empty()) {
+				s += std::string(uparams);
+			} else {
+				s += filename;
+				s += "?";
+				s += propname;
+			}
+			return s;
 		}
 
 		explicit operator std::string() const {
@@ -68,9 +81,18 @@ namespace green {
 		cgu::gl_object m_vbo_pos, m_vbo_norm, m_vbo_col;
 
 	public:
+		Model() {}
+
+		Model(Model &&other) = default;
+		Model & operator=(Model &&other) = default;
+
 		Model(const std::filesystem::path &fpath);
 
 		void save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency, bool binary);
+
+		Model prepare_decimate(const model_saliency_data &sd) const;
+
+		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
 
 		const TriMesh & trimesh() const {
 			return m_trimesh;
@@ -148,6 +170,9 @@ namespace green {
 
 		std::filesystem::path m_fpath_load;
 		std::future<std::unique_ptr<Model>> m_pending_load;
+		decimate_user_params m_dec_uparams;
+		decimate_progress m_dec_progress;
+		bool m_decimated = false;
 
 		std::filesystem::path m_fpath_save;
 		bool m_save_binary = true;
@@ -211,7 +236,8 @@ namespace green {
 		void draw_window_models(bool selected);
 		void draw_window_selection();
 		void draw_window_export();
-		void spawn_locked_notification();
+		void draw_window_decimation(bool selected);
+		void spawn_locked_notification() const;
 
 	public:
 		ModelEntity();
@@ -236,9 +262,19 @@ namespace green {
 			return m_show_faces;
 		}
 
+		const model_saliency_data * selected_saliency() const {
+			if (m_saliency_index >= m_saliency_outputs.size()) return nullptr;
+			return &m_saliency_outputs[m_saliency_index];
+		}
+
 		virtual std::string name() const override {
-			// TODO unicode...
-			return m_fpath_load.filename().u8string();
+			std::string s = m_fpath_load.filename().u8string();
+			if (m_decimated) {
+				s += " (dec ";
+				s += std::to_string(m_dec_uparams.targetverts);
+				s += ")";
+			}
+			return s;
 		}
 
 		virtual void move_by(const glm::vec3 &d) override {
@@ -258,6 +294,8 @@ namespace green {
 		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) override;
 
 		virtual std::future<saliency_result> compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) override;
+
+		std::unique_ptr<ModelEntity> decimate_async(const decimate_user_params &uparams);
 
 		virtual ~ModelEntity();
 	};

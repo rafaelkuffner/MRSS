@@ -18,6 +18,8 @@ set(sources
 	entity.cpp
 	simd.h
 	plf_colony.h
+	decimate.hpp
+	decimate.cpp
 	saliency.hpp
 	saliency.cpp
 	neighborhood.hpp
