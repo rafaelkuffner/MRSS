@@ -237,6 +237,7 @@ namespace green {
 		void draw_window_selection();
 		void draw_window_export();
 		void draw_window_decimation(bool selected);
+		bool draw_select_header(bool selected);
 		void spawn_locked_notification() const;
 
 	public:

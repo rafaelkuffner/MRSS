@@ -391,8 +391,10 @@ namespace {
 			} else {
 				TextDisabled("Select a model");
 			}
+			Separator();
 			edit_decimate_params(dec_uparams);
 			Separator();
+			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 		}
 	}
 

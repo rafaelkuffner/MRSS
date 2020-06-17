@@ -421,16 +421,7 @@ namespace green {
 		using namespace ImGui;
 		if (Begin("Models")) {
 			PushID(this);
-			PushStyleColor(ImGuiCol_Header, selected ? ImVec4{0.7f, 0.4f, 0.1f, 1} : GetStyle().Colors[ImGuiCol_Button]);
-			// hack - selectable is always 'selected' in order to show highlight, it just changes colour
-			if (Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()})) {
-				auto &sel = ui_selection();
-				sel.select_entity = id();
-				sel.select_vertex = -1;
-			}
-			PopStyleColor();
-			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
-			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+			draw_select_header(selected);
 			if (m_pending_load.valid()) {
 				Text("Loading...");
 			} else if (m_model) {
@@ -769,12 +760,31 @@ namespace green {
 		using namespace ImGui;
 		if (m_decimated && ui_decimation_window_open() && (m_dec_progress.state < decimation_state::done || selected)) {
 			if (Begin("Decimation")) {
-				if (CollapsingHeader(name().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-					draw_decimate_progress(m_dec_progress);
-					Separator();
-				}
+				PushID(this);
+				draw_select_header(selected);
+				draw_decimate_progress(m_dec_progress);
+				Separator();
+				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+				PopID();
 			}
 		}
+	}
+
+	bool ModelEntity::draw_select_header(bool selected) {
+		using namespace ImGui;
+		bool r = false;
+		PushStyleColor(ImGuiCol_Header, selected ? ImVec4{0.7f, 0.4f, 0.1f, 1} : GetStyle().Colors[ImGuiCol_Button]);
+		// hack - selectable is always 'selected' in order to show highlight, it just changes colour
+		if (Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()})) {
+			auto &sel = ui_selection();
+			sel.select_entity = id();
+			sel.select_vertex = -1;
+			r = true;
+		}
+		PopStyleColor();
+		if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+		SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+		return r;
 	}
 
 	void ModelEntity::spawn_locked_notification() const {
