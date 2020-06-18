@@ -1181,6 +1181,8 @@ namespace ImGui {
 	bool edit_decimate_params(green::decimate_user_params &uparams) {
 		TextDisabled("Ctrl-click sliders to enter values directly");
 		InputInt("Target Vertices", &uparams.targetverts);
+		SliderInt("Bins", &uparams.nbins, 1, 20);
+		SliderFloat("Weight Falloff", &uparams.weight_falloff, 0, 1, "%.3f", 2);
 		// ensure params are valid
 		uparams.sanitize();
 		// TODO return true if modified?
