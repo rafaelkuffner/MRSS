@@ -40,11 +40,13 @@ namespace green {
 	};
 
 	enum class decimation_state {
-		idle, run, done, cancelled
+		idle, bins, run, done, cancelled
 	};
 
 	struct decimate_progress {
 		std::chrono::milliseconds elapsed_time{0};
+		int target_collapses = 0;
+		int completed_collapses = 0;
 		bool should_cancel = false;
 		decimation_state state = decimation_state::idle;
 	};

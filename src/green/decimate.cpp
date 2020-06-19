@@ -79,6 +79,7 @@ namespace {
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
+			if (cancel) return Base::ILLEGAL_COLLAPSE;
 			float s0 = _ci.mesh.property(prop_sal, _ci.v0);
 			float s1 = _ci.mesh.property(prop_sal, _ci.v1);
 			// supposedly v0 gets removed
@@ -87,7 +88,13 @@ namespace {
 		}
 
 		virtual void postprocess_collapse(const CollapseInfo& _ci) {
-			
+			collapses++;
+			if (collapses - collapses_last_progress > 1000) {
+				collapses_last_progress = collapses;
+				progress->completed_collapses = collapses;
+				progress->elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
+				if (progress->should_cancel) cancel = true;
+			}
 		}
 
 
@@ -95,6 +102,11 @@ namespace {
 		sal_prop_t prop_sal;
 		float min_sal = 0;
 		float max_sal = 1;
+		decimate_progress *progress = nullptr;
+		int collapses = 0;
+		int collapses_last_progress = 0;
+		std::chrono::steady_clock::time_point time_start;
+		bool cancel = false;
 
 	private:
 
@@ -110,7 +122,7 @@ namespace green {
 	}
 
 	bool decimate(const decimate_mesh_params &mparams, const decimate_user_params &uparams, decimate_progress &progress) {
-		progress.state = decimation_state::run;
+		progress.state = decimation_state::bins;
 		const auto time_start = std::chrono::steady_clock::now();
 		std::cout << "decimating to " << uparams.targetverts << " vertices" << std::endl;
 
@@ -119,6 +131,7 @@ namespace green {
 		const int nbins = uparams.nbins;
 
 		const int target_collapses = mparams.mesh->n_vertices() - uparams.targetverts;
+		progress.target_collapses = target_collapses;
 		const float target_ratio = float(uparams.targetverts) / mparams.mesh->n_vertices();
 		std::cout << "total vertices to remove: " << target_collapses << "; " << (1.f - target_ratio) << std::endl;
 
@@ -146,6 +159,7 @@ namespace green {
 			std::cout << "vertices to remove from bin " << i << ": " << t << "/" << c << "; keep " << (c - t) << "; weight=" << bin_weights[i] << std::endl;
 		}
 
+		progress.state = decimation_state::run;
 		OpenMesh::Decimater::DecimaterT<TriMesh> decimater(*mparams.mesh);
 		
 		OpenMesh::Decimater::ModQuadricT<TriMesh>::Handle hModQuadrics;
@@ -154,9 +168,15 @@ namespace green {
 
 		ModVertexWeightingT<TriMesh>::Handle hModWeighting;
 		decimater.add(hModWeighting);
+		decimater.module(hModWeighting).progress = &progress;
 		decimater.module(hModWeighting).prop_sal = mparams.prop_saliency;
+		decimater.module(hModWeighting).time_start = time_start;
 
 		for (int i = 0; i < nbins; i++) {
+			if (progress.should_cancel) {
+				progress.state = decimation_state::cancelled;
+				return false;
+			}
 			std::cout << "decimating bin " << i << std::endl;
 			decimater.initialize();
 			auto &mod = decimater.module(hModWeighting);
@@ -179,9 +199,10 @@ namespace green {
 
 		std::cout << "final vertices: " << mparams.mesh->n_vertices() << std::endl;
 
-		progress.state = decimation_state::done;
+		progress.completed_collapses = decimater.module(hModWeighting).collapses;
 		progress.elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
-		return true;
+		progress.state = progress.should_cancel ? decimation_state::cancelled : decimation_state::done;
+		return !progress.should_cancel;
 	}
 
 }

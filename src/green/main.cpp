@@ -1039,6 +1039,8 @@ namespace green {
 		switch (s) {
 		case decimation_state::idle:
 			return "Idle";
+		case decimation_state::bins:
+			return "Initializing decimation bins";
 		case decimation_state::run:
 			return "Running";
 		case decimation_state::done:
@@ -1169,8 +1171,7 @@ namespace ImGui {
 	}
 
 	void draw_decimate_progress(green::decimate_progress &progress) {
-		// TODO progress bar
-		TextDisabled("Progress indicator not implemented yet");
+		ProgressBar(float(progress.completed_collapses) / progress.target_collapses);
 		if (progress.state < decimation_state::done) {
 			if (Button("Cancel")) progress.should_cancel = true;
 			SameLine();
