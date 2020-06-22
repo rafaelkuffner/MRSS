@@ -29,7 +29,8 @@ namespace green {
 	struct decimate_user_params {
 		int targetverts = 10000;
 		int nbins = 5;
-		float weight_falloff = 0.1f;
+		float weight = 0.5f;
+		float power = 1.f;
 
 		void sanitize();
 	};

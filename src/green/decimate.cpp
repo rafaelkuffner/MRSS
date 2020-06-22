@@ -22,29 +22,43 @@ namespace {
 
 	using sal_prop_t = decltype(decimate_mesh_params::prop_saliency);
 
-	// left bin edges (with trailing upper edge); weights must be normalized
-	std::vector<float> saliency_bin_edges(const TriMesh &mesh, sal_prop_t prop, const std::vector<float> &bin_weights, float target_ratio) {
-		std::vector<float> saliencies = mesh.property(prop).data_vector();
-		std::sort(saliencies.begin(), saliencies.end());
-		int verts = 0;
-		std::vector<float> sal_bin_edges(bin_weights.size() + 1, 0);
-		for (int i = 1; i < bin_weights.size(); i++) {
-			// bin sizes have to be determined by decimate-vs-keep weighting
-			float w = (1.f - target_ratio) * bin_weights[i - 1] + target_ratio / bin_weights.size();
-			verts += mesh.n_vertices() * w;
-			sal_bin_edges[i] = saliencies[verts];
-			std::cout << "saliency left edge for bin " << i << ": " << sal_bin_edges[i] << std::endl;
+	// left bin edges (with trailing upper edge)
+	std::vector<float> saliency_bin_edges(TriMesh &mesh, sal_prop_t prop, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
+		struct salvert {
+			OpenMesh::VertexHandle v;
+			float s = 0;
+			bool operator<(const salvert &rhs) {
+				return s < rhs.s;
+			}
+		};
+		std::vector<salvert> saliencies(mesh.n_vertices());
+		for (int i = 0; i < saliencies.size(); i++) {
+			OpenMesh::VertexHandle v(i);
+			auto &sv = saliencies[i];
+			sv.v = v;
+			sv.s = mesh.property(prop, v);
 		}
-		sal_bin_edges.back() = 1;
+		std::sort(saliencies.begin(), saliencies.end());
+		// round up so we dont have unbinned vertices at the end
+		const int verts_per_bin = 1 + (mesh.n_vertices() - 1) / nbins;
+		std::vector<float> sal_bin_edges(nbins + 1, 0);
+		int verts = 0;
+		for (int i = 0; i < nbins; i++) {
+			for (int j = verts; j < verts + verts_per_bin && j < saliencies.size(); j++) {
+				mesh.property(prop_bin, saliencies[j].v) = i;
+			}
+			sal_bin_edges[i] = saliencies[verts].s;
+			std::cout << "saliency left edge for bin " << i << ": " << sal_bin_edges[i] << std::endl;
+			verts += verts_per_bin;
+		}
+		sal_bin_edges.back() = saliencies.back().s;
 		return sal_bin_edges;
 	}
 
-	std::vector<int> saliency_bin_counts(const TriMesh &mesh, sal_prop_t prop, const std::vector<float> &bin_edges) {
-		std::vector<int> counts(bin_edges.size() - 1, 0);
-		for (auto &s : mesh.property(prop).data_vector()) {
-			int b = 0;
-			while (b < counts.size() - 1 && bin_edges[b + 1] <= s) b++;
-			counts[b]++;
+	std::vector<int> saliency_bin_counts(const TriMesh &mesh, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
+		std::vector<int> counts(nbins, 0);
+		for (auto &bin : mesh.property(prop_bin).data_vector()) {
+			counts[bin]++;
 		}
 		return counts;
 	}
@@ -75,16 +89,16 @@ namespace {
 
 	public: // inherited
 		virtual void initialize() {
-			if (!prop_sal.is_valid()) throw std::runtime_error("no saliency");
+			if (!prop_bin.is_valid()) throw std::runtime_error("no bins");
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
 			if (cancel) return Base::ILLEGAL_COLLAPSE;
-			float s0 = _ci.mesh.property(prop_sal, _ci.v0);
-			float s1 = _ci.mesh.property(prop_sal, _ci.v1);
+			//float s0 = _ci.mesh.property(prop_sal, _ci.v0);
+			//float s1 = _ci.mesh.property(prop_sal, _ci.v1);
 			// supposedly v0 gets removed
-			float s = s0; //(s0 + s1) * 0.5f;
-			return min_sal <= s && s <= max_sal ? Base::LEGAL_COLLAPSE : Base::ILLEGAL_COLLAPSE;
+			int bin = _ci.mesh.property(prop_bin, _ci.v0);
+			return bin == current_bin ? Base::LEGAL_COLLAPSE : Base::ILLEGAL_COLLAPSE;
 		}
 
 		virtual void postprocess_collapse(const CollapseInfo& _ci) {
@@ -99,9 +113,8 @@ namespace {
 
 
 	public: // local
-		sal_prop_t prop_sal;
-		float min_sal = 0;
-		float max_sal = 1;
+		OpenMesh::VPropHandleT<int> prop_bin;
+		int current_bin = 0;
 		decimate_progress *progress = nullptr;
 		int collapses = 0;
 		int collapses_last_progress = 0;
@@ -118,7 +131,8 @@ namespace green {
 	void decimate_user_params::sanitize() {
 		targetverts = std::max(targetverts, 0);
 		nbins = std::max(nbins, 1);
-		weight_falloff = std::max(weight_falloff, 0.001f);
+		weight = std::max(weight, 0.f);
+		power = std::clamp(power, 0.1f, 10.f);
 	}
 
 	bool decimate(const decimate_mesh_params &mparams, const decimate_user_params &uparams, decimate_progress &progress) {
@@ -128,6 +142,12 @@ namespace green {
 
 		if (uparams.targetverts >= mparams.mesh->n_vertices()) return true;
 
+		// explicit bin tags to deal with cases where there are large numbers
+		// of vertices with the same saliency values preventing bin discrimination
+		// TODO ensure this property is removed when eg cancelled
+		OpenMesh::VPropHandleT<int> prop_bin;
+		mparams.mesh->add_property(prop_bin);
+
 		const int nbins = uparams.nbins;
 
 		const int target_collapses = mparams.mesh->n_vertices() - uparams.targetverts;
@@ -135,28 +155,36 @@ namespace green {
 		const float target_ratio = float(uparams.targetverts) / mparams.mesh->n_vertices();
 		std::cout << "total vertices to remove: " << target_collapses << "; " << (1.f - target_ratio) << std::endl;
 
-		std::vector<float> bin_weights(nbins, 1);
-		std::vector<int> bin_target_collapses(nbins + 1, 0);
+		const int bin_min_keep = uparams.targetverts * 0.1f / float(nbins);
+
+		std::vector<float> bin_weights(nbins, 0);
+		std::vector<int> bin_keep(nbins, 0);
 		float bin_weight_divisor = 0;
 		for (int i = 0; i < nbins; i++) {
-			// TODO better weight curve?
-			float w = std::pow(uparams.weight_falloff, float(i) / nbins);
+			// bin weight params: higher bin weight => more vertices _kept_ in that bin
+			// (saliency) weight: 0 (even weights across bins) .. 1 (least weight to low bin, most weight to high bin)
+			// power: non-linearity of weighting; 1 (linear) .. 2 (quadratic, more extreme)
+			const float d = uparams.weight;
+			const float x = (i + 0.5f) / float(nbins);
+			const float w = pow(x, uparams.power) * d + (1.f - d) * 0.5f;
 			bin_weights[i] = w;
 			bin_weight_divisor += w;
 		}
 		for (int i = 0; i < nbins; i++) {
 			float w = bin_weights[i] /= bin_weight_divisor;
-			int t = target_collapses * w;
-			bin_target_collapses[i] = t;
+			bin_keep[i] = std::max<int>(uparams.targetverts * w, bin_min_keep);
 		}
 
-		const auto sal_bin_edges = saliency_bin_edges(*mparams.mesh, mparams.prop_saliency, bin_weights, target_ratio);
-		const auto init_bin_counts = saliency_bin_counts(*mparams.mesh, mparams.prop_saliency, sal_bin_edges);
+		const auto sal_bin_edges = saliency_bin_edges(*mparams.mesh, mparams.prop_saliency, prop_bin, nbins);
+		const auto init_bin_counts = saliency_bin_counts(*mparams.mesh, prop_bin, nbins);
 
 		for (int i = 0; i < nbins; i++) {
-			int t = bin_target_collapses[i];
+			int k = bin_keep[i];
 			int c = init_bin_counts[i];
-			std::cout << "vertices to remove from bin " << i << ": " << t << "/" << c << "; keep " << (c - t) << "; weight=" << bin_weights[i] << std::endl;
+			std::cout << "vertices to keep in bin " << i << ": " << k << "/" << c << "; remove " << (c - k) << "; weight=" << bin_weights[i] << std::endl;
+			if (k > c) {
+				std::cout << "warning: can't keep more vertices than available, result will have fewer vertices than desired" << std::endl;
+			}
 		}
 
 		progress.state = decimation_state::run;
@@ -169,7 +197,7 @@ namespace green {
 		ModVertexWeightingT<TriMesh>::Handle hModWeighting;
 		decimater.add(hModWeighting);
 		decimater.module(hModWeighting).progress = &progress;
-		decimater.module(hModWeighting).prop_sal = mparams.prop_saliency;
+		decimater.module(hModWeighting).prop_bin = prop_bin;
 		decimater.module(hModWeighting).time_start = time_start;
 
 		for (int i = 0; i < nbins; i++) {
@@ -180,17 +208,16 @@ namespace green {
 			std::cout << "decimating bin " << i << std::endl;
 			decimater.initialize();
 			auto &mod = decimater.module(hModWeighting);
-			mod.min_sal = sal_bin_edges[i];
-			mod.max_sal = sal_bin_edges[i + 1];
-			int target = std::min<int>(bin_target_collapses[i], (1.f - target_ratio * 0.1f) * init_bin_counts[i]);
-			int collapses = decimater.decimate_to(mparams.mesh->n_vertices() - target);
+			mod.current_bin = i;
+			int target = init_bin_counts[i] - bin_keep[i];
+			int collapses = decimater.decimate_to(std::max<size_t>(mparams.mesh->n_vertices() - target, uparams.targetverts));
 			std::cout << "vertices removed: " << collapses << std::endl;
-			int collapses_remaining = bin_target_collapses[i] - collapses;
-			if (collapses_remaining > 0) bin_target_collapses[i + 1] += collapses_remaining;
 			mparams.mesh->garbage_collection();
 		}
 
-		const auto fin_bin_counts = saliency_bin_counts(*mparams.mesh, mparams.prop_saliency, sal_bin_edges);
+		const auto fin_bin_counts = saliency_bin_counts(*mparams.mesh, prop_bin, nbins);
+
+		mparams.mesh->remove_property(prop_bin);
 
 		for (int i = 0; i < nbins; i++) {
 			int collapses = (init_bin_counts[i] - fin_bin_counts[i]);
