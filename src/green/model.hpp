@@ -212,7 +212,7 @@ namespace green {
 			{{0, 0, -1}, "-Z"}
 		};
 
-		int basis_right = 0, basis_up = 2, basis_back = 4;
+		int m_basis_right = 0, m_basis_up = 2, m_basis_back = 4;
 
 		enum class color_mode : unsigned char {
 			none, vcolor, saliency, saliency_comparison

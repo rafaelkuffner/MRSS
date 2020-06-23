@@ -355,7 +355,7 @@ namespace green {
 		transform = glm::translate(transform, m_translation);
 		transform *= glm::eulerAngleYXZ(m_rotation_euler_yxz.y, m_rotation_euler_yxz.x, m_rotation_euler_yxz.z);
 		transform = glm::scale(transform, glm::vec3(m_scale));
-		glm::mat3 basis(m_basis_vectors[basis_right].v, m_basis_vectors[basis_up].v, m_basis_vectors[basis_back].v);
+		glm::mat3 basis(m_basis_vectors[m_basis_right].v, m_basis_vectors[m_basis_up].v, m_basis_vectors[m_basis_back].v);
 		return transform * glm::mat4(transpose(basis));
 	}
 
@@ -522,11 +522,11 @@ namespace green {
 						}, m_basis_vectors, 6
 					);
 				};
-				pick_basis("Right", &basis_right);
+				pick_basis("Right", &m_basis_right);
 				SameLine();
-				pick_basis("Up", &basis_up);
+				pick_basis("Up", &m_basis_up);
 				SameLine();
-				pick_basis("Back", &basis_back);
+				pick_basis("Back", &m_basis_back);
 				if (Button("Reset##scale")) m_scale = m_model->unit_bound_scale() * 4;
 				SameLine();
 				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
@@ -957,6 +957,10 @@ namespace green {
 		e->m_fpath_load = m_fpath_load;
 		e->m_decimated = true;
 		e->m_dec_uparams = uparams;
+		e->m_basis_right = m_basis_right;
+		e->m_basis_up = m_basis_up;
+		e->m_basis_back = m_basis_back;
+		e->m_rotation_euler_yxz = m_rotation_euler_yxz;
 		// TODO move prepare to async
 		auto m = m_model->prepare_decimate(sal_valid ? m_saliency_outputs[m_saliency_index] : model_saliency_data{});
 		e->m_pending_load = std::async([=, e=e.get(), m=std::move(m), lock2=std::move(lock2)]() mutable {
