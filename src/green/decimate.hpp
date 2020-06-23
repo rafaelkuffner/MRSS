@@ -29,8 +29,22 @@ namespace green {
 	struct decimate_user_params {
 		int targetverts = 10000;
 		int nbins = 5;
-		float weight = 0.5f;
+		float weight = 1.f;
 		float power = 1.f;
+		bool use_saliency = true;
+
+		std::string str() const {
+			char buf[128];
+			char *end = buf + sizeof(buf);
+			char *p = buf;
+			p += snprintf(p, end - p, "v=%d", targetverts);
+			if (use_saliency) p += snprintf(p, end - p, ",b=%d,w=%.2f,p=%.2f", nbins, weight, power);
+			return {buf};
+		}
+
+		explicit operator std::string() const {
+			return str();
+		}
 
 		void sanitize();
 	};

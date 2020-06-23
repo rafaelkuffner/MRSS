@@ -178,19 +178,20 @@ namespace green {
 		sd2.prop_saliency.invalidate();
 		sd2.prop_sampled.invalidate();
 		sd2.decimated = true;
-		m.m_trimesh.add_property(sd2.prop_saliency);
-		m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
-		m.m_original_saliency.push_back(sd2);
+		if (sd.prop_saliency.is_valid()) {
+			m.m_trimesh.add_property(sd2.prop_saliency);
+			m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
+			m.m_original_saliency.push_back(sd2);
+		}
 		return m;
 	}
 
 	bool Model::decimate(const decimate_user_params &uparams, decimate_progress &progress) {
-		auto &sd = m_original_saliency[0];
 		// decimate!
 		std::cout << "Decimating model" << std::endl;
 		decimate_mesh_params mparams;
 		mparams.mesh = &m_trimesh;
-		mparams.prop_saliency = sd.prop_saliency;
+		if (m_original_saliency.size()) mparams.prop_saliency = m_original_saliency[0].prop_saliency;
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
@@ -444,8 +445,8 @@ namespace green {
 			if (IsItemHovered()) SetTooltip("Close model");
 			PopStyleColor();
 			if (BeginPopupModal("##close", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration)) {
-				Text("Close model \"%s\" ?", m_fpath_load.filename().u8string().c_str());
-				if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+				Text("Close model \"%s\" ?", name().c_str());
+				SetHoveredTooltip("%s", make_name_tooltip().c_str());
 				if (Button("Close")) {
 					std::unique_lock lock(m_modelmtx, std::defer_lock);
 					if (lock.try_lock()) {
@@ -475,10 +476,15 @@ namespace green {
 			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
 			Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()});
 			PopStyleColor();
-			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+			SetHoveredTooltip("%s", make_name_tooltip().c_str());
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 
-			TextDisabled("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
+			Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
+			if (m_decimated) Text(
+				"Decimated %d vertices (%.1f%%)",
+				m_dec_progress.completed_collapses,
+				100.f * m_dec_progress.completed_collapses / float(m_dec_uparams.targetverts + m_dec_progress.completed_collapses)
+			);
 
 			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
 			if (m_pending_save.valid()) {
@@ -696,7 +702,7 @@ namespace green {
 			Selectable(m_fpath_load.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
 			PopStyleColor();
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
-			if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+			SetHoveredTooltip("%s", make_name_tooltip().c_str());
 			if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) {
 				auto &salout = m_saliency_outputs[m_saliency_index];
 				Text("Saliency: %s", std::string(salout).c_str());
@@ -758,7 +764,7 @@ namespace green {
 
 	void ModelEntity::draw_window_decimation(bool selected) {
 		using namespace ImGui;
-		if (m_decimated && ui_decimation_window_open() && (m_dec_progress.state < decimation_state::done || selected)) {
+		if (m_decimated && ui_decimation_window_open() && (m_dec_progress.state < decimation_state::done)) {
 			if (Begin("Decimation")) {
 				PushID(this);
 				draw_select_header(selected);
@@ -782,19 +788,19 @@ namespace green {
 			r = true;
 		}
 		PopStyleColor();
-		if (IsItemHovered()) SetTooltip("%s", m_fpath_load.u8string().c_str());
+		SetHoveredTooltip("%s", make_name_tooltip().c_str());
 		SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 		return r;
 	}
 
 	void ModelEntity::spawn_locked_notification() const {
 		using namespace ImGui;
-		ui_spawn([fpath=m_fpath_load, name=name()](bool *p_open) {
+		ui_spawn([nametooltip=make_name_tooltip(), name=name()](bool *p_open) {
 			if (*p_open) OpenPopup("Model in use");
 			if (BeginPopupModal("Model in use", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
 				Selectable(name.c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
 				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
-				if (IsItemHovered()) SetTooltip("%s", fpath.u8string().c_str());
+				SetHoveredTooltip("%s", nametooltip.c_str());
 				Text("The operation cannot be performed because\nthe model is currently in use.");
 				if (Button("  OK  ")) {
 					*p_open = false;
@@ -803,6 +809,15 @@ namespace green {
 				EndPopup();
 			}
 		});
+	}
+
+	std::string ModelEntity::make_name_tooltip() const {
+		auto s = m_fpath_load.u8string();
+		if (m_decimated) {
+			s += "\n";
+			s += m_dec_uparams.str();
+		}
+		return s;
 	}
 
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
@@ -930,9 +945,8 @@ namespace green {
 	}
 
 	std::unique_ptr<ModelEntity> ModelEntity::decimate_async(const decimate_user_params &uparams) {
-		// this function can't be const because it needs to lock the mutex
+		// this function isn't const because it needs to lock the mutex - mutable?
 		const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
-		if (!sal_valid) return {};
 		std::shared_lock lock1(m_modelmtx, std::defer_lock);
 		if (!lock1.try_lock()) {
 			spawn_locked_notification();
@@ -943,8 +957,8 @@ namespace green {
 		e->m_fpath_load = m_fpath_load;
 		e->m_decimated = true;
 		e->m_dec_uparams = uparams;
-		// TODO maybe move prepare to async?
-		auto m = m_model->prepare_decimate(m_saliency_outputs[m_saliency_index]);
+		// TODO move prepare to async
+		auto m = m_model->prepare_decimate(sal_valid ? m_saliency_outputs[m_saliency_index] : model_saliency_data{});
 		e->m_pending_load = std::async([=, e=e.get(), m=std::move(m), lock2=std::move(lock2)]() mutable {
 			if (!m.decimate(uparams, e->m_dec_progress)) throw std::runtime_error("decimation was cancelled");
 			return std::make_unique<Model>(std::move(m));

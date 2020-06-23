@@ -315,7 +315,6 @@ namespace {
 					cur_sel.select_vertex = -1;
 				}
 				SameLine();
-				// TODO unicode...
 				Text("%s", ep->name().c_str());
 			}
 			sal_need_preview |= Checkbox("Preview", &sal_uparams.preview);
@@ -378,15 +377,20 @@ namespace {
 			Text("-- Work in Progress --");
 			PopStyleColor();
 			if (select_model) {
+				Text("%s", select_model->name().c_str());
 				auto *sd = select_model->selected_saliency();
-				if (sd) {
-					Text("Using saliency: %s", sd->str().c_str());
-					if (Button("GO", {-1, 0})) {
-						auto e = select_model->decimate_async(dec_uparams);
-						if (e) entities.push_back(std::move(e));
-					}
+				if (sd) Text("Saliency: %s", sd->str().c_str());
+				bool go = false;
+				if (sd && dec_uparams.use_saliency) {
+					if (Button("GO with saliency", {-1, 0})) go = true;
+				} else if (!dec_uparams.use_saliency) {
+					if (Button("GO without saliency", {-1, 0})) go = true;
 				} else {
-					TextDisabled("Select a saliency result");
+					TextDisabled("Select a saliency result or uncheck 'use saliency'");
+				}
+				if (go) {
+					auto e = select_model->decimate_async(dec_uparams);
+					if (e) entities.push_back(std::move(e));
 				}
 			} else {
 				TextDisabled("Select a model");
@@ -1075,14 +1079,6 @@ namespace ImGui {
 		Text("%s [%.3fs]", saliency_state_str(progress.state), progress.elapsed_time / std::chrono::duration<double>(1.0));
 	}
 
-	bool SliderAny(const char *label, int *v, int v_min, int v_max, const char *format = "%d") {
-		return SliderInt(label, v, v_min, v_max, format);
-	}
-
-	bool SliderAny(const char *label, float *v, float v_min, float v_max, const char *format = "%.3f", float power = 1.f) {
-		return SliderFloat(label, v, v_min, v_max, format, power);
-	}
-
 	bool edit_saliency_params(green::saliency_user_params &uparams) {
 		using green::saliency_user_params;
 		const auto uparams0 = uparams;
@@ -1091,64 +1087,37 @@ namespace ImGui {
 		saliency_user_params defparams;
 		defparams.thread_count = defthreads;
 		if (!uparams.thread_count) uparams.thread_count = defthreads;
-		auto slider = [&](const char *label, auto param, auto vmin, auto vmax, auto ...args) {
-			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
-			const ImVec4 badcolhov{badcol.x, badcol.y, badcol.z, GetStyle().Colors[ImGuiCol_FrameBg].w};
-			const ImVec4 badcolbg{badcol.x * 0.7f, badcol.y * 0.7f, badcol.z * 0.7f, badcolhov.w};
-			ImGui::PushID(label);
-			if (ImGui::Button("Reset")) uparams.*param = defparams.*param;
-			ImGui::SameLine();
-			auto &val = uparams.*param;
-			const bool oor = !(val >= vmin && val <= vmax);
-			if (oor) {
-				PushStyleColor(ImGuiCol_FrameBg, badcolbg);
-				PushStyleColor(ImGuiCol_FrameBgHovered, badcolhov);
-				PushStyleColor(ImGuiCol_SliderGrab, badcol);
-				// can't be out-of-range and active at the same time
-			}
-			bool r = ImGui::SliderAny(label, &val, vmin, vmax, args...);
-			if (oor) PopStyleColor(3);
-			ImGui::PopID();
-			return r;
-		};
-		auto checkbox = [&](const char *label, auto param) {
-			ImGui::PushID(label);
-			if (ImGui::Button("Reset")) uparams.*param = defparams.*param;
-			ImGui::SameLine();
-			bool r = ImGui::Checkbox(label, &(uparams.*param));
-			ImGui::PopID();
-			return r;
-		};
+		param_widgets widgets{&defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		slider("Levels", &saliency_user_params::levels, 1, 6);
+		widgets.slider("Levels", &saliency_user_params::levels, 1, 6);
 		SetHoveredTooltip("Using more levels allows increasingly local features to become visible.");
-		slider("Area", &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
+		widgets.slider("Area", &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
 		SetHoveredTooltip("Size of the largest salient features.\nSpecified as a fraction of the surface area.");
-		slider("Contour", &saliency_user_params::curv_weight, 0.f, 1.f);
+		widgets.slider("Contour", &saliency_user_params::curv_weight, 0.f, 1.f);
 		SetHoveredTooltip("Additional visibility for immediate local features of high curvature.");
-		slider("Contrast", &saliency_user_params::normal_power, 0.f, 2.f);
+		widgets.slider("Contrast", &saliency_user_params::normal_power, 0.f, 2.f);
 		SetHoveredTooltip("Controls how quickly saliency tends towards extreme values.");
-		checkbox("Noise Filter", &saliency_user_params::normalmap_filter);
+		widgets.checkbox("Noise Filter", &saliency_user_params::normalmap_filter);
 		SetHoveredTooltip("Filter out noise from otherwise smooth surfaces.\nEnable to access noise parameters.");
 		if (uparams.normalmap_filter) {
-			slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
+			widgets.slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
 			SetHoveredTooltip("Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area.");
 		}
 		if (uparams.preview) {
 			Text("Preview mode: subsampling at %.1f S/N", sal_preview_spn);
 		} else {
-			checkbox("Subsample", &saliency_user_params::subsample_auto);
+			widgets.checkbox("Subsample", &saliency_user_params::subsample_auto);
 			SetHoveredTooltip("Apply automatic subsampling (fast, recommended).\nEnable to access sampling parameters.");	
 			if (uparams.subsample_manual) {
 				// no longer exposing this mode of subsampling in the ui
-				slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
+				widgets.slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
 				SetHoveredTooltip("Subsampling Rate\nMust be tuned for each model.\nHigher: fewer samples, less accurate results.");
 			} else if (uparams.subsample_auto) {
-				slider("S/N", &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
+				widgets.slider("S/N", &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
 				SetHoveredTooltip("Samples per Neighbourhood\nDoes not usually need tuning per model.\nHigher: more samples, more accurate results.");
 			}
 		}
-		slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
+		widgets.slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
 		SetHoveredTooltip("Number of computation threads to use.");
 		// ensure params are valid
 		uparams.sanitize();
@@ -1172,6 +1141,7 @@ namespace ImGui {
 
 	void draw_decimate_progress(green::decimate_progress &progress) {
 		ProgressBar(float(progress.completed_collapses) / progress.target_collapses);
+		SetHoveredTooltip("Decimated %d / %d vertices", progress.completed_collapses, progress.target_collapses);
 		if (progress.state < decimation_state::done) {
 			if (Button("Cancel")) progress.should_cancel = true;
 			SameLine();
@@ -1180,11 +1150,15 @@ namespace ImGui {
 	}
 
 	bool edit_decimate_params(green::decimate_user_params &uparams) {
+		using green::decimate_user_params;
+		decimate_user_params defparams;
+		param_widgets widgets{&defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		InputInt("Target Vertices", &uparams.targetverts);
-		SliderInt("Bins", &uparams.nbins, 1, 10);
-		SliderFloat("Weight", &uparams.weight, 0, 1);
-		SliderFloat("Power", &uparams.power, 0, 2);
+		widgets.inputint("Vertices", &decimate_user_params::targetverts, 100, 1000);
+		widgets.checkbox("Use Saliency", &decimate_user_params::use_saliency);
+		widgets.slider("Bins", &decimate_user_params::nbins, 1, 10);
+		widgets.slider("Weight", &decimate_user_params::weight, 0.f, 1.f);
+		widgets.slider("Power", &decimate_user_params::power, 0.f, 2.f);
 		// ensure params are valid
 		uparams.sanitize();
 		// TODO return true if modified?

@@ -36,7 +36,7 @@ namespace {
 			OpenMesh::VertexHandle v(i);
 			auto &sv = saliencies[i];
 			sv.v = v;
-			sv.s = mesh.property(prop, v);
+			sv.s = prop.is_valid() ? mesh.property(prop, v) : 0.f;
 		}
 		std::sort(saliencies.begin(), saliencies.end());
 		// round up so we dont have unbinned vertices at the end
@@ -89,11 +89,12 @@ namespace {
 
 	public: // inherited
 		virtual void initialize() {
-			if (!prop_bin.is_valid()) throw std::runtime_error("no bins");
+			
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
 			if (cancel) return Base::ILLEGAL_COLLAPSE;
+			if (!prop_bin.is_valid()) return Base::LEGAL_COLLAPSE;
 			//float s0 = _ci.mesh.property(prop_sal, _ci.v0);
 			//float s1 = _ci.mesh.property(prop_sal, _ci.v1);
 			// supposedly v0 gets removed
@@ -181,7 +182,7 @@ namespace green {
 		for (int i = 0; i < nbins; i++) {
 			int k = bin_keep[i];
 			int c = init_bin_counts[i];
-			std::cout << "vertices to keep in bin " << i << ": " << k << "/" << c << "; remove " << (c - k) << "; weight=" << bin_weights[i] << std::endl;
+			std::cout << "bin " << i << ": keep " << k << "/" << c << " (" << bin_weights[i] << "); remove " << (c - k) << std::endl;
 			if (k > c) {
 				std::cout << "warning: can't keep more vertices than available, result will have fewer vertices than desired" << std::endl;
 			}
@@ -197,8 +198,13 @@ namespace green {
 		ModVertexWeightingT<TriMesh>::Handle hModWeighting;
 		decimater.add(hModWeighting);
 		decimater.module(hModWeighting).progress = &progress;
-		decimater.module(hModWeighting).prop_bin = prop_bin;
 		decimater.module(hModWeighting).time_start = time_start;
+		
+		if (uparams.use_saliency) {
+			decimater.module(hModWeighting).prop_bin = prop_bin;
+		} else {
+			std::cout << "decimating without saliency, bins will be ignored" << std::endl;
+		}
 
 		for (int i = 0; i < nbins; i++) {
 			if (progress.should_cancel) {
@@ -220,8 +226,9 @@ namespace green {
 		mparams.mesh->remove_property(prop_bin);
 
 		for (int i = 0; i < nbins; i++) {
-			int collapses = (init_bin_counts[i] - fin_bin_counts[i]);
-			std::cout << "vertices removed from bin " << i << ": " << collapses << "; ratio=" << (float(collapses) / target_collapses) << std::endl;
+			int k = fin_bin_counts[i];
+			int r = init_bin_counts[i] - k;
+			std::cout << "bin " << i << ": kept " << k << " (" << (float(k) / mparams.mesh->n_vertices()) << "); removed " << r << " (" << (float(r) / target_collapses) << ")" << std::endl;
 		}
 
 		std::cout << "final vertices: " << mparams.mesh->n_vertices() << std::endl;

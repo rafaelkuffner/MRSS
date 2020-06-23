@@ -99,13 +99,17 @@ namespace green {
 		// interactive previewing
 		bool preview = false;
 
-		explicit operator std::string() const {
+		std::string str() const {
 			char buf[128];
 			char *end = buf + sizeof(buf);
 			char *p = buf;
 			p += snprintf(p, end - p, "l=%d,a=%.3f,w=%.2f,p=%.2f", levels, area, curv_weight, normal_power);
 			if (normalmap_filter) p += snprintf(p, end - p, ",N,h=%.3f", noise_height);
 			return {buf};
+		}
+
+		explicit operator std::string() const {
+			return str();
 		}
 
 		bool operator==(const saliency_user_params &other) const {

@@ -239,6 +239,7 @@ namespace green {
 		void draw_window_decimation(bool selected);
 		bool draw_select_header(bool selected);
 		void spawn_locked_notification() const;
+		std::string make_name_tooltip() const;
 
 	public:
 		ModelEntity();
@@ -271,9 +272,9 @@ namespace green {
 		virtual std::string name() const override {
 			std::string s = m_fpath_load.filename().u8string();
 			if (m_decimated) {
-				s += " (dec ";
-				s += std::to_string(m_dec_uparams.targetverts);
-				s += ")";
+				s += " [dec ";
+				s += m_dec_uparams.str();
+				s += "]";
 			}
 			return s;
 		}
