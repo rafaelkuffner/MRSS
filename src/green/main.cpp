@@ -378,6 +378,11 @@ namespace {
 			PopStyleColor();
 			if (select_model) {
 				Text("%s", select_model->name().c_str());
+				if (select_model->decimated()) {
+					PushStyleColor(ImGuiCol_Text, {0.9f, 0.4f, 0.4f, 1});
+					Text("Warning: model has already been decimated");
+					PopStyleColor();
+				}
 				auto *sd = select_model->selected_saliency();
 				if (sd) Text("Saliency: %s", sd->str().c_str());
 				bool go = false;

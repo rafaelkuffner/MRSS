@@ -264,6 +264,10 @@ namespace green {
 			return m_show_faces;
 		}
 
+		bool decimated() const {
+			return m_decimated;
+		}
+
 		const model_saliency_data * selected_saliency() const {
 			if (m_saliency_index >= m_saliency_outputs.size()) return nullptr;
 			return &m_saliency_outputs[m_saliency_index];
