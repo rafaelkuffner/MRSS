@@ -167,7 +167,7 @@ namespace green {
 			// power: non-linearity of weighting; 1 (linear) .. 2 (quadratic, more extreme)
 			const float d = uparams.weight;
 			const float x = (i + 0.5f) / float(nbins);
-			const float w = pow(x, uparams.power) * d + (1.f - d) * 0.5f;
+			const float w = std::max(pow(x, uparams.power) * d + (1.f - d) * 0.5f, 0.f);
 			bin_weights[i] = w;
 			bin_weight_divisor += w;
 		}
