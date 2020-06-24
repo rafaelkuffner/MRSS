@@ -481,9 +481,10 @@ namespace green {
 
 			Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
 			if (m_decimated) Text(
-				"Decimated %d vertices (%.1f%%)",
+				"Decimated %d vertices (%.1f%%) in %.3fs",
 				m_dec_progress.completed_collapses,
-				100.f * m_dec_progress.completed_collapses / float(m_dec_uparams.targetverts + m_dec_progress.completed_collapses)
+				100.f * m_dec_progress.completed_collapses / float(m_dec_uparams.targetverts + m_dec_progress.completed_collapses),
+				m_dec_progress.elapsed_time / std::chrono::duration<double>(1.0)
 			);
 
 			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
