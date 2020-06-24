@@ -766,8 +766,12 @@ namespace {
 	}
 }
 
-int main() {
-
+#ifdef _WIN32
+int wmain(int argc, const wchar_t *argv[])
+#else
+int main(int argc, const char *argv[])
+#endif
+{
 	init_console();
 	
 	if (!glfwInit()) {
