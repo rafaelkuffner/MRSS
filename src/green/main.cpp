@@ -1,5 +1,6 @@
 ﻿
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <stdexcept>
@@ -764,200 +765,199 @@ namespace {
 			monitorY + (mode->height - windowHeight) / 2
 		);
 	}
-}
 
-#ifdef _WIN32
-int wmain(int argc, const wchar_t *argv[])
-#else
-int main(int argc, const char *argv[])
-#endif
-{
-	init_console();
-	
-	if (!glfwInit()) {
-		cerr << "Error: Could not initialize GLFW" << endl;
-		abort();
-	}
+	void main_gui() {
 
-	set_ui_thread_priority();
-
-	// GL 3.3 core context
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-	// disallow legacy (for OS X)
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-	// request a debug context so we get debug callbacks
-	// remove this for possible GL performance increases
-	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-
-	// request a window that can perform gamma correction
-	glfwWindowHint(GLFW_SRGB_CAPABLE, true);
-
-	window = glfwCreateWindow(1280, 800, (std::string("Multi-Resolution Subsampled Saliency (") + git_describe() + ")").c_str(), nullptr, nullptr);
-	if (!window) {
-		cerr << "Error: Could not create GLFW window" << endl;
-		abort();
-	}
-
-	center_window(window, glfwGetPrimaryMonitor());
-
-	glfwMakeContextCurrent(window);
-
-	// required for full GLEW functionality for GL3+
-	glewExperimental = GL_TRUE;
-
-	// initialize GLEW
-	// must be done after making a GL context current
-	GLenum glew_err = glewInit();
-	if (GLEW_OK != glew_err) {
-		cerr << "Error: Could not initialize GLEW: " << glewGetErrorString(glew_err) << endl;
-		abort();
-	}
-
-	// print out versions
-	cout << "OpenGL : " << glGetString(GL_VERSION) << endl;
-	cout << "GLEW   : " << glewGetString(GLEW_VERSION) << endl;
-	cout << "GLFW   : " << glfwGetVersionString() << endl;
-	cout << "ImGui  : " << ImGui::GetVersion() << endl;
-
-	// enable GL_ARB_debug_output if available
-	if (glfwExtensionSupported("GL_ARB_debug_output")) {
-		// this allows the error location to be determined from a stacktrace
-		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
-		// setup up the callback
-		glDebugMessageCallbackARB(gl_debug_callback, nullptr);
-		glDebugMessageControlARB(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, true);
-		cout << "GL_ARB_debug_output callback installed" << endl;
-	} else {
-		cout << "GL_ARB_debug_output not available" << endl;
-	}
-
-	// initialize ImGui
-	imguictx = ImGui::CreateContext();
-	ImGui::SetCurrentContext(imguictx);
-	ImGui_ImplGlfw_InitForOpenGL(window, false);
-	ImGui_ImplOpenGL3_Init();
-
-	{
-		ImGuiStyle &sty = ImGui::GetStyle();
-		//sty.FramePadding.x += 1;
-		//sty.FramePadding.y += 1;
-		sty.SelectableTextAlign.y = 0.5f;
-		sty.Colors[ImGuiCol_WindowBg].w = 0.6f;
-		sty.Colors[ImGuiCol_ScrollbarBg].w = 0.6f;
-		sty.Colors[ImGuiCol_ScrollbarGrab].w = 0.6f;
-	}
-
-	{
-		ImGuiIO& io = ImGui::GetIO();
-		// disable imgui.ini
-		io.IniFilename = nullptr;
-		// fonts
-		io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
-		ImFontConfig fc;
-		// dont oversample to save texture space
-		fc.PixelSnapH = true;
-		fc.OversampleH = 1;
-		// use imgui default font for ascii
-		io.Fonts->AddFontDefault(&fc);
-		// load other fonts
-		fc.MergeMode = true;
-		init_fonts(io, fc);
-		// NOTE we are not able to achieve full unicode rendering because
-		// a) iirc imgui only supports the BMP, and is certainly not capable of fancy layout
-		// b) the font texture atlas would be intractably large
-		io.Fonts->Build();
-		// hacks to increase line height to make japanese etc text easier
-		io.Fonts->Fonts[0]->FontSize += 3;
-		io.Fonts->Fonts[0]->DisplayOffset.y += 1;
-		std::cout << "imgui font atlas " << io.Fonts->TexWidth << "x" << io.Fonts->TexHeight << std::endl;
-	}
-
-	// attach input callbacks to window
-	glfwSetCursorPosCallback(window, cursor_pos_callback);
-	glfwSetMouseButtonCallback(window, mouse_button_callback);
-	glfwSetScrollCallback(window, scroll_callback);
-	glfwSetKeyCallback(window, key_callback);
-	glfwSetCharCallback(window, char_callback);
-	glfwSetDropCallback(window, drop_callback);
-	glfwSetWindowFocusCallback(window, focus_callback);
-
-	cgu::glsl_frag_depth_source = glsl_depth_env;
-
-	auto time_next_frame = chrono::steady_clock::now();
-	auto time_last_fps = time_next_frame;
-	int fps_counter = 0;
-
-	cam.focus.y = 1;
-	cam.cam_yaw = -glm::pi<float>() / 4;
-	cam.cam_pitch = glm::pi<float>() / 8;
-
-	glDisable(GL_DITHER);
-
-	const auto poll_events = []() {
-		glfwPollEvents();
-		if (focus_gained) {
-			focus_lost = false;
-			focus_gained = false;
-		}
-	};
-
-	// loop until the user closes the window
-	while (!glfwWindowShouldClose(window)) {
-
-		poll_events();
-
-		// frame rate limiter and counter
-		auto now = chrono::steady_clock::now();
-		while (time_next_frame - now >= 1ms) {
-			this_thread::sleep_for(1ms);
-			// keep polling events when limiting frame rate to ensure responsiveness with e.g. win32 dialogs
-			poll_events();
-			now = chrono::steady_clock::now();
-		}
-		const auto frame_duration = focus_lost ? 100ms : 6ms;
-		time_next_frame = max(time_next_frame, now - frame_duration) + frame_duration;
-		fps_counter++;
-		if (now - time_last_fps >= 1s) {
-			fps = fps_counter;
-			fps_counter = 0;
-			time_last_fps = now;
+		if (!glfwInit()) {
+			cerr << "Error: Could not initialize GLFW" << endl;
+			abort();
 		}
 
-		//if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+		set_ui_thread_priority();
 
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+		// GL 3.3 core context
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-		// render scene before main ui so that current model can be determined
-		render_early_ui();
-		render();
-		render_main_ui();
+		// disallow legacy (for OS X)
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-		for (auto it = persistent_ui.begin(); it != persistent_ui.end(); ) {
-			bool r = true;
-			(*it)(&r);
-			if (r) {
-				++it;
-			} else {
-				it = persistent_ui.erase(it);
+		// request a debug context so we get debug callbacks
+		// remove this for possible GL performance increases
+		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+
+		// request a window that can perform gamma correction
+		glfwWindowHint(GLFW_SRGB_CAPABLE, true);
+
+		window = glfwCreateWindow(1280, 800, (std::string("Multi-Resolution Subsampled Saliency (") + git_describe() + ")").c_str(), nullptr, nullptr);
+		if (!window) {
+			cerr << "Error: Could not create GLFW window" << endl;
+			abort();
+		}
+
+		center_window(window, glfwGetPrimaryMonitor());
+
+		glfwMakeContextCurrent(window);
+
+		// required for full GLEW functionality for GL3+
+		glewExperimental = GL_TRUE;
+
+		// initialize GLEW
+		// must be done after making a GL context current
+		GLenum glew_err = glewInit();
+		if (GLEW_OK != glew_err) {
+			cerr << "Error: Could not initialize GLEW: " << glewGetErrorString(glew_err) << endl;
+			abort();
+		}
+
+		// print out versions
+		cout << "OpenGL : " << glGetString(GL_VERSION) << endl;
+		cout << "GLEW   : " << glewGetString(GLEW_VERSION) << endl;
+		cout << "GLFW   : " << glfwGetVersionString() << endl;
+		cout << "ImGui  : " << ImGui::GetVersion() << endl;
+
+		// enable GL_ARB_debug_output if available
+		if (glfwExtensionSupported("GL_ARB_debug_output")) {
+			// this allows the error location to be determined from a stacktrace
+			glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+			// setup up the callback
+			glDebugMessageCallbackARB(gl_debug_callback, nullptr);
+			glDebugMessageControlARB(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, true);
+			cout << "GL_ARB_debug_output callback installed" << endl;
+		} else {
+			cout << "GL_ARB_debug_output not available" << endl;
+		}
+
+		// initialize ImGui
+		imguictx = ImGui::CreateContext();
+		ImGui::SetCurrentContext(imguictx);
+		ImGui_ImplGlfw_InitForOpenGL(window, false);
+		ImGui_ImplOpenGL3_Init();
+
+		{
+			ImGuiStyle &sty = ImGui::GetStyle();
+			//sty.FramePadding.x += 1;
+			//sty.FramePadding.y += 1;
+			sty.SelectableTextAlign.y = 0.5f;
+			sty.Colors[ImGuiCol_WindowBg].w = 0.6f;
+			sty.Colors[ImGuiCol_ScrollbarBg].w = 0.6f;
+			sty.Colors[ImGuiCol_ScrollbarGrab].w = 0.6f;
+		}
+
+		{
+			ImGuiIO& io = ImGui::GetIO();
+			// disable imgui.ini
+			io.IniFilename = nullptr;
+			// fonts
+			io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
+			ImFontConfig fc;
+			// dont oversample to save texture space
+			fc.PixelSnapH = true;
+			fc.OversampleH = 1;
+			// use imgui default font for ascii
+			io.Fonts->AddFontDefault(&fc);
+			// load other fonts
+			fc.MergeMode = true;
+			init_fonts(io, fc);
+			// NOTE we are not able to achieve full unicode rendering because
+			// a) iirc imgui only supports the BMP, and is certainly not capable of fancy layout
+			// b) the font texture atlas would be intractably large
+			io.Fonts->Build();
+			// hacks to increase line height to make japanese etc text easier
+			io.Fonts->Fonts[0]->FontSize += 3;
+			io.Fonts->Fonts[0]->DisplayOffset.y += 1;
+			std::cout << "imgui font atlas " << io.Fonts->TexWidth << "x" << io.Fonts->TexHeight << std::endl;
+		}
+
+		// attach input callbacks to window
+		glfwSetCursorPosCallback(window, cursor_pos_callback);
+		glfwSetMouseButtonCallback(window, mouse_button_callback);
+		glfwSetScrollCallback(window, scroll_callback);
+		glfwSetKeyCallback(window, key_callback);
+		glfwSetCharCallback(window, char_callback);
+		glfwSetDropCallback(window, drop_callback);
+		glfwSetWindowFocusCallback(window, focus_callback);
+
+		cgu::glsl_frag_depth_source = glsl_depth_env;
+
+		auto time_next_frame = chrono::steady_clock::now();
+		auto time_last_fps = time_next_frame;
+		int fps_counter = 0;
+
+		cam.focus.y = 1;
+		cam.cam_yaw = -glm::pi<float>() / 4;
+		cam.cam_pitch = glm::pi<float>() / 8;
+
+		glDisable(GL_DITHER);
+
+		const auto poll_events = []() {
+			glfwPollEvents();
+			if (focus_gained) {
+				focus_lost = false;
+				focus_gained = false;
 			}
+		};
+
+		// loop until the user closes the window
+		while (!glfwWindowShouldClose(window)) {
+
+			poll_events();
+
+			// frame rate limiter and counter
+			auto now = chrono::steady_clock::now();
+			while (time_next_frame - now >= 1ms) {
+				this_thread::sleep_for(1ms);
+				// keep polling events when limiting frame rate to ensure responsiveness with e.g. win32 dialogs
+				poll_events();
+				now = chrono::steady_clock::now();
+			}
+			const auto frame_duration = focus_lost ? 100ms : 6ms;
+			time_next_frame = max(time_next_frame, now - frame_duration) + frame_duration;
+			fps_counter++;
+			if (now - time_last_fps >= 1s) {
+				fps = fps_counter;
+				fps_counter = 0;
+				time_last_fps = now;
+			}
+
+			//if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+
+			ImGui_ImplOpenGL3_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
+
+			// render scene before main ui so that current model can be determined
+			render_early_ui();
+			render();
+			render_main_ui();
+
+			for (auto it = persistent_ui.begin(); it != persistent_ui.end(); ) {
+				bool r = true;
+				(*it)(&r);
+				if (r) {
+					++it;
+				} else {
+					it = persistent_ui.erase(it);
+				}
+			}
+
+			ImGui::Render();
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+			glfwSwapBuffers(window);
 		}
 
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		glfwTerminate();
+		sal_progress.should_cancel = true;
+		if (sal_future.valid()) sal_future.wait();
 
-		glfwSwapBuffers(window);
 	}
 
-	glfwTerminate();
-	sal_progress.should_cancel = true;
-	if (sal_future.valid()) sal_future.wait();
-
+	// expects utf-8 encoded args
+	void main_cli(int argc, const char *argv[]) {
+		std::cerr << "CLI not implemented yet: " << argv[1] << std::endl;
+	}
 }
 
 namespace green {
@@ -1268,9 +1268,11 @@ namespace {
 
 #ifdef _WIN32
 	extern "C" {
+		__declspec(dllimport) int __stdcall GetLastError();
 		__declspec(dllimport) void * __stdcall GetCurrentThread();
 		__declspec(dllimport) int __stdcall SetThreadPriority(void *hThread, int nPriority);
 		__declspec(dllimport) bool __stdcall SetConsoleOutputCP(unsigned int wCodePageID);
+		__declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned CodePage, int dwFlags, const wchar_t *lpWideCharStr, int cchWideChar, char *lpMultiByteStr, int cbMultiByte, const char *lpDefaultChar, bool *lpUsedDefaultChar);
 	}
 
 	void set_ui_thread_priority() {
@@ -1317,3 +1319,35 @@ namespace {
 
 }
 
+#ifdef _WIN32
+int wmain(int argc, const wchar_t *wargv[]) {
+	init_console();
+	if (argc > 1) {
+		// need to convert to utf-8
+		std::vector<const char *> argv(argc);
+		for (int i = 0; i < argc; i++) {
+			const int wl = wcsnlen(wargv[i], 32767);
+			// pessimistic buffer sizing (note x2 is same size in bytes), +1 for null terminator
+			const int cl = wl * 3 + 1;
+			char *buf = new char[cl];
+			if (!WideCharToMultiByte(65001, 0, wargv[i], wl + 1, buf, cl, nullptr, nullptr)) {
+				std::cerr << "failed to convert argv[" << i << "] to utf-8: error " << GetLastError() << std::endl;
+				abort();
+			}
+			argv[i] = buf;
+		}
+		main_cli(argc, argv.data());
+	} else {
+		main_gui();
+	}
+}
+#else
+int main(int argc, const char *argv[]) {
+	init_console();
+	if (argc > 1) {
+		main_cli(argc, argv);
+	} else {
+		main_gui();
+	}
+}
+#endif
