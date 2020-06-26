@@ -37,6 +37,7 @@ set(sources
 	dialog_simple.cpp
 	imguiex.hpp
 	imguiex.cpp
+	clipp.h
 	model.glsl
 	deferred.glsl
 	about_licences.txt
