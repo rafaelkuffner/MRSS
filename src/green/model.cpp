@@ -156,13 +156,15 @@ namespace green {
 		if (m_trimesh.has_vertex_colors()) opts = opts | OpenMesh::IO::Options::VertexColor;
 		if (binary) opts = opts | OpenMesh::IO::Options::Binary;
 
-		// TODO unicode filenames...
+		std::cerr << "Saving model " << fpath.u8string() << std::endl;
 		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath, opts);
 
 		m_trimesh.remove_property(prop_quality);
 
-		if (!res) {
-			std::cerr << "Could not write mesh file " << fpath.u8string() << std::endl;
+		if (res) {
+			std::cerr << "Saved" << std::endl;
+		} else {
+			std::cerr << "Could not save model " << fpath.u8string() << std::endl;
 			throw std::runtime_error("failed to save model");
 		}
 	}
@@ -347,6 +349,23 @@ namespace green {
 			m_model->save(fpath, salout.prop_saliency, binary);
 			return true;
 		});
+	}
+
+	void ModelEntity::load(const std::filesystem::path &fpath, Model m) {
+		m_model.reset();
+		m_fpath_load = fpath;
+		m_pending_load = std::async(std::launch::deferred, [m=std::move(m)]() mutable {
+			return std::make_unique<Model>(std::move(m));
+		});
+		// non-blocking wait will never succeed otherwise
+		m_pending_load.wait();
+	}
+
+	void ModelEntity::load(const std::filesystem::path &fpath, Model m, const decimate_user_params &dec_uparams, const decimate_progress &dec_progress) {
+		load(fpath, std::move(m));
+		m_decimated = true;
+		m_dec_uparams = dec_uparams;
+		m_dec_progress = dec_progress;
 	}
 
 	glm::mat4 ModelEntity::transform() const {

@@ -110,6 +110,10 @@ namespace green {
 			return m_prop_edge_length;
 		}
 
+		std::vector<model_saliency_data> & original_saliency() {
+			return m_original_saliency;
+		}
+
 		const std::vector<model_saliency_data> & original_saliency() const {
 			return m_original_saliency;
 		}
@@ -255,6 +259,10 @@ namespace green {
 		void load(const std::filesystem::path &fpath);
 
 		void save(const std::filesystem::path &fpath, bool binary);
+
+		void load(const std::filesystem::path &fpath, Model m);
+
+		void load(const std::filesystem::path &fpath, Model m, const decimate_user_params &dec_uparams, const decimate_progress &dec_progress);
 
 		void try_export() {
 			m_try_export = true;

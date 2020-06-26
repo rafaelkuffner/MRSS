@@ -24,6 +24,7 @@
 #include "dialog.hpp"
 #include "model.hpp"
 #include "saliency.hpp"
+#include "clipp.h"
 
 #include "deferred.glsl.hpp"
 
@@ -547,7 +548,7 @@ namespace {
 				Separator();
 				Text("Copyright 2020\nVictoria University of Wellington\nComputational Media Innovation Centre\nAll rights reserved.");
 				Separator();
-				Text("Revision:\n%s (%s)\n%s", git_revision(), git_describe(), git_timestamp());
+				Text("Version:\n%s (%s)\n%s", git_describe(), git_revision(), git_timestamp());
 				Separator();
 				if (Button("Library Licenses")) about_licences_window_open = true;
 			}
@@ -956,7 +957,195 @@ namespace {
 
 	// expects utf-8 encoded args
 	void main_cli(int argc, const char *argv[]) {
-		std::cerr << "CLI not implemented yet: " << argv[1] << std::endl;
+		using namespace clipp;
+
+		string infile, outfile;
+		string decprop = "quality";
+		bool show_gui = false;
+		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
+		bool save_ascii = false;
+		int threads = 0;
+
+		auto alt_opts = group{
+			option("--version").set(do_version).doc("Print version"),
+			option("-h", "--help").set(do_help).doc("Show help")
+		};
+		
+		auto common_opts = group{
+			(required("-i", "--input") & value("infile", infile)).doc("Input file"),
+			(option("-o", "--output") & value("outfile", outfile)).doc("Output file"),
+			(option("-j", "--threads") & integer("threads", threads)).doc("Number of threads to use where parallelizable"),
+			option("--ascii").set(save_ascii).doc("Save in plaintext instead of binary if possible"),
+			option("--gui").set(show_gui).doc("Show result in gui when done")
+		}.doc("Common options:");
+
+		auto sal_opts = group{
+			option("--saliency").set(do_sal).doc("compute saliency"),
+			(option("-a", "--area") & number("area", sal_uparams.area))
+				.doc("Size of the largest salient features.\nSpecified as a fraction of the surface area."),
+			(option("-l", "--levels") & integer("levels", sal_uparams.levels))
+				.doc("Using more levels allows increasingly local features to become visible."),
+			(option("-r", "--contrast") & number("contrast", sal_uparams.normal_power))
+				.doc("Controls how quickly saliency tends towards extreme values."),
+			(option("-c", "--contour") & number("contour", sal_uparams.curv_weight))
+				.doc("Additional visibility for immediate local features of high curvature."),
+			(option("-n", "--noisefilter").set(sal_uparams.normalmap_filter))
+				.doc("Filter out noise from otherwise smooth surfaces."),
+			(option("-e", "--noiseheight") & number("height", sal_uparams.noise_height))
+				.doc("Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area."),
+			(option("-s", "--subsampling") & number("samples-per-neighborhood", sal_uparams.samples_per_neighborhood))
+				.doc("Higher: more samples, more accurate results.\nDoes not usually need tuning per model."),
+			option("--fullsampling").call([]{ sal_uparams.subsample_auto = false; })
+				.doc("disable subsampling")
+		}.doc("Saliency options:");
+
+		auto dec_opts = group{
+			option("--decimate").set(do_dec).doc("Perform decimation"),
+			(option("-t", "--targetverts") & integer("verts", dec_uparams.targetverts))
+				.doc("Target number of vertices"),
+			(option("-w", "--salweight") & number("weight", dec_uparams.weight))
+				.doc("Saliency weighting; 0 (even) .. 1 (most weight to highest saliency)"),
+			(option("-p", "--binpower") & number("power", dec_uparams.power))
+				.doc("Non-linearity of saliency weighting; 1 (linear) .. 2 (more extreme)"),
+			(option("--decbins") & integer("bins", dec_uparams.nbins))
+				.doc("Number of saliency bins"),
+			(option("--decprop") & value("propname", decprop))
+				.doc("Mesh vertex property to use for decimation")
+		}.doc("Decimation options:");
+
+		auto opts = (common_opts, sal_opts, dec_opts) | alt_opts;
+
+		if (auto res = parse(argv + 1, argv + argc, opts); !res) {
+			for (auto &m : res.missing()) {
+				if (m.param()->flags().size()) {
+					cerr << "missing required argument " << m.param()->flags()[0] << endl;
+				} else {
+					cerr << "missing required argument <" << m.param()->label() << ">" << endl;
+				}
+			}
+			for (auto &m : res) {
+				if (m.any_error()) {
+					cerr << "argument '" << m.arg() << "' : ";
+					if (m.blocked()) cerr << "blocked";
+					if (m.conflict()) cerr << "conflict";
+					cerr << endl;
+				}
+			}
+			cerr << "usage:\n" << usage_lines(opts) << endl;
+			exit(1);
+		} 
+		
+		if (do_version) {
+			cout << "Multi-Resolution Subsampled Saliency\n" << git_describe() << " (" << git_revision() << ")" << endl;
+		}
+
+		if (do_help) {
+			doc_formatting fmt;
+			fmt.first_column(4);
+			auto man = make_man_page(opts, "GREEN", fmt);
+			man.prepend_section(
+				"DESCRIPTION",
+				"    Multi-Resolution Subsampled Saliency\n"
+				"    Copyright 2020\n    Victoria University of Wellington\n"
+				"    Computational Media Innovation Centre\n    All rights reserved."
+			);
+			man.append_section(
+				"VERSION", 
+				string("    ") + git_describe() + " (" + git_revision() + ")\n    " + git_timestamp()
+			);
+			cout << man << endl;
+		}
+		
+		if (!(do_sal || do_dec)) {
+			cerr << "nothing to do" << endl;
+			exit(0);
+		}
+
+		sal_uparams.thread_count = threads;
+		sal_uparams.sanitize();
+		dec_uparams.sanitize();
+		sal_progress.levels.resize(sal_uparams.levels);
+
+		const auto inpath = std::filesystem::u8path(infile);
+
+		Model m{inpath};
+		Model md;
+		Model *pmr = &m;
+
+		decimate_progress dec_progress;
+		model_saliency_data sd;
+
+		if (!do_sal && do_dec) {
+			if (m.trimesh().get_property_handle(sd.prop_saliency, decprop)) {
+				sd.filename = inpath.filename().u8string();
+				sd.propname = decprop;
+			} else {
+				cerr << "couldn't find saliency property '" << decprop << "' for decimation" << endl;
+				exit(1);
+			}
+		}
+
+		if (do_sal) {
+
+			saliency_mesh_params mparams;
+			mparams.mesh = &m.trimesh();
+			mparams.prop_vertex_area = m.prop_vertex_area();
+			mparams.prop_edge_length = m.prop_edge_length();
+
+			// create properties
+			mparams.prop_saliency_levels.resize(sal_uparams.levels);
+			mparams.mesh->add_property(mparams.prop_curvature);
+			mparams.mesh->add_property(mparams.prop_saliency);
+			mparams.mesh->add_property(mparams.prop_sampled);
+			for (int i = 0; i < sal_uparams.levels; i++) {
+				mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
+			}
+
+			// calculate saliency
+			if (!compute_saliency(mparams, sal_uparams, sal_progress)) {
+				cerr << "saliency cancelled" << endl;
+				exit(1);
+			}
+
+			// destroy temp properties
+			mparams.mesh->remove_property(mparams.prop_curvature);
+			for (int i = 0; i < sal_uparams.levels; i++) {
+				mparams.mesh->remove_property(mparams.prop_saliency_levels[i]);
+			}
+
+			sd.prop_saliency = mparams.prop_saliency;
+			sd.prop_sampled = mparams.prop_sampled;
+			sd.uparams = sal_uparams;
+			sd.progress = sal_progress;
+
+			m.original_saliency().push_back(sd);
+		}
+
+		if (do_dec) {
+			md = m.prepare_decimate(sd);
+			if (!md.decimate(dec_uparams, dec_progress)) {
+				cerr << "decimation cancelled" << endl;
+				exit(1);
+			}
+			pmr = &md;
+		}
+
+		if (outfile.size()) {
+			pmr->save(std::filesystem::u8path(outfile), sd.prop_saliency, !save_ascii);
+		}
+
+		if (show_gui) {
+			auto e = std::make_unique<ModelEntity>();
+			e->load(inpath, std::move(m));
+			entities.push_back(std::move(e));
+			if (do_dec) {
+				auto ed = std::make_unique<ModelEntity>();
+				ed->load(inpath, std::move(md), dec_uparams, dec_progress);
+				entities.push_back(std::move(ed));
+			}
+			main_gui();
+		}
+
 	}
 }
 
