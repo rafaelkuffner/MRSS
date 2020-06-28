@@ -40,7 +40,8 @@ namespace {
 namespace green {
 
 	AssimpReader::AssimpReader() {
-		omerr() << "[Assimp] : registering openmesh reader module" << std::endl;
+		// commented - dont pollute cli output
+		//omerr() << "[Assimp] : registering openmesh reader module" << std::endl;
 		OpenMesh::IO::IOManager().register_module(this);
 	}
 

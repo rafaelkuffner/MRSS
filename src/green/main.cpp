@@ -974,13 +974,14 @@ namespace {
 		auto common_opts = group{
 			(required("-i", "--input") & value("infile", infile)).doc("Input file"),
 			(option("-o", "--output") & value("outfile", outfile)).doc("Output file"),
-			(option("-j", "--threads") & integer("threads", threads)).doc("Number of threads to use where parallelizable"),
+			(option("-j", "--threads") & integer("threads", threads))
+				.doc("Number of threads to use where parallelizable.\nDefault is all available processors."),
 			option("--ascii").set(save_ascii).doc("Save in plaintext instead of binary if possible"),
 			option("--gui").set(show_gui).doc("Show result in gui when done")
 		}.doc("Common options:");
 
 		auto sal_opts = group{
-			option("--saliency").set(do_sal).doc("compute saliency"),
+			option("--saliency").set(do_sal).doc("Compute saliency"),
 			(option("-a", "--area") & number("area", sal_uparams.area))
 				.doc("Size of the largest salient features.\nSpecified as a fraction of the surface area."),
 			(option("-l", "--levels") & integer("levels", sal_uparams.levels))
@@ -1010,8 +1011,9 @@ namespace {
 			(option("--decbins") & integer("bins", dec_uparams.nbins))
 				.doc("Number of saliency bins"),
 			(option("--decprop") & value("propname", decprop))
-				.doc("Mesh vertex property to use for decimation")
-		}.doc("Decimation options:");
+				.doc("Mesh vertex property to use for decimation.\n"),
+			option("--decimate-nosaliency").call([]{ dec_uparams.use_saliency = false; }).doc("Don't use saliency for decimation")
+		}.doc("Decimation options (Work in Progress) :");
 
 		auto opts = (common_opts, sal_opts, dec_opts) | alt_opts;
 
@@ -1042,7 +1044,8 @@ namespace {
 		if (do_help) {
 			doc_formatting fmt;
 			fmt.first_column(4);
-			auto man = make_man_page(opts, "GREEN", fmt);
+			const auto exename = std::filesystem::u8path(argv[0]).filename().replace_extension("").u8string();
+			auto man = make_man_page(opts, exename, fmt);
 			man.prepend_section(
 				"DESCRIPTION",
 				"    Multi-Resolution Subsampled Saliency\n"
@@ -1057,7 +1060,7 @@ namespace {
 		}
 		
 		if (!(do_sal || do_dec)) {
-			cerr << "nothing to do" << endl;
+			if (!do_help && !do_version) cerr << "nothing to do" << endl;
 			exit(0);
 		}
 
