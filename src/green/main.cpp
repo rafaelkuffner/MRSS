@@ -988,7 +988,12 @@ namespace {
 			option("--ascii").set(save_ascii)
 				.doc(loc[help_cli_ascii].clone()),
 			option("--gui").set(show_gui)
-				.doc(loc[help_cli_gui].clone())
+				.doc(loc[help_cli_gui].clone()),
+			option("--noprogress").call([]{
+					sal_uparams.show_progress = false;
+					// TODO dec progress
+				})
+				.doc(loc[help_cli_noprogress].clone())
 		}.doc(loc[help_cli_opts_common].clone());
 
 		auto sal_opts = group{

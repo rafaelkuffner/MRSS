@@ -17,6 +17,7 @@ namespace green {
 		loc[help_cli_help] = "Show help";
 		loc[help_cli_ascii] = "Save in plaintext instead of binary if possible";
 		loc[help_cli_gui] = "Show result in gui when done";
+		loc[help_cli_noprogress] = "Suppress progress output (useful for automation)";
 		loc[param_threads] = "Threads";
 		// saliency
 		loc[help_cli_opts_saliency] = "Saliency options:";

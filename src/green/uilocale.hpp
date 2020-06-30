@@ -20,6 +20,7 @@ namespace green {
 			help_cli_help,
 			help_cli_ascii,
 			help_cli_gui,
+			help_cli_noprogress,
 			param_threads,
 			// saliency
 			help_cli_opts_saliency,
