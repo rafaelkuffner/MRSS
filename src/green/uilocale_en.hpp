@@ -45,7 +45,7 @@ namespace green {
 		loc[help_dec_weight] = "Saliency weighting; 0 (even) .. 1 (most weight to highest saliency)";
 		loc[help_dec_power] = "Non-linearity of saliency weighting; 1 (linear) .. 2 (more extreme)";
 		loc[help_dec_bins] = "Number of saliency bins";
-		loc[help_dec_propname] = "Mesh vertex property to use for decimation";
+		loc[help_dec_propname] = "Mesh vertex property to use for decimation if not calculating saliency.\nDefault is 'quality'.";
 		loc[help_dec_usesaliency] = "Use saliency for decimation";
 		loc[help_dec_nosaliency] = "Don't use saliency for decimation";
 		loc[param_dec_usesaliency] = "Use Saliency";

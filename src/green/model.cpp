@@ -324,6 +324,7 @@ namespace green {
 			return;
 		}
 		m_model.reset();
+		m_translation = glm::vec3(0);
 		m_fpath_load = fpath;
 		m_pending_load = std::async([=, lock=std::move(lock)]() {
 			// apparently openmesh load is not threadsafe?
@@ -353,6 +354,7 @@ namespace green {
 
 	void ModelEntity::load(const std::filesystem::path &fpath, Model m) {
 		m_model.reset();
+		m_translation = glm::vec3(0);
 		m_fpath_load = fpath;
 		m_pending_load = std::async(std::launch::deferred, [m=std::move(m)]() mutable {
 			return std::make_unique<Model>(std::move(m));
@@ -849,7 +851,6 @@ namespace green {
 				m_model->update_vao();
 				m_model->update_vbos();
 				m_scale = m_model->unit_bound_scale() * 4;
-				m_translation = glm::vec3(0);
 				// add saliency results for loaded saliency
 				for (auto &sd : m_model->original_saliency()) {
 					m_saliency_outputs.push_back(sd);

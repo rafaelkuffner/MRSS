@@ -518,6 +518,7 @@ namespace {
 			if (BeginMenu("Help")) {
 				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
 				if (Selectable("About")) about_window_open = true;
+				TextDisabled("Run with '-h' for command line help");
 				Separator();
 				PopStyleVar();
 				EndMenu();
@@ -1035,7 +1036,7 @@ namespace {
 				if (m.param()->flags().size()) {
 					cerr << "missing required argument " << m.param()->flags()[0] << endl;
 				} else {
-					cerr << "missing required argument <" << m.param()->label() << ">" << endl;
+					cerr << "missing required argument <" << m.param()->label() << "> after '" << argv[1 + m.after_index()] << "'" << endl;
 				}
 			}
 			for (auto &m : res) {
@@ -1152,12 +1153,15 @@ namespace {
 
 		if (show_gui) {
 			auto e = std::make_unique<ModelEntity>();
+			ModelEntity *ep = e.get();
 			e->load(inpath, std::move(m));
 			entities.push_back(std::move(e));
 			if (do_dec) {
 				auto ed = std::make_unique<ModelEntity>();
 				ed->load(inpath, std::move(md), dec_uparams, dec_progress);
 				entities.push_back(std::move(ed));
+				// move the pre-decimated result out of the way
+				ep->move_by({0, 0, -4});
 			}
 			main_gui();
 		}
