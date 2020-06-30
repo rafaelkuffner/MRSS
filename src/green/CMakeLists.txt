@@ -38,6 +38,10 @@ set(sources
 	imguiex.hpp
 	imguiex.cpp
 	clipp.h
+	uilocale.hpp
+	uilocale.cpp
+	uilocale_en.hpp
+	uilocale_jp.hpp
 	model.glsl
 	deferred.glsl
 	about_licences.txt

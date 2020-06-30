@@ -6,13 +6,23 @@
 
 #include <imgui.h>
 
+#include "uilocale.hpp"
+
 namespace ImGui {
+
+	using green::uilocale;
+	using green::uistring;
 
 	bool ButtonDisabled(const char* label, const ImVec2& size_arg = ImVec2{0, 0});
 
 	template <typename ...Ts>
 	inline void SetHoveredTooltip(const char *fmt, const Ts &...args) {
 		if (IsItemHovered()) SetTooltip(fmt, args...);
+	}
+
+	template <typename ...Ts>
+	inline void SetHoveredTooltip(const uilocale &loc, uistring fmt, const Ts &...args) {
+		if (IsItemHovered()) SetTooltip(loc[fmt].c_str(), args...);
 	}
 
 	inline bool SliderAny(const char *label, int *v, int v_min, int v_max, const char *format = "%d") {
@@ -25,11 +35,12 @@ namespace ImGui {
 
 	template <typename T>
 	struct param_widgets {
+		const uilocale *loc = nullptr;
 		T *defparams = nullptr;
 		T *realparams = nullptr;
 
 		template <typename U, typename ...Args>
-		bool slider(const char *label, U T::*param, U vmin, U vmax, const Args &...args) {
+		bool slider(uistring label, U T::*param, U vmin, U vmax, const Args &...args) {
 			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
 			const ImVec4 badcolhov{badcol.x, badcol.y, badcol.z, GetStyle().Colors[ImGuiCol_FrameBg].w};
 			const ImVec4 badcolbg{badcol.x * 0.7f, badcol.y * 0.7f, badcol.z * 0.7f, badcolhov.w};
@@ -44,33 +55,33 @@ namespace ImGui {
 				PushStyleColor(ImGuiCol_SliderGrab, badcol);
 				// can't be out-of-range and active at the same time
 			}
-			bool r = SliderAny(label, &val, vmin, vmax, args...);
+			bool r = SliderAny((*loc)[label].c_str(), &val, vmin, vmax, args...);
 			if (oor) PopStyleColor(3);
 			PopID();
 			return r;
 		}
 
-		bool checkbox(const char *label, bool T::*param) {
+		bool checkbox(uistring label, bool T::*param) {
 			PushID(label);
 			if (Button("Reset")) realparams->*param = defparams->*param;
 			SameLine();
-			bool r = Checkbox(label, &(realparams->*param));
+			bool r = Checkbox((*loc)[label].c_str(), &(realparams->*param));
 			PopID();
 			return r;
 		}
 
-		bool inputint(const char *label, int T::*param, int step = 1, int step_fast = 100) {
+		bool inputint(uistring label, int T::*param, int step = 1, int step_fast = 100) {
 			PushID(label);
 			if (Button("Reset")) realparams->*param = defparams->*param;
 			SameLine();
-			bool r = InputInt(label, &(realparams->*param), step, step_fast);
+			bool r = InputInt((*loc)[label].c_str(), &(realparams->*param), step, step_fast);
 			PopID();
 			return r;
 		}
 	};
 
 	template <typename T>
-	param_widgets(T *, T *) -> param_widgets<T>;
+	param_widgets(const uilocale *, T *, T *) -> param_widgets<T>;
 
 }
 

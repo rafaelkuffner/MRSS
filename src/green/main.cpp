@@ -25,6 +25,7 @@
 #include "model.hpp"
 #include "saliency.hpp"
 #include "clipp.h"
+#include "uilocale.hpp"
 
 #include "deferred.glsl.hpp"
 
@@ -958,6 +959,9 @@ namespace {
 	// expects utf-8 encoded args
 	void main_cli(int argc, const char *argv[]) {
 		using namespace clipp;
+		using namespace uistrings;
+
+		const uilocale &loc = uilocale_en();
 
 		string infile, outfile;
 		string decprop = "quality";
@@ -967,53 +971,62 @@ namespace {
 		int threads = 0;
 
 		auto alt_opts = group{
-			option("--version").set(do_version).doc("Print version"),
-			option("-h", "--help").set(do_help).doc("Show help")
+			option("--version").set(do_version)
+				.doc(loc[help_cli_version].clone()),
+			option("-h", "--help").set(do_help)
+				.doc(loc[help_cli_help].clone())
 		};
 		
 		auto common_opts = group{
-			(required("-i", "--input") & value("infile", infile)).doc("Input file"),
-			(option("-o", "--output") & value("outfile", outfile)).doc("Output file"),
+			(required("-i", "--input") & value("infile", infile))
+				.doc(loc[help_input].clone()),
+			(option("-o", "--output") & value("outfile", outfile))
+				.doc(loc[help_output].clone()),
 			(option("-j", "--threads") & integer("threads", threads))
-				.doc("Number of threads to use where parallelizable.\nDefault is all available processors."),
-			option("--ascii").set(save_ascii).doc("Save in plaintext instead of binary if possible"),
-			option("--gui").set(show_gui).doc("Show result in gui when done")
-		}.doc("Common options:");
+				.doc(loc[help_threads].clone()),
+			option("--ascii").set(save_ascii)
+				.doc(loc[help_cli_ascii].clone()),
+			option("--gui").set(show_gui)
+				.doc(loc[help_cli_gui].clone())
+		}.doc(loc[help_cli_opts_common].clone());
 
 		auto sal_opts = group{
-			option("--saliency").set(do_sal).doc("Compute saliency"),
+			option("--saliency").set(do_sal)
+				.doc(loc[help_sal_go].clone()),
 			(option("-a", "--area") & number("area", sal_uparams.area))
-				.doc("Size of the largest salient features.\nSpecified as a fraction of the surface area."),
+				.doc(loc[help_sal_area].clone()),
 			(option("-l", "--levels") & integer("levels", sal_uparams.levels))
-				.doc("Using more levels allows increasingly local features to become visible."),
+				.doc(loc[help_sal_levels].clone()),
 			(option("-r", "--contrast") & number("contrast", sal_uparams.normal_power))
-				.doc("Controls how quickly saliency tends towards extreme values."),
+				.doc(loc[help_sal_normpower].clone()),
 			(option("-c", "--contour") & number("contour", sal_uparams.curv_weight))
-				.doc("Additional visibility for immediate local features of high curvature."),
+				.doc(loc[help_sal_curvweight].clone()),
 			(option("-n", "--noisefilter").set(sal_uparams.normalmap_filter))
-				.doc("Filter out noise from otherwise smooth surfaces."),
+				.doc(loc[help_sal_noisefilter].clone()),
 			(option("-e", "--noiseheight") & number("height", sal_uparams.noise_height))
-				.doc("Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area."),
+				.doc(loc[help_sal_noiseheight].clone()),
 			(option("-s", "--subsampling") & number("samples-per-neighborhood", sal_uparams.samples_per_neighborhood))
-				.doc("Higher: more samples, more accurate results.\nDoes not usually need tuning per model."),
+				.doc(loc[help_sal_samplespern].clone()),
 			option("--fullsampling").call([]{ sal_uparams.subsample_auto = false; })
-				.doc("disable subsampling")
-		}.doc("Saliency options:");
+				.doc(loc[help_sal_full].clone())
+		}.doc(loc[help_cli_opts_saliency].clone());
 
 		auto dec_opts = group{
-			option("--decimate").set(do_dec).doc("Perform decimation"),
+			option("--decimate").set(do_dec)
+				.doc(loc[help_dec_go].clone()),
 			(option("-t", "--targetverts") & integer("verts", dec_uparams.targetverts))
-				.doc("Target number of vertices"),
+				.doc(loc[help_dec_targetverts].clone()),
 			(option("-w", "--salweight") & number("weight", dec_uparams.weight))
-				.doc("Saliency weighting; 0 (even) .. 1 (most weight to highest saliency)"),
+				.doc(loc[help_dec_weight].clone()),
 			(option("-p", "--binpower") & number("power", dec_uparams.power))
-				.doc("Non-linearity of saliency weighting; 1 (linear) .. 2 (more extreme)"),
+				.doc(loc[help_dec_power].clone()),
 			(option("--decbins") & integer("bins", dec_uparams.nbins))
-				.doc("Number of saliency bins"),
+				.doc(loc[help_dec_bins].clone()),
 			(option("--decprop") & value("propname", decprop))
-				.doc("Mesh vertex property to use for decimation.\n"),
-			option("--decimate-nosaliency").call([]{ dec_uparams.use_saliency = false; }).doc("Don't use saliency for decimation")
-		}.doc("Decimation options (Work in Progress) :");
+				.doc(loc[help_dec_propname].clone()),
+			option("--decimate-nosaliency").call([]{ dec_uparams.use_saliency = false; })
+				.doc(loc[help_dec_nosaliency].clone())
+		}.doc(loc[help_cli_opts_decimate].clone());
 
 		auto opts = (common_opts, sal_opts, dec_opts) | alt_opts;
 
@@ -1266,7 +1279,7 @@ namespace ImGui {
 			Text("%2d/%zu", i + 1, progress.levels.size());
 			SameLine();
 			char buf[1024];
-			const char *normalmap_filter_str = level.normalmap_filter ? "\nNormalmap filter active" : "";
+			const char *normalmap_filter_str = level.normalmap_filter ? "\Noise filter active" : "";
 			if (level.subsampled) {
 				const float actual_subsampling = progress.total_vertices / float(level.completed_samples);
 				std::snprintf(buf, sizeof(buf), "%.0f%% [subsampled %.1fx]", level.completion * 100, actual_subsampling);
@@ -1282,44 +1295,46 @@ namespace ImGui {
 
 	bool edit_saliency_params(green::saliency_user_params &uparams) {
 		using green::saliency_user_params;
+		using namespace green::uistrings;
+		const uilocale &loc = uilocale_en();
 		const auto uparams0 = uparams;
 		// max hardware threads leaving 1 for UI
 		static const int defthreads = std::max(1, int(std::thread::hardware_concurrency()) - 1);
 		saliency_user_params defparams;
 		defparams.thread_count = defthreads;
 		if (!uparams.thread_count) uparams.thread_count = defthreads;
-		param_widgets widgets{&defparams, &uparams};
+		param_widgets widgets{&loc, &defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		widgets.slider("Levels", &saliency_user_params::levels, 1, 6);
-		SetHoveredTooltip("Using more levels allows increasingly local features to become visible.");
-		widgets.slider("Area", &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
-		SetHoveredTooltip("Size of the largest salient features.\nSpecified as a fraction of the surface area.");
-		widgets.slider("Contour", &saliency_user_params::curv_weight, 0.f, 1.f);
-		SetHoveredTooltip("Additional visibility for immediate local features of high curvature.");
-		widgets.slider("Contrast", &saliency_user_params::normal_power, 0.f, 2.f);
-		SetHoveredTooltip("Controls how quickly saliency tends towards extreme values.");
-		widgets.checkbox("Noise Filter", &saliency_user_params::normalmap_filter);
-		SetHoveredTooltip("Filter out noise from otherwise smooth surfaces.\nEnable to access noise parameters.");
+		widgets.slider(param_sal_levels, &saliency_user_params::levels, 1, 6);
+		SetHoveredTooltip(loc, help_sal_levels);
+		widgets.slider(param_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
+		SetHoveredTooltip(loc, help_sal_area);
+		widgets.slider(param_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
+		SetHoveredTooltip(loc, help_sal_curvweight);
+		widgets.slider(param_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);
+		SetHoveredTooltip(loc, help_sal_normpower);
+		widgets.checkbox(param_sal_noisefilter, &saliency_user_params::normalmap_filter);
+		SetHoveredTooltip(loc, help_sal_noisefilter);
 		if (uparams.normalmap_filter) {
-			widgets.slider("Noise Height", &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
-			SetHoveredTooltip("Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area.");
+			widgets.slider(param_sal_noiseheight, &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
+			SetHoveredTooltip(loc, help_sal_noiseheight);
 		}
 		if (uparams.preview) {
 			Text("Preview mode: subsampling at %.1f S/N", sal_preview_spn);
 		} else {
-			widgets.checkbox("Subsample", &saliency_user_params::subsample_auto);
-			SetHoveredTooltip("Apply automatic subsampling (fast, recommended).\nEnable to access sampling parameters.");	
+			widgets.checkbox(param_sal_subsample, &saliency_user_params::subsample_auto);
+			SetHoveredTooltip(loc, help_sal_subsample);	
 			if (uparams.subsample_manual) {
 				// no longer exposing this mode of subsampling in the ui
-				widgets.slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
-				SetHoveredTooltip("Subsampling Rate\nMust be tuned for each model.\nHigher: fewer samples, less accurate results.");
+				//widgets.slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
+				//SetHoveredTooltip("Subsampling Rate\nMust be tuned for each model.\nHigher: fewer samples, less accurate results.");
 			} else if (uparams.subsample_auto) {
-				widgets.slider("S/N", &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
-				SetHoveredTooltip("Samples per Neighbourhood\nDoes not usually need tuning per model.\nHigher: more samples, more accurate results.");
+				widgets.slider(param_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
+				SetHoveredTooltip(loc, help_sal_samplespern);
 			}
 		}
-		widgets.slider("Threads", &saliency_user_params::thread_count, 1, defthreads);
-		SetHoveredTooltip("Number of computation threads to use.");
+		widgets.slider(param_threads, &saliency_user_params::thread_count, 1, defthreads);
+		SetHoveredTooltip(loc, help_threads);
 		// ensure params are valid
 		uparams.sanitize();
 		return uparams != uparams0;
@@ -1352,14 +1367,21 @@ namespace ImGui {
 
 	bool edit_decimate_params(green::decimate_user_params &uparams) {
 		using green::decimate_user_params;
+		using namespace green::uistrings;
+		const uilocale &loc = uilocale_en();
 		decimate_user_params defparams;
-		param_widgets widgets{&defparams, &uparams};
+		param_widgets widgets{&loc, &defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		widgets.inputint("Vertices", &decimate_user_params::targetverts, 100, 1000);
-		widgets.checkbox("Use Saliency", &decimate_user_params::use_saliency);
-		widgets.slider("Bins", &decimate_user_params::nbins, 1, 10);
-		widgets.slider("Weight", &decimate_user_params::weight, 0.f, 1.f);
-		widgets.slider("Power", &decimate_user_params::power, 0.f, 2.f);
+		widgets.checkbox(param_dec_usesaliency, &decimate_user_params::use_saliency);
+		SetHoveredTooltip(loc, help_dec_usesaliency);
+		widgets.inputint(param_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
+		SetHoveredTooltip(loc, help_dec_targetverts);
+		widgets.slider(param_dec_bins, &decimate_user_params::nbins, 1, 10);
+		SetHoveredTooltip(loc, help_dec_bins);
+		widgets.slider(param_dec_weight, &decimate_user_params::weight, 0.f, 1.f);
+		SetHoveredTooltip(loc, help_dec_weight);
+		widgets.slider(param_dec_power, &decimate_user_params::power, 0.f, 2.f);
+		SetHoveredTooltip(loc, help_dec_power);
 		// ensure params are valid
 		uparams.sanitize();
 		// TODO return true if modified?
