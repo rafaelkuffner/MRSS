@@ -1090,9 +1090,16 @@ namespace {
 
 		const auto inpath = std::filesystem::u8path(infile);
 
-		Model m{inpath};
+		Model m;
 		Model md;
 		Model *pmr = &m;
+
+		try {
+			m = Model{inpath};
+		} catch (exception &e) {
+			cerr << "failed to load model: " << e.what() << endl;
+			exit(1);
+		}
 
 		decimate_progress dec_progress;
 		model_saliency_data sd;
@@ -1153,7 +1160,11 @@ namespace {
 		}
 
 		if (outfile.size()) {
-			pmr->save(std::filesystem::u8path(outfile), sd.prop_saliency, !save_ascii);
+			try {
+				pmr->save(std::filesystem::u8path(outfile), sd.prop_saliency, !save_ascii);
+			} catch (exception &e) {
+				cerr << "failed to save model: " << e.what() << endl;
+			}
 		}
 
 		if (show_gui) {
