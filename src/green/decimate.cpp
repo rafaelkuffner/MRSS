@@ -89,7 +89,7 @@ namespace {
 
 	public: // inherited
 		virtual void initialize() {
-			
+			std::printf("decimating %5.1f", 0.f);
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
@@ -104,14 +104,14 @@ namespace {
 
 		virtual void postprocess_collapse(const CollapseInfo& _ci) {
 			collapses++;
-			if (collapses - collapses_last_progress > 1000) {
+			if (collapses - collapses_last_progress > 5000) {
 				collapses_last_progress = collapses;
 				progress->completed_collapses = collapses;
 				progress->elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
 				if (progress->should_cancel) cancel = true;
+				std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%", progress->elapsed_time / std::chrono::duration<double>(1.0), collapses, 100.f * collapses / progress->target_collapses);
 			}
 		}
-
 
 	public: // local
 		OpenMesh::VPropHandleT<int> prop_bin;
@@ -217,6 +217,8 @@ namespace green {
 			mod.current_bin = i;
 			int target = init_bin_counts[i] - bin_keep[i];
 			int collapses = decimater.decimate_to(std::max<size_t>(mparams.mesh->n_vertices() - target, uparams.targetverts));
+			progress.completed_collapses = mod.collapses;
+			std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f\n", progress.elapsed_time / std::chrono::duration<double>(1.0), progress.completed_collapses, 100.f * progress.completed_collapses / progress.target_collapses);
 			std::cout << "vertices removed: " << collapses << std::endl;
 			mparams.mesh->garbage_collection();
 		}
