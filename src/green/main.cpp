@@ -1104,7 +1104,7 @@ namespace {
 		decimate_progress dec_progress;
 		model_saliency_data sd;
 
-		if (!do_sal && do_dec) {
+		if (!do_sal && do_dec && dec_uparams.use_saliency) {
 			if (m.trimesh().get_property_handle(sd.prop_saliency, decprop)) {
 				sd.filename = inpath.filename().u8string();
 				sd.propname = decprop;
