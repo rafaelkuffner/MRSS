@@ -32,6 +32,7 @@ namespace green {
 		float weight = 1.f;
 		float power = 1.f;
 		bool use_saliency = true;
+		bool show_progress = true;
 
 		std::string str() const {
 			char buf[128];

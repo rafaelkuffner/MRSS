@@ -991,7 +991,7 @@ namespace {
 				.doc(loc[help_cli_gui].clone()),
 			option("--noprogress").call([]{
 					sal_uparams.show_progress = false;
-					// TODO dec progress
+					dec_uparams.show_progress = false;
 				})
 				.doc(loc[help_cli_noprogress].clone())
 		}.doc(loc[help_cli_opts_common].clone());

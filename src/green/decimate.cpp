@@ -89,7 +89,7 @@ namespace {
 
 	public: // inherited
 		virtual void initialize() {
-			std::printf("decimating %5.1f", 0.f);
+			std::printf("decimating @%8.2fs : %9d collapses, %5.1f%%", progress->elapsed_time / std::chrono::duration<double>(1.0), collapses, 100.f * collapses / progress->target_collapses);
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
@@ -109,7 +109,7 @@ namespace {
 				progress->completed_collapses = collapses;
 				progress->elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
 				if (progress->should_cancel) cancel = true;
-				std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%", progress->elapsed_time / std::chrono::duration<double>(1.0), collapses, 100.f * collapses / progress->target_collapses);
+				if (show_progress) std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%", progress->elapsed_time / std::chrono::duration<double>(1.0), collapses, 100.f * collapses / progress->target_collapses);
 			}
 		}
 
@@ -121,6 +121,7 @@ namespace {
 		int collapses_last_progress = 0;
 		std::chrono::steady_clock::time_point time_start;
 		bool cancel = false;
+		bool show_progress = true;
 
 	private:
 
@@ -199,6 +200,7 @@ namespace green {
 		decimater.add(hModWeighting);
 		decimater.module(hModWeighting).progress = &progress;
 		decimater.module(hModWeighting).time_start = time_start;
+		decimater.module(hModWeighting).show_progress = uparams.show_progress;
 		
 		if (uparams.use_saliency) {
 			decimater.module(hModWeighting).prop_bin = prop_bin;
@@ -218,7 +220,7 @@ namespace green {
 			int target = init_bin_counts[i] - bin_keep[i];
 			int collapses = decimater.decimate_to(std::max<size_t>(mparams.mesh->n_vertices() - target, uparams.targetverts));
 			progress.completed_collapses = mod.collapses;
-			std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f\n", progress.elapsed_time / std::chrono::duration<double>(1.0), progress.completed_collapses, 100.f * progress.completed_collapses / progress.target_collapses);
+			std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%\n", progress.elapsed_time / std::chrono::duration<double>(1.0), progress.completed_collapses, 100.f * progress.completed_collapses / progress.target_collapses);
 			std::cout << "vertices removed: " << collapses << std::endl;
 			mparams.mesh->garbage_collection();
 		}
