@@ -1104,13 +1104,16 @@ namespace {
 		decimate_progress dec_progress;
 		model_saliency_data sd;
 
-		if (!do_sal && do_dec && dec_uparams.use_saliency) {
+		if (!do_sal && do_dec) {
+			// should always try find named property so that it can be decimated
+			// even if we're not actually using it for decimation
 			if (m.trimesh().get_property_handle(sd.prop_saliency, decprop)) {
 				sd.filename = inpath.filename().u8string();
 				sd.propname = decprop;
 			} else {
 				cerr << "couldn't find saliency property '" << decprop << "' for decimation" << endl;
-				exit(1);
+				// only exit if the property is really required
+				if (dec_uparams.use_saliency) exit(1);
 			}
 		}
 
