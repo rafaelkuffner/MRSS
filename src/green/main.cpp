@@ -1117,7 +1117,7 @@ namespace {
 			if (!sd.prop_saliency.is_valid()) {
 				cout << "couldn't find saliency property '" << decprop << "'" << endl;
 				// only exit if the property is really required
-				if (dec_uparams.use_saliency) exit(1);
+				if (do_dec && dec_uparams.use_saliency) exit(1);
 			}
 		}
 
