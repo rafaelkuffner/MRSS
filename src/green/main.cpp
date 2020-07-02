@@ -1164,6 +1164,7 @@ namespace {
 				pmr->save(std::filesystem::u8path(outfile), sd.prop_saliency, !save_ascii);
 			} catch (exception &e) {
 				cerr << "failed to save model: " << e.what() << endl;
+				if (!show_gui) exit(1);
 			}
 		}
 
