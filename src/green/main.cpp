@@ -1078,7 +1078,7 @@ namespace {
 			cout << man << endl;
 		}
 		
-		if (!(do_sal || do_dec)) {
+		if (!(do_sal || do_dec || show_gui || outfile.size())) {
 			if (!do_help && !do_version) cerr << "nothing to do" << endl;
 			exit(0);
 		}
@@ -1097,21 +1097,25 @@ namespace {
 		try {
 			m = Model{inpath};
 		} catch (exception &e) {
-			cerr << "failed to load model: " << e.what() << endl;
+			cout << "failed to load model: " << e.what() << endl;
 			exit(1);
 		}
 
 		decimate_progress dec_progress;
 		model_saliency_data sd;
 
-		if (!do_sal && do_dec) {
-			// should always try find named property so that it can be decimated
+		if (!do_sal) {
+			// should always try find named property so that it can be decimated or saved
 			// even if we're not actually using it for decimation
-			if (m.trimesh().get_property_handle(sd.prop_saliency, decprop)) {
-				sd.filename = inpath.filename().u8string();
-				sd.propname = decprop;
-			} else {
-				cerr << "couldn't find saliency property '" << decprop << "' for decimation" << endl;
+			// need to search model, not mesh (because model de-names the properties)
+			for (auto &sd0 : m.original_saliency()) {
+				if (sd0.propname == decprop) {
+					sd = sd0;
+					cout << "using saliency property '" << decprop << "'" << endl;
+				}
+			}
+			if (!sd.prop_saliency.is_valid()) {
+				cout << "couldn't find saliency property '" << decprop << "'" << endl;
 				// only exit if the property is really required
 				if (dec_uparams.use_saliency) exit(1);
 			}
@@ -1135,7 +1139,7 @@ namespace {
 
 			// calculate saliency
 			if (!compute_saliency(mparams, sal_uparams, sal_progress)) {
-				cerr << "saliency cancelled" << endl;
+				cout << "saliency cancelled" << endl;
 				exit(1);
 			}
 
@@ -1156,7 +1160,7 @@ namespace {
 		if (do_dec) {
 			md = m.prepare_decimate(sd);
 			if (!md.decimate(dec_uparams, dec_progress)) {
-				cerr << "decimation cancelled" << endl;
+				cout << "decimation cancelled" << endl;
 				exit(1);
 			}
 			pmr = &md;
@@ -1166,7 +1170,7 @@ namespace {
 			try {
 				pmr->save(std::filesystem::u8path(outfile), sd.prop_saliency, !save_ascii);
 			} catch (exception &e) {
-				cerr << "failed to save model: " << e.what() << endl;
+				cout << "failed to save model: " << e.what() << endl;
 				if (!show_gui) exit(1);
 			}
 		}
