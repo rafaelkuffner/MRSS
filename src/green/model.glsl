@@ -24,7 +24,8 @@ out VertexData {
 	vec3 norm_v;
 	vec4 color;
 	flat int id;
-	flat bool should_discard;
+	// this causes problems with intel igpus, and we're not using it atm anyway
+	//flat bool should_discard;
 } v_out;
 
 vec4 gamma_decode(vec4 c) {
@@ -72,7 +73,7 @@ void main() {
 	v_out.norm_v = normalize(vec3(u_modelview * vec4(a_norm_m + vec3(0,0.0001,0), 0)));
 	v_out.color = map_color(a_color);
 	v_out.id = gl_VertexID;
-	v_out.should_discard = u_show_samples && a_color.a < 0.5;
+	//v_out.should_discard = u_show_samples && a_color.a < 0.5;
 }
 
 #endif
@@ -84,14 +85,14 @@ in VertexData {
 	vec3 norm_v;
 	vec4 color;
 	flat int id;
-	flat bool should_discard;
+	//flat bool should_discard;
 } v_in;
 
 layout(location=0) out vec4 f_color;
 layout(location=1) out ivec2 f_id;
 
 void main() {
-	if (v_in.should_discard) discard;
+	//if (v_in.should_discard) discard;
 	vec3 norm_v = normalize(v_in.norm_v);
 	f_color = vec4(v_in.color.rgb * (abs(norm_v.z) * u_shading + 1.0 - u_shading), 1);
 	gl_FragDepth = frag_depth() + u_depth_bias;
