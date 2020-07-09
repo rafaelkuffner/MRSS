@@ -17,4 +17,8 @@ namespace green {
 		return GREEN_GIT_TIMESTAMP;
 	}
 
+	bool git_has_changes() {
+		return GREEN_GIT_HAS_CHANGES;
+	}
+
 }

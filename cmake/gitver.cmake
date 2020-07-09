@@ -6,13 +6,15 @@ message(STATUS "Retrieving git revision info")
 set(git_rev unknown)
 set(git_describe unknown)
 set(git_timestamp unknown)
+set(git_status unknown)
+set(git_has_changes 0)
 
 find_package(Git)
 
-set(revfile "${dst}.rev")
-set(prev "")
-if(EXISTS "${revfile}")
-	file(READ "${revfile}" prev)
+set(descfile "${dst}.rev")
+set(prevdesc "")
+if(EXISTS "${descfile}")
+	file(READ "${descfile}" prevdesc)
 endif()
 
 if(GIT_FOUND)
@@ -34,17 +36,29 @@ if(GIT_FOUND)
 		ERROR_QUIET
 		OUTPUT_STRIP_TRAILING_WHITESPACE
 	)
+	execute_process(
+		COMMAND ${GIT_EXECUTABLE} --no-optional-locks status --porcelain
+		OUTPUT_VARIABLE git_status
+		ERROR_QUIET
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
+	if(NOT "${git_status}" STREQUAL "")
+		set(git_has_changes 1)
+	endif()
 	message(STATUS "Git rev: " ${git_rev})
 	message(STATUS "Git describe: " ${git_describe})
 	message(STATUS "Git timestamp: " ${git_timestamp})
+	message(STATUS "Git has changes: " ${git_has_changes})
+	message(STATUS "Git status:\n" ${git_status})
 else()
 	message(STATUS "Git not found")
 endif()
 
-if("${git_rev}" STREQUAL "${prev}")
-	message(STATUS "Git rev up-to-date, skipping configure")
+set(desc "${git_describe} (${git_rev}) ${git_has_changes}")
+if("${desc}" STREQUAL "${prevdesc}")
+	message(STATUS "Git description up-to-date, skipping configure")
 else()
 	message(STATUS "configuring ${src} -> ${dst}")
 	configure_file("${src}" "${dst}" @ONLY)
-	file(WRITE "${revfile}" ${git_rev})
+	file(WRITE "${descfile}" "${desc}")
 endif()

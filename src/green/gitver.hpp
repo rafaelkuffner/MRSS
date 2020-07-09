@@ -14,6 +14,8 @@ namespace green {
 
 	const char * git_timestamp();
 
+	bool git_has_changes();
+
 }
 
 #endif

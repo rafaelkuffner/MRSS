@@ -551,6 +551,7 @@ namespace {
 				Text("Copyright 2020\nVictoria University of Wellington\nComputational Media Innovation Centre\nAll rights reserved.");
 				Separator();
 				Text("Version:\n%s (%s)\n%s", git_describe(), git_revision(), git_timestamp());
+				if (git_has_changes()) Text("+ UNCOMMITTED CHANGES");
 				Separator();
 				if (Button("Library Licenses")) about_licences_window_open = true;
 			}
@@ -793,7 +794,8 @@ namespace {
 		// request a window that can perform gamma correction
 		glfwWindowHint(GLFW_SRGB_CAPABLE, true);
 
-		window = glfwCreateWindow(1280, 800, (std::string("Multi-Resolution Subsampled Saliency (") + git_describe() + ")").c_str(), nullptr, nullptr);
+		auto window_title = std::string("Multi-Resolution Subsampled Saliency (") + git_describe() + ")" + (git_has_changes() ? " + UNCOMMITTED CHANGES" : "");
+		window = glfwCreateWindow(1280, 800, window_title.c_str(), nullptr, nullptr);
 		if (!window) {
 			cerr << "Error: Could not create GLFW window" << endl;
 			abort();
@@ -1058,6 +1060,7 @@ namespace {
 		
 		if (do_version) {
 			cout << "Multi-Resolution Subsampled Saliency\n" << git_describe() << " (" << git_revision() << ")" << endl;
+			if (git_has_changes()) cout << "+ UNCOMMITTED CHANGES" << endl;
 		}
 
 		if (do_help) {
@@ -1074,6 +1077,7 @@ namespace {
 			man.append_section(
 				"VERSION", 
 				string("    ") + git_describe() + " (" + git_revision() + ")\n    " + git_timestamp()
+				+ (git_has_changes() ? "\n    + UNCOMMITTED CHANGES" : "")
 			);
 			cout << man << endl;
 		}
