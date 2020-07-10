@@ -173,8 +173,13 @@ namespace green {
 		Model m;
 		m.m_bound_min = m_bound_min;
 		m.m_bound_max = m_bound_max;
-		// copy vertex positions, connectivity, and probably colors and normals?
-		m.m_trimesh.assign(m_trimesh, true);
+		// copy vertex positions and connectivity
+		m.m_trimesh.assign(m_trimesh);
+		// copy original vertex colors if present
+		if (m_prop_vcolor_original.is_valid()) {
+			m.m_trimesh.add_property(m.m_prop_vcolor_original);
+			m.m_trimesh.property(m.m_prop_vcolor_original).data_vector() = m_trimesh.property(m_prop_vcolor_original).data_vector();
+		}
 		// copy (specified) saliency property
 		model_saliency_data sd2 = sd;
 		sd2.prop_saliency.invalidate();
@@ -197,6 +202,8 @@ namespace green {
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
+		m_trimesh.request_face_normals();
+		m_trimesh.request_vertex_normals();
 		m_trimesh.update_face_normals();
 		m_trimesh.update_vertex_normals();
 		// recompute vertex areas and edge length
@@ -982,6 +989,8 @@ namespace green {
 		e->m_basis_up = m_basis_up;
 		e->m_basis_back = m_basis_back;
 		e->m_rotation_euler_yxz = m_rotation_euler_yxz;
+		e->m_cull_faces = m_cull_faces;
+		e->m_cull_edges = m_cull_edges;
 		// TODO move prepare to async
 		auto m = m_model->prepare_decimate(sal_valid ? m_saliency_outputs[m_saliency_index] : model_saliency_data{});
 		e->m_pending_load = std::async([=, e=e.get(), m=std::move(m), lock2=std::move(lock2)]() mutable {
