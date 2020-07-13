@@ -110,6 +110,7 @@ namespace {
 	drag_mode cur_drag_mode = drag_mode::plane;
 
 	bool need_select = false;
+	bool need_focus_here = false;
 	bool maybe_dragging = false;
 	bool dragging_camera = false;
 	bool drag_skip_next = false;
@@ -576,7 +577,7 @@ namespace {
 			SetNextWindowPos({winsize.x - 20, 30}, ImGuiCond_Always, {1.f, 0.f});
 			if (Begin("ControlHelp", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing)) {
 				PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-				Text("Left Mouse: Move\n [Object, Horizontal]\n + Shift: Vertical\n + Alt: Camera");
+				Text("Left Mouse: Drag\n [Object, Horizontal]\n + Shift: Vertical\n + Alt: Drag Camera\n + Ctrl: Focus Here");
 				Text("Right Mouse: Rotate camera");
 				Text("Scroll: Zoom");
 				PopStyleVar();
@@ -663,7 +664,24 @@ namespace {
 		auto camdrag_norm = drag_plane_normal(world_ray.dir, {0, 1, 0}, cur_drag_mode);
 		cur_camdrag_pos = world_ray.origin + world_ray.dir * ray_plane_intersect(world_ray.origin, world_ray.dir, camdrag_norm, dot(camdrag_norm, {cam.focus.x, 0, cam.focus.z}));
 
-		if (need_select) {
+		if (need_focus_here) {
+			// move camera focus to mouse pos
+			need_focus_here = false;
+			if (cur_sel.hover_entity >= 0 && !dragging_camera) {
+				// ... on hovered entity; dist 0 to ensure click was actually on the entity,
+				// because we rely on the click position on the entity
+				if (cur_sel.hover_entity_dist == 0) {
+					cam.focus = cur_world_pos;
+					cam.cam_distance = length(cam.focus - world_ray.origin);
+				}
+			} else {
+				// ... on camera drag plane
+				// preserve distance of focus from plane
+				const float d0 = dot(cam.focus, camdrag_norm);
+				const float d1 = dot(cur_camdrag_pos, camdrag_norm);
+				cam.focus = cur_camdrag_pos + (d0 - d1) * camdrag_norm;
+			}
+		} else if (need_select) {
 			// select entity/vertex
 			// NOTE the event handler runs before we've updated the selected entity
 			// so we delay actually doing the selection until here
@@ -1463,9 +1481,13 @@ namespace {
 		if (io.WantCaptureMouse) return;
 		maybe_dragging = false;
 		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-			need_select = true;
-			dragging_camera = mods & GLFW_MOD_ALT;
 			cur_drag_mode = (mods & GLFW_MOD_SHIFT) ? drag_mode::axis : drag_mode::plane;
+			dragging_camera = mods & GLFW_MOD_ALT;
+			if (mods & GLFW_MOD_CONTROL) {
+				need_focus_here = true;
+			} else {
+				need_select = true;
+			}
 		}
 	}
 
