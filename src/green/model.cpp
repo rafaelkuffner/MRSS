@@ -612,8 +612,9 @@ namespace green {
 					str = std::string(so);
 					*out_text = str.c_str();
 					return true;
-				}, m_saliency_outputs.data(), m_saliency_outputs.size()
-					)) {
+				}, 
+				m_saliency_outputs.data(), m_saliency_outputs.size()
+			)) {
 				m_saliency_vbo_dirty = true;
 			}
 
@@ -664,6 +665,8 @@ namespace green {
 				SameLine();
 				if (Button("Remove")) OpenPopup("##remove");
 				SameLine();
+				if (Button("Rename")) OpenPopup("Rename Saliency##rename");
+				SameLine();
 				if (Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
 				Separator();
 				if (salout.filename.empty()) {
@@ -684,7 +687,28 @@ namespace green {
 						if (Button("OK")) CloseCurrentPopup();
 					}
 				}
-				if (BeginPopup("##remove", ImGuiWindowFlags_Modal)) {
+				bool rename_open = true;
+				SetNextWindowSize({300, 100}, ImGuiCond_Appearing);
+				if (BeginPopupModal("Rename Saliency##rename", &rename_open)) {
+					Text("New saliency property name");
+					// TODO better?
+					static char buf[1024]{};
+					if (IsWindowAppearing()) {
+						if (salout.propname.substr(0, 7) == "quality") {
+							strncpy(buf, salout.propname.c_str() + 7, sizeof(buf));
+						} else {
+							buf[0] = '\0';
+						}
+						SetKeyboardFocusHere();
+					}
+					SetNextItemWidth(GetContentRegionAvail().x);
+					if (InputText("", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+						(salout.propname = "quality") += buf;
+						CloseCurrentPopup();
+					}
+					EndPopup();
+				}
+				if (BeginPopupModal("##remove")) {
 					Text("Remove saliency result?");
 					if (Button("Remove")) {
 						std::unique_lock lock(m_modelmtx, std::defer_lock);
@@ -695,6 +719,7 @@ namespace green {
 							m_model->trimesh().remove_property(it->prop_saliency);
 							m_saliency_outputs.erase(it);
 							// references/iterators into saliency outputs are invalidated
+							// (so this section should come last)
 							if (m_saliency_index >= m_saliency_outputs.size()) {
 								m_saliency_index = std::max(0, m_saliency_index - 1);
 								m_saliency_vbo_dirty = true;
@@ -711,6 +736,8 @@ namespace green {
 				ButtonDisabled("Copy");
 				SameLine();
 				ButtonDisabled("Remove");
+				SameLine();
+				ButtonDisabled("Rename");
 				SameLine();
 				ButtonDisabled("Baseline");
 			}

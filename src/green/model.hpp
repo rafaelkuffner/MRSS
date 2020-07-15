@@ -33,7 +33,7 @@ namespace green {
 
 	struct model_saliency_data {
 		std::string filename;
-		std::string propname;
+		std::string propname = "quality";
 		saliency_user_params uparams;
 		saliency_progress progress;
 		OpenMesh::VPropHandleT<float> prop_saliency{};
@@ -41,6 +41,9 @@ namespace green {
 		bool decimated = false;
 
 		std::string str() const {
+			// actual property name should be prefixed with 'quality'
+			// this is then stripped for the display name
+			std::string pdname = propname.substr(0, 7) == "quality" ? propname.substr(7) : propname;
 			std::string s;
 			if (decimated) {
 				s += "<decimated> ";
@@ -48,11 +51,13 @@ namespace green {
 				s += "<preview> ";
 			}
 			if (filename.empty()) {
-				s += std::string(uparams);
+				s += pdname.empty() ? uparams.str() : pdname;
 			} else {
 				s += filename;
-				s += "?";
-				s += propname;
+				if (!pdname.empty()) {
+					s += "?";
+					s += pdname;
+				}
 			}
 			return s;
 		}

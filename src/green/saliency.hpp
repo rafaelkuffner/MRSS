@@ -103,8 +103,8 @@ namespace green {
 			char buf[128];
 			char *end = buf + sizeof(buf);
 			char *p = buf;
-			p += snprintf(p, end - p, "l=%d,a=%.3f,w=%.2f,p=%.2f", levels, area, curv_weight, normal_power);
-			if (normalmap_filter) p += snprintf(p, end - p, ",N,h=%.3f", noise_height);
+			p += snprintf(p, end - p, "l=%d,a=%.3f,c=%.2f,r=%.2f", levels, area, curv_weight, normal_power);
+			if (normalmap_filter) p += snprintf(p, end - p, ",n,e=%.3f", noise_height);
 			return {buf};
 		}
 
