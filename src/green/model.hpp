@@ -36,9 +36,10 @@ namespace green {
 		std::string propname = "quality";
 		saliency_user_params uparams;
 		saliency_progress progress;
-		OpenMesh::VPropHandleT<float> prop_saliency{};
+		saliency_prop_t prop_saliency{};
 		OpenMesh::VPropHandleT<unsigned char> prop_sampled{};
 		bool decimated = false;
+		bool persistent = false;
 
 		std::string str() const {
 			// actual property name should be prefixed with 'quality'
@@ -76,6 +77,7 @@ namespace green {
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
+		saliency_prop_t m_prop_sal_dec;
 		std::vector<model_saliency_data> m_original_saliency;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
@@ -93,9 +95,9 @@ namespace green {
 
 		Model(const std::filesystem::path &fpath);
 
-		void save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency, bool binary);
+		void save(const std::filesystem::path &fpath, saliency_prop_t prop_saliency, bool binary);
 
-		Model prepare_decimate(const model_saliency_data &sd) const;
+		Model prepare_decimate(saliency_prop_t prop_saliency, const std::vector<model_saliency_data> &sdv) const;
 
 		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
 
@@ -113,6 +115,10 @@ namespace green {
 
 		OpenMesh::EPropHandleT<float> prop_edge_length() const {
 			return m_prop_edge_length;
+		}
+
+		saliency_prop_t prop_sal_dec() const {
+			return m_prop_sal_dec;
 		}
 
 		std::vector<model_saliency_data> & original_saliency() {

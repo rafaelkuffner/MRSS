@@ -94,8 +94,7 @@ namespace green {
 			}
 		}
 
-		using sprop_t = decltype(model_saliency_data::prop_saliency);
-		std::vector<std::pair<sprop_t, model_saliency_data>> sprops;
+		std::vector<std::pair<saliency_prop_t, model_saliency_data>> sprops;
 
 		// check for 'raw' saliency properties
 		for (auto it = m_trimesh.vprops_begin(); it != m_trimesh.vprops_end(); ++it) {
@@ -104,11 +103,13 @@ namespace green {
 			if (!prop) continue;
 			if (prop->name().substr(0, 7) == "quality") {
 				std::cout << "Found quality property " << prop->name() << std::endl;
-				auto ph0 = sprop_t{int(it - m_trimesh.vprops_begin())};
+				auto ph0 = saliency_prop_t{int(it - m_trimesh.vprops_begin())};
 				if (&m_trimesh.property(ph0) != prop) abort();
 				model_saliency_data sd;
 				sd.filename = fpath.filename().u8string();
 				sd.propname = prop->name();
+				// re-persist by default
+				sd.persistent = true;
 				sprops.emplace_back(ph0, std::move(sd));
 			}
 		}
@@ -116,7 +117,7 @@ namespace green {
 		// move 'raw' saliency to unnamed properties
 		// need 2 passes because we cant modify the properties while iterating them
 		for (auto &p : sprops) {
-			sprop_t ph;
+			saliency_prop_t ph;
 			m_trimesh.add_property(ph);
 			m_trimesh.property(ph).data_vector() = std::move(m_trimesh.property(p.first).data_vector());
 			m_trimesh.remove_property(p.first);
@@ -127,7 +128,7 @@ namespace green {
 
 	}
 
-	void Model::save(const std::filesystem::path &fpath, OpenMesh::VPropHandleT<float> prop_saliency, bool binary) {
+	void Model::save(const std::filesystem::path &fpath, saliency_prop_t prop_saliency, bool binary) {
 
 		if (m_trimesh.has_vertex_colors() && prop_saliency.is_valid()) {
 			std::cout << "Colorizing saliency" << std::endl;
@@ -169,7 +170,7 @@ namespace green {
 		}
 	}
 
-	Model Model::prepare_decimate(const model_saliency_data &sd) const {
+	Model Model::prepare_decimate(saliency_prop_t prop_saliency, const std::vector<model_saliency_data> &sdv) const {
 		Model m;
 		m.m_bound_min = m_bound_min;
 		m.m_bound_max = m_bound_max;
@@ -180,15 +181,18 @@ namespace green {
 			m.m_trimesh.add_property(m.m_prop_vcolor_original);
 			m.m_trimesh.property(m.m_prop_vcolor_original).data_vector() = m_trimesh.property(m_prop_vcolor_original).data_vector();
 		}
-		// copy (specified) saliency property
-		model_saliency_data sd2 = sd;
-		sd2.prop_saliency.invalidate();
-		sd2.prop_sampled.invalidate();
-		sd2.decimated = true;
-		if (sd.prop_saliency.is_valid()) {
-			m.m_trimesh.add_property(sd2.prop_saliency);
-			m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
-			m.m_original_saliency.push_back(sd2);
+		// copy specified saliency properties
+		for (auto &sd : sdv) {
+			model_saliency_data sd2 = sd;
+			sd2.prop_saliency.invalidate();
+			sd2.prop_sampled.invalidate();
+			sd2.decimated = true;
+			if (sd.prop_saliency.is_valid()) {
+				m.m_trimesh.add_property(sd2.prop_saliency);
+				if (sd.prop_saliency == prop_saliency) m.m_prop_sal_dec = sd2.prop_saliency;
+				m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
+				m.m_original_saliency.push_back(std::move(sd2));
+			}
 		}
 		return m;
 	}
@@ -198,7 +202,7 @@ namespace green {
 		std::cout << "Decimating model" << std::endl;
 		decimate_mesh_params mparams;
 		mparams.mesh = &m_trimesh;
-		if (m_original_saliency.size()) mparams.prop_saliency = m_original_saliency[0].prop_saliency;
+		mparams.prop_saliency = m_prop_sal_dec;
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
@@ -668,6 +672,8 @@ namespace green {
 				if (Button("Rename")) OpenPopup("Rename Saliency##rename");
 				SameLine();
 				if (Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
+				Checkbox("Persistent", &salout.persistent);
+				SetHoveredTooltip("Persistent properties will be preserved when decimating\nand will be exported by default");
 				Separator();
 				if (salout.filename.empty()) {
 					if (CollapsingHeader("Saliency Parameters")) {
@@ -1001,7 +1007,6 @@ namespace green {
 
 	std::unique_ptr<ModelEntity> ModelEntity::decimate_async(const decimate_user_params &uparams) {
 		// this function isn't const because it needs to lock the mutex - mutable?
-		const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
 		std::shared_lock lock1(m_modelmtx, std::defer_lock);
 		if (!lock1.try_lock()) {
 			spawn_locked_notification();
@@ -1018,9 +1023,24 @@ namespace green {
 		e->m_rotation_euler_yxz = m_rotation_euler_yxz;
 		e->m_cull_faces = m_cull_faces;
 		e->m_cull_edges = m_cull_edges;
-		// TODO move prepare to async
-		auto m = m_model->prepare_decimate(sal_valid ? m_saliency_outputs[m_saliency_index] : model_saliency_data{});
-		e->m_pending_load = std::async([=, e=e.get(), m=std::move(m), lock2=std::move(lock2)]() mutable {
+		e->m_pending_load = std::async([=, e=e.get(), lock1=std::move(lock1), lock2=std::move(lock2)]() mutable {
+			// prepare mesh copy to decimate
+			// this is slow enough on big models to be async
+			std::vector<model_saliency_data> sdv;
+			saliency_prop_t srcprop;
+			for (int i = 0; i < m_saliency_outputs.size(); i++) {
+				auto &sd = m_saliency_outputs[i];
+				if (i == m_saliency_index || sd.persistent) {
+					srcprop = sd.prop_saliency;
+					sdv.push_back(sd);
+				} else if (sd.persistent) {
+					sdv.push_back(sd);
+				}
+			}
+			auto m = m_model->prepare_decimate(srcprop, sdv);
+			// release lock on source model
+			lock1.release();
+			// now decimate
 			if (!m.decimate(uparams, e->m_dec_progress)) throw std::runtime_error("decimation was cancelled");
 			return std::make_unique<Model>(std::move(m));
 		});

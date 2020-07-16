@@ -1180,7 +1180,7 @@ namespace {
 		}
 
 		if (do_dec) {
-			md = m.prepare_decimate(sd);
+			md = m.prepare_decimate(sd.prop_saliency, m.original_saliency());
 			if (!md.decimate(dec_uparams, dec_progress)) {
 				cout << "decimation cancelled" << endl;
 				exit(1);

@@ -26,6 +26,8 @@
 
 namespace green {
 
+	using saliency_prop_t = OpenMesh::VPropHandleT<float>;
+
 	class saliency_result {
 	private:
 		std::function<void(bool)> m_cleanup;
@@ -134,13 +136,13 @@ namespace green {
 		// input
 		OpenMesh::EPropHandleT<float> prop_edge_length;
 		// output: saliency
-		OpenMesh::VPropHandleT<float> prop_saliency;
+		saliency_prop_t prop_saliency;
 		// output: sample location flags (bool, uchar to avoid vector<bool>)
 		OpenMesh::VPropHandleT<unsigned char> prop_sampled;
 		// temp
 		OpenMesh::VPropHandleT<float> prop_curvature;
 		// temp
-		std::vector<OpenMesh::VPropHandleT<float>> prop_saliency_levels;
+		std::vector<saliency_prop_t> prop_saliency_levels;
 		// cleanup to be run from result
 		std::function<void(bool)> cleanup;
 	};
