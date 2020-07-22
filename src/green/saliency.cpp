@@ -89,13 +89,17 @@ namespace green {
 
 			m_hMin = curvhist.getMin();
 			m_hMax = curvhist.getMax();
+			std::cout << "Curv min: " << m_hMin << std::endl;
+			std::cout << "Curv max: " << m_hMax << std::endl;
 
 			m_progress.state = saliency_computation_state::area;
 			std::cout << "Computing surface area" << std::endl;
 			m_surfaceArea = surfaceArea(*m_mparams.mesh);
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
+			std::cout << "Surface area: " << m_surfaceArea << std::endl;
 
 			m_real_noise_height = m_uparams.noise_height * sqrt(m_surfaceArea);
+			std::cout << "Real noise height: " << m_real_noise_height << std::endl;
 
 			m_progress.state = saliency_computation_state::nhprep;
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
@@ -162,6 +166,7 @@ namespace green {
 				// && (currentRadius * currentRadius * 3.14159265f / m_surfaceArea) <= 0.00125f;
 				m_progress.levels[currentLevel].normalmap_filter = normalmap_filter;
 				
+				std::cout << "Real neighbourhood radius: " << currentRadius << std::endl;
 				std::cout << "Desired saliency subsampling ~" << (100.f / subsampling) << "% (~" << subsampling << "x)" << std::endl;
 
 				if (subsampling >= 5 && samples_per_neighbourhood > 0) {
