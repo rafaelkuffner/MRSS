@@ -78,7 +78,7 @@ namespace green {
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
 		saliency_prop_t m_prop_sal_dec;
-		std::vector<model_saliency_data> m_original_saliency;
+		std::vector<model_saliency_data> m_saliency;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 
@@ -121,12 +121,12 @@ namespace green {
 			return m_prop_sal_dec;
 		}
 
-		std::vector<model_saliency_data> & original_saliency() {
-			return m_original_saliency;
+		std::vector<model_saliency_data> & saliency() {
+			return m_saliency;
 		}
 
-		const std::vector<model_saliency_data> & original_saliency() const {
-			return m_original_saliency;
+		const std::vector<model_saliency_data> & saliency() const {
+			return m_saliency;
 		}
 
 		OpenMesh::VPropHandleT<TriMesh::Color> prop_vcolor_original() const {
@@ -194,7 +194,6 @@ namespace green {
 		bool m_save_ok = false;
 		std::future<bool> m_pending_save;
 
-		std::vector<model_saliency_data> m_saliency_outputs;
 		int m_saliency_index = 0;
 		int m_saliency_baseline_index = 0;
 		bool m_saliency_vbo_dirty = false;
@@ -288,8 +287,9 @@ namespace green {
 		}
 
 		const model_saliency_data * selected_saliency() const {
-			if (m_saliency_index >= m_saliency_outputs.size()) return nullptr;
-			return &m_saliency_outputs[m_saliency_index];
+			if (!m_model) return nullptr;
+			if (m_saliency_index >= m_model->saliency().size()) return nullptr;
+			return &m_model->saliency()[m_saliency_index];
 		}
 
 		virtual std::string name() const override {

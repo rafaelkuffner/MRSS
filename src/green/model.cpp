@@ -123,7 +123,7 @@ namespace green {
 			m_trimesh.remove_property(p.first);
 			auto sd = std::move(p.second);
 			sd.prop_saliency = ph;
-			m_original_saliency.push_back(std::move(sd));
+			m_saliency.push_back(std::move(sd));
 		}
 
 	}
@@ -191,7 +191,7 @@ namespace green {
 				m.m_trimesh.add_property(sd2.prop_saliency);
 				if (sd.prop_saliency == prop_saliency) m.m_prop_sal_dec = sd2.prop_saliency;
 				m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
-				m.m_original_saliency.push_back(std::move(sd2));
+				m.m_saliency.push_back(std::move(sd2));
 			}
 		}
 		return m;
@@ -346,12 +346,13 @@ namespace green {
 	}
 
 	void ModelEntity::save(const std::filesystem::path &fpath, bool binary) {
+		if (!m_model) return;
 		std::unique_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) {
 			spawn_locked_notification();
 			return;
 		}
-		const auto salout = m_saliency_index < m_saliency_outputs.size() ? m_saliency_outputs[m_saliency_index] : model_saliency_data{};
+		const auto salout = m_saliency_index < m_model->saliency().size() ? m_model->saliency()[m_saliency_index] : model_saliency_data{};
 		if (salout.prop_saliency.is_valid()) m_model->trimesh().request_vertex_colors();
 		m_fpath_save = fpath;
 		m_pending_save = std::async([=, lock=std::move(lock)]() {
@@ -396,10 +397,11 @@ namespace green {
 		if (!m_saliency_vbo_dirty) return;
 		std::shared_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) return;
-		if (m_color_mode == color_mode::saliency && m_saliency_index >= m_saliency_outputs.size()) return;
+		auto &saliency_outputs = m_model->saliency();
+		if (m_color_mode == color_mode::saliency && m_saliency_index >= saliency_outputs.size()) return;
 		if (m_color_mode == color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
-		if (m_color_mode == color_mode::saliency_comparison && m_saliency_index >= m_saliency_outputs.size()) return;
-		if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index >= m_saliency_outputs.size()) return;
+		if (m_color_mode == color_mode::saliency_comparison && m_saliency_index >= saliency_outputs.size()) return;
+		if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index >= saliency_outputs.size()) return;
 		GLuint vbo_col = m_model->vbo_color();
 		if (!vbo_col) return;
 		const auto &mesh = m_model->trimesh();
@@ -409,8 +411,8 @@ namespace green {
 			glMapBufferRange(GL_ARRAY_BUFFER, 0, nverts * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 		);
 		if (m_color_mode == color_mode::saliency) {
-			auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
-			auto sampledprop = m_saliency_outputs[m_saliency_index].prop_sampled;
+			auto salprop = saliency_outputs[m_saliency_index].prop_saliency;
+			auto sampledprop = saliency_outputs[m_saliency_index].prop_sampled;
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				const float s = mesh.property(salprop, v);
@@ -418,9 +420,9 @@ namespace green {
 				data[i] = glm::vec4(s, 0, 0, sampled);
 			}
 		} else if (m_color_mode == color_mode::saliency_comparison) {
-			auto baseprop = m_saliency_outputs[m_saliency_baseline_index].prop_saliency;
-			auto salprop = m_saliency_outputs[m_saliency_index].prop_saliency;
-			auto sampledprop = m_saliency_outputs[m_saliency_index].prop_sampled;
+			auto baseprop = saliency_outputs[m_saliency_baseline_index].prop_saliency;
+			auto salprop = saliency_outputs[m_saliency_index].prop_saliency;
+			auto sampledprop = saliency_outputs[m_saliency_index].prop_sampled;
 			m_saliency_errors.min = 9001;
 			m_saliency_errors.max = -9001;
 			float sse = 0;
@@ -606,6 +608,9 @@ namespace green {
 
 			Separator();
 
+			std::vector<model_saliency_data> empty_saliency_outputs;
+			auto &saliency_outputs = m_model ? m_model->saliency() : empty_saliency_outputs;
+
 			if (Combo(
 				"Saliency", &m_saliency_index,
 				[](void *data, int item, const char **out_text) {
@@ -617,14 +622,14 @@ namespace green {
 					*out_text = str.c_str();
 					return true;
 				}, 
-				m_saliency_outputs.data(), m_saliency_outputs.size()
+				saliency_outputs.data(), saliency_outputs.size()
 			)) {
 				m_saliency_vbo_dirty = true;
 			}
 
-			if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index < m_saliency_outputs.size()) {
-				Text("Baseline: %s", m_saliency_outputs[m_saliency_baseline_index].str().c_str());
-				if (m_saliency_index < m_saliency_outputs.size()) {
+			if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index < saliency_outputs.size()) {
+				Text("Baseline: %s", saliency_outputs[m_saliency_baseline_index].str().c_str());
+				if (m_saliency_index < saliency_outputs.size()) {
 					auto &err = m_saliency_errors;
 					Text("Errors: min=%.3f, max=%.3f, rmse=%.3f", err.min, err.max, err.rms);
 					if (SliderFloat("Error Scale", &m_saliency_error_scale, 1, 100, "%.3f", 2)) {
@@ -644,7 +649,7 @@ namespace green {
 					m_model->trimesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
 					clip.sd = {};
 					clip.data.clear();
-					m_saliency_outputs.push_back(std::move(sd));
+					saliency_outputs.push_back(std::move(sd));
 					m_saliency_vbo_dirty = true;
 					// references/iterators into saliency outputs are invalidated
 				} else {
@@ -652,8 +657,8 @@ namespace green {
 				}
 			}
 
-			if (m_saliency_index < m_saliency_outputs.size()) {
-				auto &salout = m_saliency_outputs[m_saliency_index];
+			if (m_saliency_index < saliency_outputs.size()) {
+				auto &salout = saliency_outputs[m_saliency_index];
 				SameLine();
 				if (Button("Copy")) {
 					std::shared_lock lock(m_modelmtx, std::defer_lock);
@@ -721,12 +726,12 @@ namespace green {
 						if (!lock.try_lock()) {
 							spawn_locked_notification();
 						} else {
-							auto it = m_saliency_outputs.begin() + m_saliency_index;
+							auto it = saliency_outputs.begin() + m_saliency_index;
 							m_model->trimesh().remove_property(it->prop_saliency);
-							m_saliency_outputs.erase(it);
+							saliency_outputs.erase(it);
 							// references/iterators into saliency outputs are invalidated
 							// (so this section should come last)
-							if (m_saliency_index >= m_saliency_outputs.size()) {
+							if (m_saliency_index >= saliency_outputs.size()) {
 								m_saliency_index = std::max(0, m_saliency_index - 1);
 								m_saliency_vbo_dirty = true;
 							}
@@ -755,18 +760,20 @@ namespace green {
 
 	void ModelEntity::draw_window_export() {
 		using namespace ImGui;
+		if (!m_model) return;
 		if (m_try_export) OpenPopup("Export##export");
 		SetNextWindowSize({500, 180}, ImGuiCond_Appearing);
 		if (BeginPopupModal("Export##export")) {
 			PushID(this);
 			m_try_export = false;
+			auto &saliency_outputs = m_model->saliency();
 			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
 			Selectable(m_fpath_load.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
 			PopStyleColor();
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 			SetHoveredTooltip("%s", make_name_tooltip().c_str());
-			if (m_color_mode == color_mode::saliency && m_saliency_index < m_saliency_outputs.size()) {
-				auto &salout = m_saliency_outputs[m_saliency_index];
+			if (m_color_mode == color_mode::saliency && m_saliency_index < saliency_outputs.size()) {
+				auto &salout = saliency_outputs[m_saliency_index];
 				Text("Saliency: %s", std::string(salout).c_str());
 			} else {
 				Text("No saliency will be exported");
@@ -891,11 +898,7 @@ namespace green {
 				m_model->update_vao();
 				m_model->update_vbos();
 				m_scale = m_model->unit_bound_scale() * 4;
-				// add saliency results for loaded saliency
-				for (auto &sd : m_model->original_saliency()) {
-					m_saliency_outputs.push_back(sd);
-					m_saliency_vbo_dirty = true;
-				}
+				m_saliency_vbo_dirty = true;
 			} catch (std::exception &e) {
 				std::cerr << "failed to load model: " << e.what() << std::endl;
 			} catch (...) {
@@ -913,10 +916,11 @@ namespace green {
 			if (selected) draw_window_export();
 			update_vbo();
 			// determine color map to apply in shader
+			auto &saliency_outputs = m_model->saliency();
 			int color_map = 0;
-			const bool sal_valid = m_saliency_index < m_saliency_outputs.size();
+			const bool sal_valid = m_saliency_index < saliency_outputs.size();
 			if (m_color_mode == color_mode::saliency && sal_valid) color_map = 3;
-			if (m_color_mode == color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < m_saliency_outputs.size()) color_map = 4;
+			if (m_color_mode == color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
 			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
 			// prepare to draw
 			model_draw_params params;
@@ -983,6 +987,8 @@ namespace green {
 			// now need to upgrade to unique lock
 			slock->unlock();
 			std::unique_lock lock(m_modelmtx);
+			if (!m_model) return;
+			auto &saliency_outputs = m_model->saliency();
 			// destroy temp properties
 			mparams.mesh->remove_property(mparams.prop_curvature);
 			for (int i = 0; i < uparams.levels; i++) {
@@ -990,11 +996,11 @@ namespace green {
 			}
 			if (r) {
 				// if preview, remove any previous preview results
-				m_saliency_outputs.erase(std::remove_if(m_saliency_outputs.begin(), m_saliency_outputs.end(), [](const auto &sd) { return sd.uparams.preview; }), m_saliency_outputs.end());
+				saliency_outputs.erase(std::remove_if(saliency_outputs.begin(), saliency_outputs.end(), [](const auto &sd) { return sd.uparams.preview; }), saliency_outputs.end());
 				// save user params, progress output and actual saliency mesh property
-				m_saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency, mparams.prop_sampled});
+				saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency, mparams.prop_sampled});
 				// give focus to this result
-				m_saliency_index = m_saliency_outputs.size() - 1;
+				m_saliency_index = saliency_outputs.size() - 1;
 				m_saliency_vbo_dirty = true;
 			} else {
 				// cancelled, destroy saliency property too
@@ -1026,10 +1032,11 @@ namespace green {
 		e->m_pending_load = std::async([=, e=e.get(), lock1=std::move(lock1), lock2=std::move(lock2)]() mutable {
 			// prepare mesh copy to decimate
 			// this is slow enough on big models to be async
+			auto &saliency_outputs = m_model->saliency();
 			std::vector<model_saliency_data> sdv;
 			saliency_prop_t srcprop;
-			for (int i = 0; i < m_saliency_outputs.size(); i++) {
-				auto &sd = m_saliency_outputs[i];
+			for (int i = 0; i < saliency_outputs.size(); i++) {
+				auto &sd = saliency_outputs[i];
 				if (i == m_saliency_index || sd.persistent) {
 					srcprop = sd.prop_saliency;
 					sdv.push_back(sd);

@@ -1130,7 +1130,7 @@ namespace {
 			// should always try find named property so that it can be decimated or saved
 			// even if we're not actually using it for decimation
 			// need to search model, not mesh (because model de-names the properties)
-			for (auto &sd0 : m.original_saliency()) {
+			for (auto &sd0 : m.saliency()) {
 				if (sd0.propname == decprop) {
 					sd = sd0;
 					cout << "using saliency property '" << decprop << "'" << endl;
@@ -1176,11 +1176,11 @@ namespace {
 			sd.uparams = sal_uparams;
 			sd.progress = sal_progress;
 
-			m.original_saliency().push_back(sd);
+			m.saliency().push_back(sd);
 		}
 
 		if (do_dec) {
-			md = m.prepare_decimate(sd.prop_saliency, m.original_saliency());
+			md = m.prepare_decimate(sd.prop_saliency, m.saliency());
 			if (!md.decimate(dec_uparams, dec_progress)) {
 				cout << "decimation cancelled" << endl;
 				exit(1);
