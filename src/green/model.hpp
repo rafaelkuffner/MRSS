@@ -4,6 +4,8 @@
 #ifndef GREEN_MODEL_HPP
 #define GREEN_MODEL_HPP
 
+#include <string>
+#include <string_view>
 #include <filesystem>
 #include <utility>
 #include <memory>
@@ -22,6 +24,10 @@
 
 namespace green {
 
+	enum class model_color_mode : unsigned char {
+		none, vcolor, saliency, saliency_comparison
+	};
+
 	struct model_draw_params {
 		entity_selection sel;
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
@@ -31,20 +37,28 @@ namespace green {
 		bool show_samples = false;
 	};
 
+	struct model_save_params {
+		saliency_prop_t prop_saliency;
+		saliency_prop_t prop_saliency_baseline;
+		model_color_mode color_mode = model_color_mode::none;
+		float error_scale = 1;
+		bool binary = true;
+	};
+
 	struct model_saliency_data {
 		std::string filename;
-		std::string propname = "quality";
+		std::string dispname;
+		std::string expname;
 		saliency_user_params uparams;
 		saliency_progress progress;
 		saliency_prop_t prop_saliency{};
 		OpenMesh::VPropHandleT<unsigned char> prop_sampled{};
 		bool decimated = false;
 		bool persistent = false;
+		bool uparams_known = false;
+		bool should_export = false;
 
 		std::string str() const {
-			// actual property name should be prefixed with 'quality'
-			// this is then stripped for the display name
-			std::string pdname = propname.substr(0, 7) == "quality" ? propname.substr(7) : propname;
 			std::string s;
 			if (decimated) {
 				s += "<decimated> ";
@@ -52,12 +66,12 @@ namespace green {
 				s += "<preview> ";
 			}
 			if (filename.empty()) {
-				s += pdname.empty() ? uparams.str() : pdname;
+				s += dispname.empty() ? uparams.str() : dispname;
 			} else {
 				s += filename;
-				if (!pdname.empty()) {
+				if (!dispname.empty()) {
 					s += "?";
-					s += pdname;
+					s += dispname;
 				}
 			}
 			return s;
@@ -65,6 +79,21 @@ namespace green {
 
 		explicit operator std::string() const {
 			return str();
+		}
+
+		std::string export_propname(int i) const {
+			std::string s = "quality";
+			s += !expname.empty() ? expname : (!dispname.empty() ? dispname : "");
+			s += '@';
+			s += std::to_string(i);
+			if (uparams_known) {
+				s += '[';
+				if (decimated) s += 'D';
+				if (s.back() != '[') s += ';';
+				s += uparams.str(true);
+				s += ']';
+			}
+			return s;
 		}
 	};
 
@@ -95,7 +124,7 @@ namespace green {
 
 		Model(const std::filesystem::path &fpath);
 
-		void save(const std::filesystem::path &fpath, saliency_prop_t prop_saliency, bool binary);
+		void save(const std::filesystem::path &fpath, const model_save_params &sparams);
 
 		Model prepare_decimate(saliency_prop_t prop_saliency, const std::vector<model_saliency_data> &sdv) const;
 
@@ -127,6 +156,16 @@ namespace green {
 
 		const std::vector<model_saliency_data> & saliency() const {
 			return m_saliency;
+		}
+
+		// search by display name (first found) or @index (into current saliency properties).
+		// note that for @index will only correlate with property names in files if there have been no removals.
+		std::vector<model_saliency_data>::const_iterator find_saliency(std::string_view name) const;
+
+		std::vector<model_saliency_data>::iterator find_saliency(std::string_view name) {
+			const auto &cthis = *this;
+			auto cit = cthis.find_saliency(name);
+			return m_saliency.begin() + (cit - m_saliency.cbegin());
 		}
 
 		OpenMesh::VPropHandleT<TriMesh::Color> prop_vcolor_original() const {
@@ -195,6 +234,7 @@ namespace green {
 		std::future<bool> m_pending_save;
 
 		int m_saliency_index = 0;
+		int m_saliency_export_index = 0;
 		int m_saliency_baseline_index = 0;
 		bool m_saliency_vbo_dirty = false;
 
@@ -228,12 +268,9 @@ namespace green {
 
 		int m_basis_right = 0, m_basis_up = 2, m_basis_back = 4;
 
-		enum class color_mode : unsigned char {
-			none, vcolor, saliency, saliency_comparison
-		};
-
 		int m_vert_point_size = 3;
-		color_mode m_color_mode = color_mode::saliency;
+		model_color_mode m_disp_color_mode = model_color_mode::saliency;
+		model_color_mode m_exp_color_mode = model_color_mode::saliency;
 		bool m_color_faces = true;
 		bool m_color_verts = false;
 		bool m_show_faces = true;
@@ -268,7 +305,7 @@ namespace green {
 
 		void load(const std::filesystem::path &fpath);
 
-		void save(const std::filesystem::path &fpath, bool binary);
+		void save(const std::filesystem::path &fpath);
 
 		void load(const std::filesystem::path &fpath, Model m);
 

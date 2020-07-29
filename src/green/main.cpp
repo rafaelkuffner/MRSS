@@ -985,7 +985,7 @@ namespace {
 		const uilocale &loc = uilocale_en();
 
 		string infile, outfile;
-		string decprop = "quality";
+		string decprop = "@0";
 		bool show_gui = false;
 		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
 		bool save_ascii = false;
@@ -1130,11 +1130,9 @@ namespace {
 			// should always try find named property so that it can be decimated or saved
 			// even if we're not actually using it for decimation
 			// need to search model, not mesh (because model de-names the properties)
-			for (auto &sd0 : m.saliency()) {
-				if (sd0.propname == decprop) {
-					sd = sd0;
-					cout << "using saliency property '" << decprop << "'" << endl;
-				}
+			if (auto it = m.find_saliency(decprop); it != m.saliency().end()) {
+				sd = *it;
+				cout << "using saliency property '" << decprop << "' : " << sd.str() << endl;
 			}
 			if (!sd.prop_saliency.is_valid()) {
 				cout << "couldn't find saliency property '" << decprop << "'" << endl;
@@ -1190,7 +1188,12 @@ namespace {
 
 		if (outfile.size()) {
 			try {
-				pmr->save(std::filesystem::u8path(outfile), sd.prop_saliency, !save_ascii);
+				model_save_params sparams;
+				// FIXME cli export color mode
+				sparams.prop_saliency = sd.prop_saliency;
+				sparams.color_mode = model_color_mode::saliency;
+				sparams.binary = !save_ascii;
+				pmr->save(std::filesystem::u8path(outfile), sparams);
 			} catch (exception &e) {
 				cout << "failed to save model: " << e.what() << endl;
 				if (!show_gui) exit(1);
@@ -1396,7 +1399,9 @@ namespace ImGui {
 		ImGui::Text("Contour: %.3f", uparams.curv_weight);
 		ImGui::Text("Contrast: %.3f", uparams.normal_power);
 		ImGui::Text("Noise Filter: %s", uparams.normalmap_filter ? "true" : "false");
-		ImGui::Text("Noise Height: %f", uparams.noise_height);
+		if (uparams.normalmap_filter) {
+			ImGui::Text("Noise Height: %f", uparams.noise_height);
+		}
 		ImGui::Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
 		if (uparams.subsample_manual) {
 			ImGui::Text("Subsampling Rate: %.1f", uparams.subsampling_rate);

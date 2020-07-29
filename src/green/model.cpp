@@ -9,6 +9,7 @@
 #include <thread>
 #include <algorithm>
 #include <memory>
+#include <charconv>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -102,14 +103,36 @@ namespace green {
 			auto prop = dynamic_cast<OpenMesh::PropertyT<float> *>(*it);
 			if (!prop) continue;
 			if (prop->name().substr(0, 7) == "quality") {
-				std::cout << "Found quality property " << prop->name() << std::endl;
+				std::cout << "Found saliency property with internal name " << prop->name() << std::endl;
 				auto ph0 = saliency_prop_t{int(it - m_trimesh.vprops_begin())};
 				if (&m_trimesh.property(ph0) != prop) abort();
 				model_saliency_data sd;
 				sd.filename = fpath.filename().u8string();
-				sd.propname = prop->name();
+				auto &pname = prop->name();
+				if (auto i = pname.find('['); i != std::string::npos && pname.back() == ']') {
+					// property name contains metadata
+					sd.dispname = pname.substr(7, i - 7);
+					auto meta = std::string_view(pname).substr(i + 1, pname.size() - i - 2);
+					std::string_view metamisc = "";
+					std::string_view metauparams = meta;
+					if (auto j = meta.find(';'); j != std::string::npos) {
+						// misc metadata before saliency user params
+						metamisc = meta.substr(0, j);
+						metauparams = meta.substr(j + 1);
+					}
+					sd.decimated = metamisc.find('D') != std::string::npos;
+					sd.uparams_known = sd.uparams.parse(metauparams);
+				} else {
+					// no metadata
+					sd.dispname = pname.substr(7);
+				}
+				if (auto i = sd.dispname.find('@'); i != std::string::npos) {
+					// name has file-local unique index
+					sd.dispname = sd.dispname.substr(0, i);
+				}
 				// re-persist by default
 				sd.persistent = true;
+				sd.should_export = true;
 				sprops.emplace_back(ph0, std::move(sd));
 			}
 		}
@@ -128,40 +151,82 @@ namespace green {
 
 	}
 
-	void Model::save(const std::filesystem::path &fpath, saliency_prop_t prop_saliency, bool binary) {
-
-		if (m_trimesh.has_vertex_colors() && prop_saliency.is_valid()) {
+	void Model::save(const std::filesystem::path &fpath, const model_save_params &sparams0) {
+		auto sparams = sparams0;
+		if (sparams.color_mode == model_color_mode::saliency) {
+			if (!sparams.prop_saliency.is_valid()) sparams.color_mode = model_color_mode::none;
 			std::cout << "Colorizing saliency" << std::endl;
+		}
+		if (sparams.color_mode == model_color_mode::saliency_comparison) {
+			if (!sparams.prop_saliency.is_valid()) sparams.color_mode = model_color_mode::none;
+			if (!sparams.prop_saliency_baseline.is_valid()) sparams.color_mode = model_color_mode::none;
+			std::cout << "Colorizing saliency comparison" << std::endl;
+		}
+		// assign vertex colors
+		if (sparams.color_mode != model_color_mode::none) {
+			m_trimesh.request_vertex_colors();
 			for (auto vIt = m_trimesh.vertices_begin(); vIt != m_trimesh.vertices_end(); ++vIt) {
 				TriMesh::Color col;
-				const float s = m_trimesh.property(prop_saliency, *vIt);
 				OpenMesh::Vec3f v;
-				mapScalarToColor(v, s, TransferFunction::ZBRUSH);
-				v = v * 255;
-				col[0] = v[0];
-				col[1] = v[1];
-				col[2] = v[2];
+				bool usev = true;
+				switch (sparams.color_mode) {
+				case model_color_mode::saliency:
+				{
+					const float s = m_trimesh.property(sparams.prop_saliency, *vIt);
+					mapScalarToColor(v, s, TransferFunction::ZBRUSH);
+					break;
+				}
+				case model_color_mode::saliency_comparison:
+				{
+					const float s = m_trimesh.property(sparams.prop_saliency, *vIt);
+					const float b = m_trimesh.property(sparams.prop_saliency_baseline, *vIt);
+					mapScalarToColor(v, std::clamp((s - b) * sparams.error_scale * 0.5f + 0.5f, 0.f, 1.f), TransferFunction::ZBRUSH);
+					break;
+				}
+				case model_color_mode::vcolor:
+				{
+					col = m_trimesh.property(m_prop_vcolor_original, *vIt);
+					usev = false;
+					break;
+				}
+				default:
+					break;
+				}
+				if (usev) {
+					v = v * 255;
+					col[0] = v[0];
+					col[1] = v[1];
+					col[2] = v[2];
+				}
 				m_trimesh.set_color(*vIt, col);
 			}
 		}
-
-		// TODO save arbitrary saliency properties with arbitrary names
-		auto prop_quality = decltype(prop_saliency){};
-		if (prop_saliency.is_valid()) {
-			m_trimesh.add_property(prop_quality, "quality");
-			m_trimesh.property(prop_quality).set_persistent(true);
-			m_trimesh.property(prop_quality).data_vector() = m_trimesh.property(prop_saliency).data_vector();
+		// copy export saliency to named properties
+		std::vector<saliency_prop_t> exprops;
+		for (auto &sd : m_saliency) {
+			if (!sd.should_export || !sd.prop_saliency.is_valid()) continue;
+			saliency_prop_t p;
+			const auto name = sd.export_propname(exprops.size());
+			std::cout << "Export saliency property with internal name " << name << std::endl;
+			m_trimesh.add_property(p, name);
+			exprops.push_back(p);
+			// persistent => openmesh will export with Options::Custom
+			m_trimesh.property(p).set_persistent(true);
+			// note - copying saliency data, not exactly efficient
+			m_trimesh.property(p).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
 		}
-
-		OpenMesh::IO::Options opts = OpenMesh::IO::Options::Custom;
-		if (m_trimesh.has_vertex_colors()) opts = opts | OpenMesh::IO::Options::VertexColor;
-		if (binary) opts = opts | OpenMesh::IO::Options::Binary;
-
+		// export!
+		OpenMesh::IO::Options opts{};
+		if (exprops.size()) opts = opts | OpenMesh::IO::Options::Custom;
+		if (sparams.color_mode != model_color_mode::none) opts = opts | OpenMesh::IO::Options::VertexColor;
+		if (sparams.binary) opts = opts | OpenMesh::IO::Options::Binary;
 		std::cerr << "Saving model " << fpath.u8string() << std::endl;
 		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath, opts);
-
-		m_trimesh.remove_property(prop_quality);
-
+		// remove temp named properties
+		for (auto &p : exprops) {
+			m_trimesh.remove_property(p);
+		}
+		// done
 		if (res) {
 			std::cerr << "Saved" << std::endl;
 		} else {
@@ -216,6 +281,23 @@ namespace green {
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_trimesh);
 		return true;
+	}
+
+	std::vector<model_saliency_data>::const_iterator Model::find_saliency(std::string_view name) const {
+		if (name.size() > 0 && name.front() == '@') {
+			// parse index
+			int i = 0;
+			auto r = std::from_chars(&*name.begin() + 1, &*name.end(), i);
+			if (r.ec != std::errc{}) return m_saliency.end();
+			if (i >= m_saliency.size()) return m_saliency.end();
+			return m_saliency.begin() + i;
+		} else {
+			// search by name
+			for (auto it = m_saliency.begin(); it != m_saliency.end(); ++it) {
+				if (it->dispname == name) return it;
+			}
+			return m_saliency.end();
+		}
 	}
 
 	void Model::update_vao() {
@@ -345,21 +427,28 @@ namespace green {
 		});
 	}
 
-	void ModelEntity::save(const std::filesystem::path &fpath, bool binary) {
+	void ModelEntity::save(const std::filesystem::path &fpath) {
 		if (!m_model) return;
 		std::unique_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) {
 			spawn_locked_notification();
 			return;
 		}
-		const auto salout = m_saliency_index < m_model->saliency().size() ? m_model->saliency()[m_saliency_index] : model_saliency_data{};
-		if (salout.prop_saliency.is_valid()) m_model->trimesh().request_vertex_colors();
+		const auto &saliency = m_model->saliency();
+		const auto sdcolor = m_saliency_index < saliency.size() ? saliency[m_saliency_index] : model_saliency_data{};
+		const auto sdbase = m_saliency_export_index < saliency.size() ? saliency[m_saliency_export_index] : model_saliency_data{};
+		//if (salout.prop_saliency.is_valid()) m_model->trimesh().request_vertex_colors();
 		m_fpath_save = fpath;
 		m_pending_save = std::async([=, lock=std::move(lock)]() {
 			// TODO is this also not threadsafe? idk
 			// ... can it run parallel with load?
 			std::lock_guard iolock(mesh_io_mutex());
-			m_model->save(fpath, salout.prop_saliency, binary);
+			model_save_params sparams;
+			sparams.prop_saliency = sdcolor.prop_saliency;
+			sparams.prop_saliency_baseline = sdbase.prop_saliency;
+			sparams.color_mode = m_exp_color_mode;
+			sparams.binary = m_save_binary;
+			m_model->save(fpath, sparams);
 			return true;
 		});
 	}
@@ -398,10 +487,10 @@ namespace green {
 		std::shared_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) return;
 		auto &saliency_outputs = m_model->saliency();
-		if (m_color_mode == color_mode::saliency && m_saliency_index >= saliency_outputs.size()) return;
-		if (m_color_mode == color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
-		if (m_color_mode == color_mode::saliency_comparison && m_saliency_index >= saliency_outputs.size()) return;
-		if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index >= saliency_outputs.size()) return;
+		if (m_disp_color_mode == model_color_mode::saliency && m_saliency_index >= saliency_outputs.size()) return;
+		if (m_disp_color_mode == model_color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
+		if (m_disp_color_mode == model_color_mode::saliency_comparison && m_saliency_index >= saliency_outputs.size()) return;
+		if (m_disp_color_mode == model_color_mode::saliency_comparison && m_saliency_baseline_index >= saliency_outputs.size()) return;
 		GLuint vbo_col = m_model->vbo_color();
 		if (!vbo_col) return;
 		const auto &mesh = m_model->trimesh();
@@ -410,7 +499,7 @@ namespace green {
 		auto *data = reinterpret_cast<glm::vec4 *>(
 			glMapBufferRange(GL_ARRAY_BUFFER, 0, nverts * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 		);
-		if (m_color_mode == color_mode::saliency) {
+		if (m_disp_color_mode == model_color_mode::saliency) {
 			auto salprop = saliency_outputs[m_saliency_index].prop_saliency;
 			auto sampledprop = saliency_outputs[m_saliency_index].prop_sampled;
 			for (size_t i = 0; i < nverts; i++) {
@@ -419,7 +508,7 @@ namespace green {
 				const bool sampled = sampledprop.is_valid() && mesh.property(sampledprop, v);
 				data[i] = glm::vec4(s, 0, 0, sampled);
 			}
-		} else if (m_color_mode == color_mode::saliency_comparison) {
+		} else if (m_disp_color_mode == model_color_mode::saliency_comparison) {
 			auto baseprop = saliency_outputs[m_saliency_baseline_index].prop_saliency;
 			auto salprop = saliency_outputs[m_saliency_index].prop_saliency;
 			auto sampledprop = saliency_outputs[m_saliency_index].prop_sampled;
@@ -439,7 +528,7 @@ namespace green {
 				data[i] = glm::vec4(e * m_saliency_error_scale, 0, 0, sampled);
 			}
 			m_saliency_errors.rms = sqrt(sse / nverts);
-		} else if (m_color_mode == color_mode::vcolor) {
+		} else if (m_disp_color_mode == model_color_mode::vcolor) {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				const auto col = mesh.property(m_model->prop_vcolor_original(), v);
@@ -600,10 +689,10 @@ namespace green {
 			Separator();
 
 			//SetNextItemWidth(GetContentRegionAvail().x);
-			int cur_color_mode = int(m_color_mode);
+			int cur_color_mode = int(m_disp_color_mode);
 			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
-				m_color_mode = color_mode(cur_color_mode);
-				if (m_color_mode != color_mode::none) m_saliency_vbo_dirty = true;
+				m_disp_color_mode = model_color_mode(cur_color_mode);
+				if (m_disp_color_mode != model_color_mode::none) m_saliency_vbo_dirty = true;
 			}
 
 			Separator();
@@ -627,7 +716,7 @@ namespace green {
 				m_saliency_vbo_dirty = true;
 			}
 
-			if (m_color_mode == color_mode::saliency_comparison && m_saliency_baseline_index < saliency_outputs.size()) {
+			if (m_disp_color_mode == model_color_mode::saliency_comparison && m_saliency_baseline_index < saliency_outputs.size()) {
 				Text("Baseline: %s", saliency_outputs[m_saliency_baseline_index].str().c_str());
 				if (m_saliency_index < saliency_outputs.size()) {
 					auto &err = m_saliency_errors;
@@ -680,11 +769,15 @@ namespace green {
 				Checkbox("Persistent", &salout.persistent);
 				SetHoveredTooltip("Persistent properties will be preserved when decimating\nand will be exported by default");
 				Separator();
-				if (salout.filename.empty()) {
-					if (CollapsingHeader("Saliency Parameters")) {
+				if (CollapsingHeader("Saliency Parameters")) {
+					if (salout.uparams_known) {
 						draw_saliency_params(salout.uparams);
 						if (Button("Reload")) ui_saliency_user_params() = salout.uparams;
+					} else {
+						TextDisabled("Parameters unknown");
 					}
+				}
+				if (salout.filename.empty()) {
 					if (CollapsingHeader("Saliency Progress")) {
 						draw_saliency_progress(salout.progress);
 					}
@@ -705,17 +798,19 @@ namespace green {
 					// TODO better?
 					static char buf[1024]{};
 					if (IsWindowAppearing()) {
-						if (salout.propname.substr(0, 7) == "quality") {
-							strncpy(buf, salout.propname.c_str() + 7, sizeof(buf));
-						} else {
-							buf[0] = '\0';
-						}
+						strncpy(buf, salout.dispname.c_str(), sizeof(buf));
 						SetKeyboardFocusHere();
 					}
 					SetNextItemWidth(GetContentRegionAvail().x);
+					const char *badchars = " \t@[]";
 					if (InputText("", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
-						(salout.propname = "quality") += buf;
-						CloseCurrentPopup();
+						if (std::string_view(buf).find_first_of(badchars) == std::string::npos) {
+							salout.dispname = buf;
+							CloseCurrentPopup();
+						}
+					}
+					if (std::string_view(buf).find_first_of(badchars) != std::string::npos) {
+						TextColored(badcol, "Property name must not contain any of: %s", badchars);
 					}
 					EndPopup();
 				}
@@ -761,41 +856,92 @@ namespace green {
 	void ModelEntity::draw_window_export() {
 		using namespace ImGui;
 		if (!m_model) return;
-		if (m_try_export) OpenPopup("Export##export");
-		SetNextWindowSize({500, 180}, ImGuiCond_Appearing);
-		if (BeginPopupModal("Export##export")) {
-			PushID(this);
+		auto &saliency_outputs = m_model->saliency();
+		if (m_try_export) {
 			m_try_export = false;
-			auto &saliency_outputs = m_model->saliency();
+			m_saliency_export_index = m_saliency_index;
+			for (int i = 0; i < saliency_outputs.size(); i++) {
+				auto &sd = saliency_outputs[i];
+				sd.should_export = sd.persistent;
+			}
+			OpenPopup("Export##export");
+		}
+		SetNextWindowSize({500, 400}, ImGuiCond_Appearing);
+		bool export_window_open = true;
+		if (BeginPopupModal("Export##export", &export_window_open)) {
+			PushID(this);
+			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
 			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
 			Selectable(m_fpath_load.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
 			PopStyleColor();
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 			SetHoveredTooltip("%s", make_name_tooltip().c_str());
-			if (m_color_mode == color_mode::saliency && m_saliency_index < saliency_outputs.size()) {
-				auto &salout = saliency_outputs[m_saliency_index];
-				Text("Saliency: %s", std::string(salout).c_str());
-			} else {
-				Text("No saliency will be exported");
-				//Text(u8"セイリエンシーを書き出しません");
-			}
+			// export path
 			const auto &pathhint = m_fpath_save.empty() ? m_fpath_load : m_fpath_save;
 			// TODO better?
-			static char buf[1024];
-			if (IsWindowAppearing()) snprintf(buf, sizeof(buf), "%s", pathhint.u8string().c_str());
+			static char pathbuf[1024]{};
+			if (IsWindowAppearing()) snprintf(pathbuf, sizeof(pathbuf), "%s", pathhint.u8string().c_str());
 			auto &fpath_save_fut = ui_save_path(pathhint, Button("Browse"));
 			if (fpath_save_fut.valid() && fpath_save_fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 				auto s = fpath_save_fut.get().u8string();
-				if (!s.empty()) snprintf(buf, sizeof(buf), "%s", s.c_str());
+				if (!s.empty()) snprintf(pathbuf, sizeof(pathbuf), "%s", s.c_str());
 			}
 			SameLine();
-			InputText("Path", buf, sizeof(buf));
+			InputText("Path", pathbuf, sizeof(pathbuf));
+			// export color mode
+			int cur_color_mode = int(m_exp_color_mode);
+			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
+				m_exp_color_mode = model_color_mode(cur_color_mode);
+			}
+			Separator();
+			Text("Saliency Properties");
+			PushID("saliency");
+			for (int i = 0; i < saliency_outputs.size(); i++) {
+				PushID(i);
+				auto &sd = saliency_outputs[i];
+				Checkbox("##shouldexport", &sd.should_export);
+				SetHoveredTooltip("Export this saliency property?");
+				SameLine();
+				if (RadioButton("##colorize", i == m_saliency_export_index)) m_saliency_export_index = i;
+				SetHoveredTooltip("Colorize this saliency property?");
+				const char *badchars = " \t@[]";
+				char propbuf[256]{};
+				strncpy(propbuf, sd.expname.c_str(), sizeof(propbuf));
+				SameLine();
+				SetNextItemWidth(150);
+				if (InputText("##expname", propbuf, sizeof(propbuf))) {
+					if (std::string_view(propbuf).find_first_of(badchars) == std::string::npos) {
+						sd.expname = propbuf;
+					}
+				}
+				SetHoveredTooltip("Export property name.\nDefault when empty is the current display name.");
+				SameLine();
+				if (sd.expname.empty()) {
+					auto p0 = GetCursorPos();
+					SetCursorPosX(p0.x - 150);
+					TextDisabled("%s", sd.dispname.c_str());
+					SameLine();
+					SetCursorPosX(p0.x);
+				}
+				if (Button("<")) sd.expname = sd.dispname;
+				SetHoveredTooltip("Copy display name to export name");
+				SameLine();
+				Text("%s", sd.str().c_str());
+				SetHoveredTooltip(sd.uparams_known ? sd.uparams.str().c_str() : "Parameters unknown");
+				if (std::string_view(propbuf).find_first_of(badchars) != std::string::npos) {
+					TextColored(badcol, "Property name must not contain any of \"%s\"", badchars);
+				}
+				PopID();
+			}
+			PopID();
+			Separator();
+			// other options
 			Checkbox("Binary", &m_save_binary);
 			SetHoveredTooltip("Save file as binary if supported");
-			auto fpath = std::filesystem::u8path(buf);
+			// validate path and maybe export
+			auto fpath = std::filesystem::u8path(pathbuf);
 			auto stat = std::filesystem::status(fpath);
 			bool cansave = !fpath.empty();
-			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
 			const char *badchars = "\\/:*?\"<>|";
 			if (fpath.is_relative()) {
 				TextColored(badcol, "Path must be absolute");
@@ -807,14 +953,14 @@ namespace green {
 				TextColored(badcol, "Directory does not exist");
 				cansave = false;
 			} else if (fpath.filename().u8string().find_first_of(badchars) != std::string::npos) {
-				TextColored(badcol, "File name must not contain any of: %s", badchars);
+				TextColored(badcol, "File name must not contain any of \"%s\"", badchars);
 				cansave = false;
 			} else if (std::filesystem::exists(stat)) {
 				TextColored(badcol, "Path exists! Save will overwrite");
 				//TextColored(badcol, u8"保存先が存在します！保存したら上書きします");
 			}
 			if (Button("Save") && cansave && !m_pending_save.valid()) {
-				save(std::filesystem::absolute(fpath), m_save_binary);
+				save(std::filesystem::absolute(fpath));
 				CloseCurrentPopup();
 			}
 			if (IsItemHovered()) {
@@ -919,9 +1065,9 @@ namespace green {
 			auto &saliency_outputs = m_model->saliency();
 			int color_map = 0;
 			const bool sal_valid = m_saliency_index < saliency_outputs.size();
-			if (m_color_mode == color_mode::saliency && sal_valid) color_map = 3;
-			if (m_color_mode == color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
-			if (m_color_mode == color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
+			if (m_disp_color_mode == model_color_mode::saliency && sal_valid) color_map = 3;
+			if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
+			if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
 			// prepare to draw
 			model_draw_params params;
 			params.sel = sel;
@@ -998,7 +1144,13 @@ namespace green {
 				// if preview, remove any previous preview results
 				saliency_outputs.erase(std::remove_if(saliency_outputs.begin(), saliency_outputs.end(), [](const auto &sd) { return sd.uparams.preview; }), saliency_outputs.end());
 				// save user params, progress output and actual saliency mesh property
-				saliency_outputs.push_back({"", "", uparams, *pprogress, mparams.prop_saliency, mparams.prop_sampled});
+				model_saliency_data sd;
+				sd.uparams = uparams;
+				sd.progress = *pprogress;
+				sd.prop_saliency = mparams.prop_saliency;
+				sd.prop_sampled = mparams.prop_sampled;
+				sd.uparams_known = true;
+				saliency_outputs.push_back(sd);
 				// give focus to this result
 				m_saliency_index = saliency_outputs.size() - 1;
 				m_saliency_vbo_dirty = true;
@@ -1045,8 +1197,8 @@ namespace green {
 				}
 			}
 			auto m = m_model->prepare_decimate(srcprop, sdv);
-			// release lock on source model
-			lock1.release();
+			// unlock source model
+			lock1.unlock();
 			// now decimate
 			if (!m.decimate(uparams, e->m_dec_progress)) throw std::runtime_error("decimation was cancelled");
 			return std::make_unique<Model>(std::move(m));

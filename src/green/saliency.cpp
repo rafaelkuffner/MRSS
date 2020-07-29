@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
+#include <sstream>
 
 #include <omp.h>
 
@@ -24,6 +25,93 @@
 #include "meshutils.hpp"
 
 namespace green {
+
+	std::string saliency_user_params::str(bool verbose) const {
+		// TODO locale independent formatting - this needs to be parseable
+		// we dont set a locale atm though
+		char buf[128];
+		char *end = buf + sizeof(buf);
+		char *p = buf;
+		if (verbose) {
+			// use extra precision
+			p += snprintf(p, end - p, "l=%d,a=%g,c=%g,r=%g", levels, area, curv_weight, normal_power);
+			if (normalmap_filter) p += snprintf(p, end - p, ",e=%g", noise_height);
+		} else {
+			p += snprintf(p, end - p, "l=%d,a=%.3g,c=%.2g,r=%.3g", levels, area, curv_weight, normal_power);
+			if (normalmap_filter) p += snprintf(p, end - p, ",e=%.3g", noise_height);
+		}
+		if (subsample_auto) p += snprintf(p, end - p, ",s=%.0f", samples_per_neighborhood);
+		return {buf};
+	}
+
+	bool saliency_user_params::parse(std::string_view s) {
+		std::cout << "parsing saliency param string " << s << std::endl;
+		// start with defaults, and construct a separate instance in case of failure
+		saliency_user_params uparams;
+		// ensure these switches start off, because they are implied on by value params
+		uparams.normalmap_filter = false;
+		uparams.subsample_manual = false;
+		uparams.subsample_auto = false;
+		std::istringstream iss{std::string(s)};
+		while (iss) {
+			const char sp = iss.get();
+			float val = 0;
+			bool has_val = false;
+			auto need_val = [&]() {
+				if (!has_val) {
+					std::cout << "value needed for saliency param " << sp << std::endl;
+					return false;
+				}
+				return true;
+			};
+			if (iss.peek() == '=') {
+				iss.get();
+				has_val = true;
+				// TODO use locale independent parsing
+				iss >> val;
+				if (!iss) {
+					std::cout << "error parsing saliency param " << sp << std::endl;
+					return false;
+				}
+			} 
+			if (iss.peek() == ',') {
+				iss.get();
+			}
+			switch (sp) {
+			case 'l':
+				if (!need_val()) return false;
+				uparams.levels = val;
+				break;
+			case 'a':
+				if (!need_val()) return false;
+				uparams.area = val;
+				break;
+			case 'c':
+				if (!need_val()) return false;
+				uparams.curv_weight = val;
+				break;
+			case 'r':
+				if (!need_val()) return false;
+				uparams.normal_power = val;
+				break;
+			case 'e':
+				if (!need_val()) return false;
+				uparams.normalmap_filter = true;
+				uparams.noise_height = val;
+				break;
+			case 's':
+				if (!need_val()) return false;
+				uparams.subsample_auto = true;
+				uparams.samples_per_neighborhood = val;
+				break;
+			default:
+				std::cout << "unknown saliency param " << sp << std::endl;
+				return false;
+			}
+		}
+		*this = uparams;
+		return true;
+	}
 
 	void saliency_user_params::sanitize() {
 		using std::clamp;

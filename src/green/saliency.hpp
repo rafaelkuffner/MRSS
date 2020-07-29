@@ -18,6 +18,7 @@
 #include <vector>
 #include <functional>
 #include <string>
+#include <string_view>
 
 #include <imgui.h>
 
@@ -101,14 +102,9 @@ namespace green {
 		// interactive previewing
 		bool preview = false;
 
-		std::string str() const {
-			char buf[128];
-			char *end = buf + sizeof(buf);
-			char *p = buf;
-			p += snprintf(p, end - p, "l=%d,a=%.3f,c=%.2f,r=%.2f", levels, area, curv_weight, normal_power);
-			if (normalmap_filter) p += snprintf(p, end - p, ",n,e=%.3f", noise_height);
-			return {buf};
-		}
+		std::string str(bool verbose = false) const;
+
+		bool parse(std::string_view);
 
 		explicit operator std::string() const {
 			return str();
