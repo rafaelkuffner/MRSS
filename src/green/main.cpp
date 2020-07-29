@@ -722,9 +722,10 @@ namespace {
 			auto &e = *it;
 			e->draw(view, proj, zfar);
 			if (e->dead()) {
-				it = entities.erase(it);
 				if (static_cast<Entity *>(select_model) == e.get()) select_model = nullptr;
 				if (static_cast<Entity *>(hover_model) == e.get()) hover_model = nullptr;
+				// erase destroys the entity and invalidates e
+				it = entities.erase(it);
 			} else {
 				++it;
 			}
