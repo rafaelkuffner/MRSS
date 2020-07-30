@@ -892,47 +892,55 @@ namespace green {
 			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
 				m_exp_color_mode = model_color_mode(cur_color_mode);
 			}
+			if (m_exp_color_mode == model_color_mode::saliency_comparison) {
+				if (m_saliency_baseline_index < m_model->saliency().size()) {
+					Text("Baseline: %s", m_model->saliency()[m_saliency_baseline_index].str().c_str());
+				} else {
+					TextColored(badcol, "Invalid baseline");
+				}
+			}
 			Separator();
 			Text("Saliency Properties");
-			PushID("saliency");
-			for (int i = 0; i < saliency_outputs.size(); i++) {
-				PushID(i);
-				auto &sd = saliency_outputs[i];
-				Checkbox("##shouldexport", &sd.should_export);
-				SetHoveredTooltip("Export this saliency property?");
-				SameLine();
-				if (RadioButton("##colorize", i == m_saliency_export_index)) m_saliency_export_index = i;
-				SetHoveredTooltip("Colorize this saliency property?");
-				const char *badchars = " \t@[]";
-				char propbuf[256]{};
-				strncpy(propbuf, sd.expname.c_str(), sizeof(propbuf));
-				SameLine();
-				SetNextItemWidth(150);
-				if (InputText("##expname", propbuf, sizeof(propbuf))) {
-					if (std::string_view(propbuf).find_first_of(badchars) == std::string::npos) {
-						sd.expname = propbuf;
-					}
-				}
-				SetHoveredTooltip("Export property name.\nDefault when empty is the current display name.");
-				SameLine();
-				if (sd.expname.empty()) {
-					auto p0 = GetCursorPos();
-					SetCursorPosX(p0.x - 150);
-					TextDisabled("%s", sd.dispname.c_str());
+			if (BeginChild("saliency", {0, -80}, false, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+				for (int i = 0; i < saliency_outputs.size(); i++) {
+					PushID(i);
+					auto &sd = saliency_outputs[i];
+					Checkbox("##shouldexport", &sd.should_export);
+					SetHoveredTooltip("Export this saliency property?");
 					SameLine();
-					SetCursorPosX(p0.x);
+					if (RadioButton("##colorize", i == m_saliency_export_index)) m_saliency_export_index = i;
+					SetHoveredTooltip("Colorize this saliency property?");
+					const char *badchars = " \t@[]";
+					char propbuf[256]{};
+					strncpy(propbuf, sd.expname.c_str(), sizeof(propbuf));
+					SameLine();
+					SetNextItemWidth(150);
+					if (InputText("##expname", propbuf, sizeof(propbuf))) {
+						if (std::string_view(propbuf).find_first_of(badchars) == std::string::npos) {
+							sd.expname = propbuf;
+						}
+					}
+					SetHoveredTooltip("Export property name.\nDefault when empty is the current display name.");
+					SameLine();
+					if (sd.expname.empty()) {
+						auto p0 = GetCursorPos();
+						SetCursorPosX(p0.x - 150);
+						TextDisabled("%s", sd.dispname.c_str());
+						SameLine();
+						SetCursorPosX(p0.x);
+					}
+					if (Button("<")) sd.expname = sd.dispname;
+					SetHoveredTooltip("Copy display name to export name");
+					SameLine();
+					Text("%s", sd.str().c_str());
+					SetHoveredTooltip(sd.uparams_known ? sd.uparams.str().c_str() : "Parameters unknown");
+					if (std::string_view(propbuf).find_first_of(badchars) != std::string::npos) {
+						TextColored(badcol, "Property name must not contain any of \"%s\"", badchars);
+					}
+					PopID();
 				}
-				if (Button("<")) sd.expname = sd.dispname;
-				SetHoveredTooltip("Copy display name to export name");
-				SameLine();
-				Text("%s", sd.str().c_str());
-				SetHoveredTooltip(sd.uparams_known ? sd.uparams.str().c_str() : "Parameters unknown");
-				if (std::string_view(propbuf).find_first_of(badchars) != std::string::npos) {
-					TextColored(badcol, "Property name must not contain any of \"%s\"", badchars);
-				}
-				PopID();
 			}
-			PopID();
+			EndChild();
 			Separator();
 			// other options
 			Checkbox("Binary", &m_save_binary);
