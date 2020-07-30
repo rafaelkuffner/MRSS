@@ -170,15 +170,21 @@ namespace cgu {
 		}
 
 		// returns the GL name of the object
-		GLuint get() const noexcept {
+		GLuint get() const & noexcept {
 			return m_id;
 		}
 
+		// disallow GLuint conversion on rvalues
+		GLuint get() const && noexcept = delete;
+
 		// implicit GLuint converter
 		// returns the GL name of the object
-		operator GLuint() const noexcept {
+		operator GLuint() const & noexcept {
 			return m_id;
 		}
+
+		// disallow GLuint conversion on rvalues
+		operator GLuint() const && noexcept = delete;
 
 		// explicit boolean converter
 		// true IFF GL name is not zero
