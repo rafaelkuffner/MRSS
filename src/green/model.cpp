@@ -435,9 +435,8 @@ namespace green {
 			return;
 		}
 		const auto &saliency = m_model->saliency();
-		const auto sdcolor = m_saliency_index < saliency.size() ? saliency[m_saliency_index] : model_saliency_data{};
-		const auto sdbase = m_saliency_export_index < saliency.size() ? saliency[m_saliency_export_index] : model_saliency_data{};
-		//if (salout.prop_saliency.is_valid()) m_model->trimesh().request_vertex_colors();
+		const auto sdcolor = m_saliency_export_index < saliency.size() ? saliency[m_saliency_export_index] : model_saliency_data{};
+		const auto sdbase = m_saliency_baseline_index < saliency.size() ? saliency[m_saliency_baseline_index] : model_saliency_data{};
 		m_fpath_save = fpath;
 		m_pending_save = std::async([=, lock=std::move(lock)]() {
 			// TODO is this also not threadsafe? idk
