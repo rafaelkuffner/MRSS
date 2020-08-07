@@ -987,6 +987,9 @@ namespace {
 
 		string infile, outfile;
 		string decprop = "@0";
+		string salprop;
+		string colorprop;
+		string colormode;
 		bool show_gui = false;
 		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
 		bool save_ascii = false;
@@ -1014,7 +1017,9 @@ namespace {
 					sal_uparams.show_progress = false;
 					dec_uparams.show_progress = false;
 				})
-				.doc(loc[help_cli_noprogress].clone())
+				.doc(loc[help_cli_noprogress].clone()),
+			(option("--color") & value("mode", colormode))
+				.doc(loc[help_cli_color].clone())
 		}.doc(loc[help_cli_opts_common].clone());
 
 		auto sal_opts = group{
@@ -1035,7 +1040,11 @@ namespace {
 			(option("-s", "--subsampling") & number("samples-per-neighborhood", sal_uparams.samples_per_neighborhood))
 				.doc(loc[help_sal_samplespern].clone()),
 			option("--fullsampling").call([]{ sal_uparams.subsample_auto = false; })
-				.doc(loc[help_sal_full].clone())
+				.doc(loc[help_sal_full].clone()),
+			(option("--salprop") & value("propname", salprop))
+				.doc(loc[help_sal_salprop].clone()),
+			(option("--colorprop") & value("propname", colorprop))
+				.doc(loc[help_sal_colorprop].clone())
 		}.doc(loc[help_cli_opts_saliency].clone());
 
 		auto dec_opts = group{
@@ -1050,7 +1059,7 @@ namespace {
 			(option("--decbins") & integer("bins", dec_uparams.nbins))
 				.doc(loc[help_dec_bins].clone()),
 			(option("--decprop") & value("propname", decprop))
-				.doc(loc[help_dec_propname].clone()),
+				.doc(loc[help_dec_decprop].clone()),
 			option("--decimate-nosaliency").call([]{ dec_uparams.use_saliency = false; })
 				.doc(loc[help_dec_nosaliency].clone())
 		}.doc(loc[help_cli_opts_decimate].clone());
@@ -1087,6 +1096,7 @@ namespace {
 			fmt.first_column(4);
 			const auto exename = std::filesystem::u8path(argv[0]).filename().replace_extension("").u8string();
 			auto man = make_man_page(opts, exename, fmt);
+			man.prepend_section("SALIENCY PROPERTIES", loc[help_cli_propnames].clone());
 			man.prepend_section(
 				"DESCRIPTION",
 				"    Multi-Resolution Subsampled Saliency\n"
@@ -1127,22 +1137,28 @@ namespace {
 		decimate_progress dec_progress;
 		model_saliency_data sd;
 
-		if (!do_sal) {
-			// should always try find named property so that it can be decimated or saved
-			// even if we're not actually using it for decimation
-			// need to search model, not mesh (because model de-names the properties)
+		if (!do_sal && do_dec) {
+			// try find named property for decimation
 			if (auto it = m.find_saliency(decprop); it != m.saliency().end()) {
+				cout << "decimating using saliency property '" << decprop << "' : " << it->str() << endl;
 				sd = *it;
-				cout << "using saliency property '" << decprop << "' : " << sd.str() << endl;
 			}
 			if (!sd.prop_saliency.is_valid()) {
-				cout << "couldn't find saliency property '" << decprop << "'" << endl;
+				cout << "couldn't find saliency property '" << decprop << "' for decimation" << endl;
 				// only exit if the property is really required
 				if (do_dec && dec_uparams.use_saliency) exit(1);
 			}
 		}
 
 		if (do_sal) {
+
+			if (!salprop.empty()) {
+				const char *badchars = " \t@[]";
+				if (salprop.find_first_of(badchars) != std::string::npos) {
+					std::cout << "bad char in property name '" << salprop << "'" << std::endl;
+					exit(1);
+				}
+			}
 
 			saliency_mesh_params mparams;
 			mparams.mesh = &m.trimesh();
@@ -1174,7 +1190,12 @@ namespace {
 			sd.prop_sampled = mparams.prop_sampled;
 			sd.uparams = sal_uparams;
 			sd.progress = sal_progress;
+			sd.uparams_known = true;
+			sd.persistent = true;
+			sd.should_export = true;
+			sd.dispname = salprop;
 
+			// put at last index
 			m.saliency().push_back(sd);
 		}
 
@@ -1187,13 +1208,38 @@ namespace {
 			pmr = &md;
 		}
 
+		if (colorprop.empty()) {
+			colorprop = do_dec ? decprop : do_sal ? "@-1" : "@0";
+		}
+
 		if (outfile.size()) {
 			try {
 				model_save_params sparams;
-				// FIXME cli export color mode
-				sparams.prop_saliency = sd.prop_saliency;
-				sparams.color_mode = model_color_mode::saliency;
 				sparams.binary = !save_ascii;
+				sparams.color_mode = model_color_mode::saliency;
+				if (auto it = pmr->find_saliency(colorprop); it != pmr->saliency().end()) {
+					cout << "colorizing using saliency property '" << colorprop << "' : " << it->str() << endl;
+					sparams.prop_saliency = it->prop_saliency;
+				} else {
+					cout << "couldn't find saliency property '" << colorprop << "' for colorization" << endl;
+				}
+				if (colormode.size()) {
+					std::cout << "trying color mode " << colormode << std::endl;
+					if (colormode == "none") {
+						sparams.color_mode = model_color_mode::none;
+					} else if (colormode == "vcolor") {
+						sparams.color_mode = model_color_mode::vcolor;
+					} else if (colormode == "saliency") {
+						sparams.color_mode = model_color_mode::saliency;
+					} else if (colormode == "saliency_comparison") {
+						sparams.color_mode = model_color_mode::saliency_comparison;
+						// TODO baseline selection (and consequent doc updates)
+					} else {
+						std::cout << "unknown color mode " << colormode << ", using saliency" << std::endl;
+					}
+				} else {
+					std::cout << "using color mode saliency" << std::endl;
+				}
 				pmr->save(std::filesystem::u8path(outfile), sparams);
 			} catch (exception &e) {
 				cout << "failed to save model: " << e.what() << endl;

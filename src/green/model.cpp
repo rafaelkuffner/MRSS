@@ -289,6 +289,8 @@ namespace green {
 			int i = 0;
 			auto r = std::from_chars(&*name.begin() + 1, &*name.end(), i);
 			if (r.ec != std::errc{}) return m_saliency.end();
+			if (i < 0) i = int(m_saliency.size()) + i;
+			if (i < 0) return m_saliency.begin();
 			if (i >= m_saliency.size()) return m_saliency.end();
 			return m_saliency.begin() + i;
 		} else {
