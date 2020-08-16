@@ -1165,9 +1165,12 @@ namespace {
 			);
 			cout << man << endl;
 		}
+
+		std::cout << "saliency enabled=" << do_sal << "; params: " << sal_uparams.str(true) << std::endl;
+		std::cout << "decimate enabled=" << do_dec << "; params: " << dec_uparams.str() << std::endl;
 		
 		if (!(do_sal || do_dec || show_gui || outfile.size())) {
-			if (!do_help && !do_version) cerr << "nothing to do" << endl;
+			if (!do_help && !do_version) cout << "nothing to do" << endl;
 			exit(0);
 		}
 

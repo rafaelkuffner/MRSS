@@ -133,18 +133,24 @@ namespace green {
 
 	class SaliencyComputation {
 	private:
-		struct sample_candidate {
+		struct initial_sample_candidate {
 			unsigned vdi = -1;
 			float area = 0;
 			float summedarea = 0;
-			bool deleted = false;
+			//bool deleted = false;
+		};
+
+		struct sample_candidate : initial_sample_candidate {
+			std::atomic<bool> deleted2{false};
+
+			sample_candidate(const initial_sample_candidate &other) : initial_sample_candidate{other} {}
 		};
 
 		saliency_mesh_params m_mparams;
 		saliency_user_params m_uparams;
 		saliency_progress &m_progress;
 		MeshCache m_meshcache;
-		std::vector<sample_candidate> m_candidates0;
+		std::vector<initial_sample_candidate> m_candidates0;
 		float m_surfaceArea = 0;
 		float m_total_vertex_area = 0;
 		float m_real_noise_height = 0;
@@ -197,7 +203,7 @@ namespace green {
 			m_progress.state = saliency_computation_state::cand;
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());
-			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return sample_candidate{vdi}; });
+			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return initial_sample_candidate{vdi}; });
 
 			// randomize sample candidates
 			// makes subsampling more stable and less sensitive to parallelization
@@ -412,21 +418,26 @@ namespace green {
 			// radius of a circle with 1/nsamples of the surface area
 			const float subsampling_radius = sqrt(m_surfaceArea * subsampling / m_mparams.mesh->n_vertices() / 3.14159265f);
 
-			std::vector<plf::colony<sample_candidate>::iterator> candidateProperty(m_mparams.mesh->n_vertices());
+			// candidates vector will not be resized, so iterators will remain valid
+			using candidate_iter_t = std::vector<sample_candidate>::iterator;
+			std::vector<sample_candidate> candidates(m_candidates0.begin(), m_candidates0.end());
+			std::vector<candidate_iter_t> candidateProperty(m_mparams.mesh->n_vertices());
 
-			plf::colony<sample_candidate> candidates;
-			candidates.reserve(m_meshcache.vdis.size());
-			for (auto &cand : m_candidates0) {
-				TriMesh::VertexHandle v(m_meshcache.get_vertex(cand.vdi).vi);
-				// after insertion, candidates colony starts in the same order
-				auto it = candidates.insert(cand);
-				// store the colony iterator as a vertex property
-				// colony iterators do not get invalidated by erasures
+			// number of non-deleted candidates
+			std::atomic<int> remaining_candidates{int(candidates.size())};
+
+			// area of non-excluded vertices
+			// can use this to report actual progress %
+			std::atomic<float> remaining_area{1.f};
+
+			// map vertices to candidates
+			for (auto it = candidates.begin(); it != candidates.end(); ++it) {
+				TriMesh::VertexHandle v(m_meshcache.get_vertex(it->vdi).vi);
 				candidateProperty[v.idx()] = it;
 			}
 
 			struct next_candidate {
-				plf::colony<sample_candidate>::iterator it;
+				candidate_iter_t it;
 				// tracking the summed-area start point separately from the iterator
 				// should be more robust to area differences between vertices
 				float summedarea = 0;
@@ -441,17 +452,26 @@ namespace green {
 			};
 
 			auto cand_inc_loop_area = [&](next_candidate &nc, float a) {
+				const candidate_iter_t none{};
 				const auto it0 = nc.it;
+				candidate_iter_t itb{};
 				float a1 = nc.summedarea + a;
-				while (nc.it->summedarea < a1 || nc.it->deleted) {
+				while (nc.it->summedarea < a1 || nc.it->deleted2.load(std::memory_order_relaxed)) {
 					if (cand_inc_loop(nc.it)) a1 = std::max(0.f, a1 - 1.f);
 					if (nc.it == it0) {
 						// no more candidates
-						// TODO if the only candidate(s) are between it0 and a1 we won't find them
-						// this is not really a problem because the main sample loop will move
-						// the candidate iterators to valid candidates until they're exhausted
-						return true;
+						// if the only candidate(s) are between it0 and a1 we won't find them 'properly'
+						// so use any valid candidate we've seen so far
+						if (itb == none) {
+							// no valid candidates => exhausted
+							return true;
+						} else {
+							nc.it = itb;
+							nc.summedarea = a1;
+							return false;
+						}
 					}
+					if (itb == none && !nc.it->deleted2.load(std::memory_order_relaxed)) itb = nc.it;
 				}
 				nc.summedarea = a1;
 				return false;
@@ -464,26 +484,33 @@ namespace green {
 				cand_inc_loop_area(nc, float(i) / omp_get_max_threads());
 			}
 
-			// note: this isnt strictly random anymore
-			auto random_vdi = [&]() {
+			// note: the randomness depends on shuffling the candidates beforehand
+			// currently on lucy (default params) about 3.5% execution time goes here, and about 6% at -a 0.01 -s 50
+			auto random_vdi = [&](int threadindex) {
 				if (candidates.empty()) return unsigned(-1);
-				auto &nc = thread_next_cand[omp_get_thread_num()];
-				if (nc.it == plf::colony<sample_candidate>::iterator()) {
+				auto &nc = thread_next_cand[threadindex];
+				if (nc.it == candidate_iter_t()) {
 					// candidates already exhausted
 					return unsigned(-1);
 				}
-				if (!nc.it->deleted) {
+				if (!nc.it->deleted2.load(std::memory_order_relaxed)) {
 					// candidate already usable
 					return nc.it->vdi;
 				}
 				if (cand_inc_loop_area(nc, float(subsampling) / m_mparams.mesh->n_vertices())) {
-					// search for next candidate (probably) exhausted
-					// note: the 'probably' currently prevents us from sentinel-izing the iterator
+					// search for next candidate exhausted (actually now)
+					// note: the 'probably' used to prevent us from sentinel-izing the iterator
+					nc.it = {};
 					return unsigned(-1);
 				}
 				// note: should not use the deleted flag as a reason to return -1
 				// deleted flag may be set by another thread after we selected a valid candidate
 				return nc.it->vdi;
+			};
+
+			const auto atomic_float_accum = [](std::atomic<float> &a, float b) {
+				float a0 = a.load(std::memory_order_relaxed);
+				while (!a.compare_exchange_weak(a0, a0 + b, std::memory_order_relaxed));
 			};
 
 			// correction factor to (experimentally) try to get closer to the desired number of samples.
@@ -503,54 +530,24 @@ namespace green {
 			// NOTE 1.4 is not scientific and may not be quite low enough in all scenarios but is generally ok.
 			const float sampling_correction = 1.4f;
 
-			// area of non-excluded vertices
-			// can use this to report actual progress %
-			float remaining_area = 1;
+			// radius within which to prevent future samples
+			const float exclusion_radius = subsampling_radius * sampling_correction;
 
-			// sample in spits until there are no more candidates
-			while (!m_progress.should_cancel) {
+			std::atomic_flag progress_lock{false};
 
-				// radius within which to prevent future samples
-				const float exclusion_radius = subsampling_radius * sampling_correction;
-
-				// adjust samples per spit based on vertices covered per sample
-				const float vertices_per_spit_per_thread = 1000000;
-				const float vertices_per_sample = m_mparams.mesh->n_vertices() * currentRadius * currentRadius * 3.14159265f / m_surfaceArea;
-
-				// specifying dynamic scheduling seems very important for this to perform well
-				// note: too few samples per thread per will hurt performance (with openmp overhead)
-				// while too many samples per thread will also hurt performance due to lazy candidate
-				// deletion and may result in worse sampling characteristics.
-				const int samples_per_spit = std::min<int>(omp_get_max_threads() * vertices_per_spit_per_thread / vertices_per_sample, m_mparams.mesh->n_vertices() / float(subsampling) * 0.5f) + 1;
-#pragma omp parallel for schedule(dynamic)
-				for (int i = 0; i < samples_per_spit; i++)
-				{
-					if (m_progress.should_cancel) {
-						// can't break an openmp loop, so we have to spin
-						std::this_thread::yield();
-						continue;
-					}
+			auto threadproc = [&](int threadindex) {
+				while (!m_progress.should_cancel) {
 					
-					auto &stats = m_thread_stats[omp_get_thread_num()];
+					auto &stats = m_thread_stats[threadindex];
 					stats.timer_begin();
 
 					// yes, this may select candidates that have been (or will be) flagged as deleted
 					// we have to put up with this in order to parallelize
-					const auto rootvdi = random_vdi();
+					const auto rootvdi = random_vdi(threadindex);
 					if (rootvdi == -1) {
-						// can't break an openmp loop, so we have to spin
-						// this should only happen when we're out of sample candidates
-						// (but can currently happen spuriously in rare conditions)
-						std::this_thread::yield();
-						continue;
+						// this should only happen when we're out of sample candidates (actually now)
+						return;
 					}
-
-					const auto atomic_float_accum = [](std::atomic<float> &a, float b) {
-						float a0 = 0;
-						do {
-							a0 = a.load(std::memory_order_relaxed);
-						} while (!a.compare_exchange_weak(a0, a0 + b, std::memory_order_relaxed));
-					};
 
 					const auto visitor = [&](unsigned vdi, float r, float s) {
 						auto &vert = m_meshcache.get_vertex(vdi);
@@ -570,13 +567,16 @@ namespace green {
 						atomic_float_accum(tempSaliencyProperty[v.idx()].w, w);
 						if (r < exclusion_radius) {
 							// exclude from future sampling
-							const auto none = plf::colony<sample_candidate>::iterator();
+							const auto none = candidate_iter_t();
 							auto it = candidateProperty[v.idx()];
 							if (it != none) {
+								// note: cannot actually erase anything
 								candidateProperty[v.idx()] = none;
-								it->deleted = true;
-								// cannot do parallel erase!
-								//candidates.erase(it);
+								bool deleted0 = it->deleted2.load(std::memory_order_relaxed);
+								if (!deleted0 && it->deleted2.compare_exchange_strong(deleted0, true, std::memory_order_relaxed)) {
+									remaining_candidates.fetch_sub(1, std::memory_order_relaxed);
+									atomic_float_accum(remaining_area, -it->area);
+								}
 							}
 						}
 					};
@@ -588,60 +588,39 @@ namespace green {
 					stats.nh_timer_end();
 
 					// TODO not actually completion, just num samples
-					const int completion1 = completion.fetch_add(1);
+					const int completion1 = completion.fetch_add(1, std::memory_order_relaxed);
 
-					// update progress to some extent to show activity
-					if (m_uparams.show_progress && omp_get_thread_num() == 0 && (stats.time0 - m_time_last_percent) > std::chrono::milliseconds(110)) {
-						m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
-						m_time_last_percent = stats.time0 - std::chrono::milliseconds(60);
-						m_progress.levels[currentLevel].completed_samples = completion1;
-						std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1);
-					}
-				}
-
-				// make thread candidate iterators point to non-deleted candidates
-				for (auto &nc : thread_next_cand) {
-					auto it0 = nc.it;
-					while (nc.it->deleted) {
-						cand_inc_loop(nc.it);
-						if (nc.it == it0) {
-							nc.it = plf::colony<sample_candidate>::iterator();
-							break;
+					// update progress
+					if (m_uparams.show_progress && !progress_lock.test_and_set(std::memory_order_acquire)) {
+						if ((stats.time0 - m_time_last_percent) > std::chrono::milliseconds(110)) {
+							m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(stats.time0 - m_time_start);
+							m_time_last_percent = stats.time0 - std::chrono::milliseconds(60);
+							const float remarea1 = remaining_area.load(std::memory_order_relaxed);
+							m_progress.levels[currentLevel].completion = 1 - remarea1;
+							m_progress.levels[currentLevel].completed_samples = completion1;
+							std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples, %7.3f%%", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1, (1 - remarea1) * 100);
 						}
+						progress_lock.clear(std::memory_order_release);
 					}
 				}
+			};
 
-				// actually erase candidates after some number of samples
-				remaining_area = 0;
-				for (auto it = candidates.begin(); it != candidates.end(); ) {
-					if (it->deleted) {
-						it = candidates.erase(it);
-					} else {
-						remaining_area += it->area;
-						it++;
-					}
+			// just use omp as a threadpool (lol)
+#pragma omp parallel for schedule(static)
+			for (int threadindex = 0; threadindex < omp_get_max_threads(); threadindex++) {
+				threadproc(threadindex);
+			}
+
+			{
+				const int completion1 = completion;
+				m_progress.levels[currentLevel].completion = 1;
+				m_progress.levels[currentLevel].completed_samples = completion1;
+				std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples, %7.3f%% : finished\n", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1, 100.f);
+				const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion1);
+				std::cout << "Actual saliency subsampling: " << (100.f / actual_subsampling) << "% (" << actual_subsampling << "x)" << std::endl;
+				if (remaining_candidates != 0) {
+					std::cout << "WARNING: candidates not actually exhausted! remaining: " << remaining_candidates << std::endl;
 				}
-
-				// need to do progress outside inner loop to access remaining area
-				if (m_uparams.show_progress && (m_thread_stats[0].time0 - m_time_last_percent) > std::chrono::milliseconds(50)) {
-					m_time_last_percent = m_thread_stats[0].time0;
-					const int completion1 = completion;
-					m_progress.levels[currentLevel].completion = 1 - remaining_area;
-					m_progress.levels[currentLevel].completed_samples = completion1;
-					m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(m_thread_stats[0].time0 - m_time_start);
-					std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples, %7.3f%%", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1, (1 - remaining_area) * 100);
-				}
-
-				if (candidates.empty()) {
-					const int completion1 = completion;
-					m_progress.levels[currentLevel].completion = 1;
-					m_progress.levels[currentLevel].completed_samples = completion1;
-					std::printf("\rSaliency computation [subsampled] @%8.2fs (lv %u/%d): %9d samples, %7.3f%% : no more sample candidates\n", m_progress.elapsed_time.count() / 1000.0, currentLevel + 1, m_uparams.levels, completion1, 100.f);
-					const float actual_subsampling = m_mparams.mesh->n_vertices() / float(completion1);
-					std::cout << "Actual saliency subsampling: " << (100.f / actual_subsampling) << "% (" << actual_subsampling << "x)" << std::endl;
-					break;
-				}
-
 			}
 
 			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt) {
