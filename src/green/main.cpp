@@ -32,6 +32,30 @@
 #include "gitver.hpp"
 #include "about_licences.txt.hpp"
 
+#ifdef _WIN32
+// TODO why am i having to do this now? (vs 16.7)
+#pragma comment(lib, "winmm.lib")
+extern "C" {
+	__declspec(dllimport) int __stdcall timeBeginPeriod(unsigned uPeriod);
+	__declspec(dllimport) int __stdcall timeEndPeriod(unsigned uPeriod);
+}
+
+class win32_time_period {
+	unsigned m_period;
+public:
+	~win32_time_period() {
+		timeEndPeriod(m_period);
+	}
+
+	win32_time_period(unsigned period) : m_period(period) {
+		timeBeginPeriod(m_period);
+	}
+
+	win32_time_period(const win32_time_period &) = delete;
+	win32_time_period & operator=(const win32_time_period &) = delete;
+};
+#endif
+
 using namespace std;
 using namespace green;
 
@@ -791,6 +815,10 @@ namespace {
 
 	void main_gui() {
 
+#ifdef _WIN32
+		win32_time_period _timeperiod(1);
+#endif
+
 		if (!glfwInit()) {
 			cerr << "Error: Could not initialize GLFW" << endl;
 			abort();
@@ -823,6 +851,8 @@ namespace {
 		center_window(window, glfwGetPrimaryMonitor());
 
 		glfwMakeContextCurrent(window);
+
+		//glfwSwapInterval(0);
 
 		// required for full GLEW functionality for GL3+
 		glewExperimental = GL_TRUE;
@@ -926,17 +956,21 @@ namespace {
 		// loop until the user closes the window
 		while (!glfwWindowShouldClose(window)) {
 
-			poll_events();
-
 			// frame rate limiter and counter
-			auto now = chrono::steady_clock::now();
-			while (time_next_frame - now >= 1ms) {
-				this_thread::sleep_for(1ms);
-				// keep polling events when limiting frame rate to ensure responsiveness with e.g. win32 dialogs
-				poll_events();
+			auto now = chrono::steady_clock::time_point();
+			while (true) {
 				now = chrono::steady_clock::now();
+				poll_events();
+				if (time_next_frame - now < 1ms) {
+					break;
+				} else if (time_next_frame - now < 10ms) {
+					this_thread::sleep_until(time_next_frame);
+				} else {
+					// keep polling events when limiting frame rate to ensure responsiveness with e.g. win32 dialogs
+					this_thread::sleep_for(8ms);
+				}
 			}
-			const auto frame_duration = focus_lost ? 100ms : 6ms;
+			const auto frame_duration = focus_lost ? 100ms : 8ms;
 			time_next_frame = max(time_next_frame, now - frame_duration) + frame_duration;
 			fps_counter++;
 			if (now - time_last_fps >= 1s) {
