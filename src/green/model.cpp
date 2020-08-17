@@ -581,6 +581,7 @@ namespace green {
 					std::unique_lock lock(m_modelmtx, std::defer_lock);
 					if (lock.try_lock()) {
 						m_dead = true;
+						invalidate_scene();
 					} else {
 						spawn_locked_notification();
 					}
@@ -699,7 +700,7 @@ namespace green {
 			int cur_color_mode = int(m_disp_color_mode);
 			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
 				m_disp_color_mode = model_color_mode(cur_color_mode);
-				if (m_disp_color_mode != model_color_mode::none) m_saliency_vbo_dirty = true;
+				if (m_disp_color_mode != model_color_mode::none) invalidate_saliency_vbo();
 			}
 
 			Separator();
@@ -720,7 +721,7 @@ namespace green {
 				}, 
 				saliency_outputs.data(), saliency_outputs.size()
 			)) {
-				m_saliency_vbo_dirty = true;
+				invalidate_saliency_vbo();
 			}
 
 			if (m_disp_color_mode == model_color_mode::saliency_comparison && m_saliency_baseline_index < saliency_outputs.size()) {
@@ -729,7 +730,7 @@ namespace green {
 					auto &err = m_saliency_errors;
 					Text("Errors: min=%.3f, max=%.3f, rmse=%.3f", err.min, err.max, err.rms);
 					if (SliderFloat("Error Scale", &m_saliency_error_scale, 1, 100, "%.3f", 2)) {
-						m_saliency_vbo_dirty = true;
+						invalidate_saliency_vbo();
 					}
 				}
 			}
@@ -746,7 +747,7 @@ namespace green {
 					clip.sd = {};
 					clip.data.clear();
 					saliency_outputs.push_back(std::move(sd));
-					m_saliency_vbo_dirty = true;
+					invalidate_saliency_vbo();
 					// references/iterators into saliency outputs are invalidated
 				} else {
 					OpenPopup("Paste Error##pasteerror");
@@ -835,7 +836,7 @@ namespace green {
 							// (so this section should come last)
 							if (m_saliency_index >= saliency_outputs.size()) {
 								m_saliency_index = std::max(0, m_saliency_index - 1);
-								m_saliency_vbo_dirty = true;
+								invalidate_saliency_vbo();
 							}
 						}
 						CloseCurrentPopup();
@@ -1050,6 +1051,11 @@ namespace green {
 		return s;
 	}
 
+	void ModelEntity::invalidate_saliency_vbo() {
+		m_saliency_vbo_dirty = true;
+		invalidate_scene();
+	}
+
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, bool draw_scene) {
 		const auto xform0 = transform();
 		if (m_pending_load.valid() && m_pending_load.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -1060,8 +1066,7 @@ namespace green {
 				m_model->update_vao();
 				m_model->update_vbos();
 				m_scale = m_model->unit_bound_scale() * 4;
-				m_saliency_vbo_dirty = true;
-				invalidate_scene();
+				invalidate_saliency_vbo();
 			} catch (std::exception &e) {
 				std::cerr << "failed to load model: " << e.what() << std::endl;
 			} catch (...) {
@@ -1174,7 +1179,7 @@ namespace green {
 				saliency_outputs.push_back(sd);
 				// give focus to this result
 				m_saliency_index = saliency_outputs.size() - 1;
-				m_saliency_vbo_dirty = true;
+				invalidate_saliency_vbo();
 			} else {
 				// cancelled, destroy saliency property too
 				mparams.mesh->remove_property(mparams.prop_saliency);

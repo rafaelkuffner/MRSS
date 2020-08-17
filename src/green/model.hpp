@@ -291,6 +291,7 @@ namespace green {
 		bool draw_select_header(bool selected);
 		void spawn_locked_notification() const;
 		std::string make_name_tooltip() const;
+		void invalidate_saliency_vbo();
 
 	public:
 		ModelEntity();

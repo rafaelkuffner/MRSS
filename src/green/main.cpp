@@ -664,11 +664,20 @@ namespace {
 		glfwGetCursorPos(window, &mouse_pos.x, &mouse_pos.y);
 		glm::ivec2 mouse_pos_fb = {int(mouse_pos.x), fbsize.y - int(mouse_pos.y) - 1};
 
-		fb_scene.bind(GL_DRAW_FRAMEBUFFER, fbsize);
+		if (fbsize == glm::ivec2{0}) {
+			invalidate_scene();
+			return;
+		}
+
+		if (fb_scene.bind(GL_DRAW_FRAMEBUFFER, fbsize)) {
+			// TODO nicer?
+			scene_was_dirty = true;
+		}
 
 		if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			// nvidia: fbo is incomplete when window is minimized
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			invalidate_scene();
 			return;
 		}
 

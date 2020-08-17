@@ -376,7 +376,7 @@ namespace cgu {
 		cgu::draw_dummy(1, ycount);
 	}
 
-	void gl_rendertarget::bind(glm::ivec3 size_) {
+	bool gl_rendertarget::bind(glm::ivec3 size_) {
 		if (!tex) {
 			tex = gl_object::gen_texture();
 			glBindTexture(params.target, tex);
@@ -388,16 +388,17 @@ namespace cgu {
 		} else {
 			glBindTexture(params.target, tex);
 		}
-		if (size == size_) return;
+		if (size == size_) return false;
 		size = size_;
 		if (size.z == 0) {
 			glTexImage2D(params.target, 0, params.internalformat, size.x, size.y, 0, params.dataformat, params.datatype, nullptr);
 		} else {
 			glTexImage3D(params.target, 0, params.internalformat, size.x, size.y, size.z, 0, params.dataformat, params.datatype, nullptr);
 		}
+		return true;
 	}
 
-	void gl_framebuffer::bind(GLenum target, glm::ivec3 size_) {
+	bool gl_framebuffer::bind(GLenum target, glm::ivec3 size_) {
 		auto bind = [&]() {
 			glBindFramebuffer(target, fbo);
 			if (target != GL_READ_FRAMEBUFFER) glDrawBuffers(drawbuffers.size(), drawbuffers.data());
@@ -410,12 +411,15 @@ namespace cgu {
 				rt.bind(size_);
 				glFramebufferTexture(target, rt.params.attachment, rt.tex, 0);
 			}
+			return true;
 		} else {
+			bool r = false;
 			bind();
 			for (auto &rt : rendertargets) {
 				// resize
-				rt.bind(size_);
+				r |= rt.bind(size_);
 			}
+			return r;
 		}
 	}
 

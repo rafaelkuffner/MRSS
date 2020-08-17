@@ -264,11 +264,11 @@ namespace cgu {
 			: params(params_)
 		{}
 
-		void bind(glm::ivec2 size_) {
-			bind(glm::ivec3{size_, 0});
+		bool bind(glm::ivec2 size_) {
+			return bind(glm::ivec3{size_, 0});
 		}
 
-		void bind(glm::ivec3 size_);
+		bool bind(glm::ivec3 size_);
 	};
 
 	struct gl_framebuffer {
@@ -318,11 +318,11 @@ namespace cgu {
 			return *it;
 		}
 
-		void bind(GLenum target, glm::ivec2 size_) {
-			bind(target, glm::ivec3{size_, 0});
+		bool bind(GLenum target, glm::ivec2 size_) {
+			return bind(target, glm::ivec3{size_, 0});
 		}
 
-		void bind(GLenum target, glm::ivec3 size_);
+		bool bind(GLenum target, glm::ivec3 size_);
 
 	};
 
