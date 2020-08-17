@@ -133,6 +133,7 @@ namespace {
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
 	drag_mode cur_drag_mode = drag_mode::plane;
 
+	bool scene_dirty = true;
 	bool need_select = false;
 	bool need_focus_here = false;
 	bool maybe_dragging = false;
@@ -455,7 +456,7 @@ namespace {
 		draw_window_decimation();
 	}
 
-	void render_main_ui() {
+	void render_main_ui(bool scene_was_dirty) {
 
 		using namespace ImGui;
 		const auto winsize = GetIO().DisplaySize;
@@ -558,6 +559,10 @@ namespace {
 				TextDisabled("Click to regain focus");
 				Separator();
 			}
+			if (scene_was_dirty) {
+				TextDisabled("Rendering");
+				Separator();
+			}
 			EndMainMenuBar();
 		}
 		PopStyleColor(2);
@@ -648,9 +653,7 @@ namespace {
 
 	}
 
-	void render() {
-
-		// TODO dont redraw models when nothing has changed
+	void render(bool scene_was_dirty) {
 
 		glm::ivec2 fbsize;
 		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
@@ -669,10 +672,12 @@ namespace {
 			return;
 		}
 
-		glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-		glClearBufferfv(GL_DEPTH, 0, value_ptr(glm::vec4{1.f}));
-		glClearBufferfv(GL_COLOR, 0, value_ptr(glm::vec4{0.1f, 0.1f, 0.2f, 1.0f}));
-		glClearBufferiv(GL_COLOR, 1, value_ptr(glm::ivec4{-1}));
+		if (scene_was_dirty) {
+			glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glClearBufferfv(GL_DEPTH, 0, value_ptr(glm::vec4{1.f}));
+			glClearBufferfv(GL_COLOR, 0, value_ptr(glm::vec4{0.1f, 0.1f, 0.2f, 1.0f}));
+			glClearBufferiv(GL_COLOR, 1, value_ptr(glm::ivec4{-1}));
+		}
 		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
 		glm::mat4 proj = glm::perspective(cam_fov, float(fbsize.x) / fbsize.y, 0.1f, zfar);
@@ -744,7 +749,7 @@ namespace {
 		for (auto it = entities.begin(); it != entities.end(); ) {
 			can_hover = true;
 			auto &e = *it;
-			e->draw(view, proj, zfar);
+			e->draw(view, proj, zfar, scene_was_dirty);
 			if (e->dead()) {
 				if (static_cast<Entity *>(select_model) == e.get()) select_model = nullptr;
 				if (static_cast<Entity *>(hover_model) == e.get()) hover_model = nullptr;
@@ -956,6 +961,8 @@ namespace {
 		// loop until the user closes the window
 		while (!glfwWindowShouldClose(window)) {
 
+			const auto cam_xform0 = cam.view();
+
 			// frame rate limiter and counter
 			auto now = chrono::steady_clock::time_point();
 			while (true) {
@@ -986,9 +993,11 @@ namespace {
 			ImGui::NewFrame();
 
 			// render scene before main ui so that current model can be determined
+			const bool scene_was_dirty = scene_dirty;
+			scene_dirty = false;
 			render_early_ui();
-			render();
-			render_main_ui();
+			render(scene_was_dirty);
+			render_main_ui(scene_was_dirty);
 
 			for (auto it = persistent_ui.begin(); it != persistent_ui.end(); ) {
 				bool r = true;
@@ -999,6 +1008,9 @@ namespace {
 					it = persistent_ui.erase(it);
 				}
 			}
+
+			const auto cam_xform1 = cam.view();
+			if (cam_xform0 != cam_xform1) invalidate_scene();
 
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1356,6 +1368,10 @@ namespace green {
 
 	bool ui_decimation_window_open() {
 		return decimation_window_open;
+	}
+
+	void invalidate_scene() {
+		scene_dirty = true;
 	}
 
 	const char * saliency_state_str(saliency_computation_state s) {

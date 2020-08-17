@@ -40,6 +40,8 @@ namespace green {
 
 	bool ui_decimation_window_open();
 
+	void invalidate_scene();
+
 }
 
 namespace ImGui {

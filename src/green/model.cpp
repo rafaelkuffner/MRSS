@@ -472,6 +472,11 @@ namespace green {
 		m_dec_progress = dec_progress;
 	}
 
+	void ModelEntity::move_by(const glm::vec3 &d) {
+		m_translation += d;
+		if (d != glm::vec3(0)) invalidate_scene();
+	}
+
 	glm::mat4 ModelEntity::transform() const {
 		if (!m_model) return glm::mat4(1);
 		glm::mat4 transform(1);
@@ -540,6 +545,7 @@ namespace green {
 		glUnmapBuffer(GL_ARRAY_BUFFER);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		m_saliency_vbo_dirty = false;
+		invalidate_scene();
 	}
 
 	void ModelEntity::draw_window_models(bool selected) {
@@ -1044,7 +1050,8 @@ namespace green {
 		return s;
 	}
 
-	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) {
+	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, bool draw_scene) {
+		const auto xform0 = transform();
 		if (m_pending_load.valid() && m_pending_load.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 			try {
 				// is this the best place to do this?
@@ -1054,6 +1061,7 @@ namespace green {
 				m_model->update_vbos();
 				m_scale = m_model->unit_bound_scale() * 4;
 				m_saliency_vbo_dirty = true;
+				invalidate_scene();
 			} catch (std::exception &e) {
 				std::cerr << "failed to load model: " << e.what() << std::endl;
 			} catch (...) {
@@ -1069,50 +1077,54 @@ namespace green {
 		if (m_model) {
 			if (selected) draw_window_selection();
 			if (selected) draw_window_export();
-			update_vbo();
-			// determine color map to apply in shader
-			auto &saliency_outputs = m_model->saliency();
-			int color_map = 0;
-			const bool sal_valid = m_saliency_index < saliency_outputs.size();
-			if (m_disp_color_mode == model_color_mode::saliency && sal_valid) color_map = 3;
-			if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
-			if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
-			// prepare to draw
-			model_draw_params params;
-			params.sel = sel;
-			params.entity_id = id();
-			auto set_cull_faces = [](bool b) {
-				if (b) {
-					glEnable(GL_CULL_FACE);
-					glCullFace(GL_BACK);
-				} else {
-					glDisable(GL_CULL_FACE);
-				}
-			};
-			// faces
-			params.color = {0.6f, 0.6f, 0.5f, 1};
-			params.vert_color_map = m_color_faces ? color_map : 0;
-			set_cull_faces(m_cull_faces);
-			glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
-			if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
-			// edges
-			params.shading = 0;
-			params.color = {0.03f, 0.03f, 0.03f, 1};
-			params.vert_color_map = 0;
-			set_cull_faces(m_cull_edges);
-			glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-			if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
-			// verts
-			params.color = {0.5f, 0, 0, 1};
-			params.vert_color_map = m_color_verts ? color_map : 0;
-			params.sel.hover_entity = -1;
-			params.sel.select_entity = -1;
-			//params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);
-			glDisable(GL_CULL_FACE);
-			glPointSize(m_vert_point_size);
-			glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
-			if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
+			if (draw_scene) {
+				update_vbo();
+				// determine color map to apply in shader
+				auto &saliency_outputs = m_model->saliency();
+				int color_map = 0;
+				const bool sal_valid = m_saliency_index < saliency_outputs.size();
+				if (m_disp_color_mode == model_color_mode::saliency && sal_valid) color_map = 3;
+				if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
+				if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
+				// prepare to draw
+				model_draw_params params;
+				params.sel = sel;
+				params.entity_id = id();
+				auto set_cull_faces = [](bool b) {
+					if (b) {
+						glEnable(GL_CULL_FACE);
+						glCullFace(GL_BACK);
+					} else {
+						glDisable(GL_CULL_FACE);
+					}
+				};
+				// faces
+				params.color = {0.6f, 0.6f, 0.5f, 1};
+				params.vert_color_map = m_color_faces ? color_map : 0;
+				set_cull_faces(m_cull_faces);
+				glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
+				if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+				// edges
+				params.shading = 0;
+				params.color = {0.03f, 0.03f, 0.03f, 1};
+				params.vert_color_map = 0;
+				set_cull_faces(m_cull_edges);
+				glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+				if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
+				// verts
+				params.color = {0.5f, 0, 0, 1};
+				params.vert_color_map = m_color_verts ? color_map : 0;
+				params.sel.hover_entity = -1;
+				params.sel.select_entity = -1;
+				//params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);
+				glDisable(GL_CULL_FACE);
+				glPointSize(m_vert_point_size);
+				glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
+				if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
+			}
 		}
+		const auto xform1 = transform();
+		if (xform0 != xform1) invalidate_scene();
 	}
 
 	std::future<saliency_result> ModelEntity::compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) {

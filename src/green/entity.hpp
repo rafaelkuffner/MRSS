@@ -44,7 +44,7 @@ namespace green {
 		// model to world
 		virtual glm::mat4 transform() const = 0;
 
-		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar) = 0;
+		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, bool draw_scene) = 0;
 
 		virtual std::future<saliency_result> compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) {
 			return {};
