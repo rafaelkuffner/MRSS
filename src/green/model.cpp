@@ -552,6 +552,7 @@ namespace green {
 		using namespace ImGui;
 		if (Begin("Models")) {
 			PushID(this);
+			bool dirty = false;
 			draw_select_header(selected);
 			if (m_pending_load.valid()) {
 				Text("Loading...");
@@ -560,11 +561,11 @@ namespace green {
 			} else {
 				Text("Failed to load model");
 			}
-			Checkbox("Faces", &m_show_faces);
+			dirty |= Checkbox("Faces", &m_show_faces);
 			SameLine();
-			Checkbox("Edges", &m_show_edges);
+			dirty |= Checkbox("Edges", &m_show_edges);
 			SameLine();
-			Checkbox("Verts", &m_show_verts);
+			dirty |= Checkbox("Verts", &m_show_verts);
 			SameLine();
 			SetCursorPosX(GetCursorPosX() + std::max(0.f, GetContentRegionAvail().x - 20));
 			PushStyleColor(ImGuiCol_Button, ImVec4{0.6f, 0.3f, 0.3f, 1});
@@ -595,6 +596,7 @@ namespace green {
 			}
 			Separator();
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+			if (dirty) invalidate_scene();
 			PopID();
 		}
 		End();
