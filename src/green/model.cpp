@@ -702,7 +702,7 @@ namespace green {
 			int cur_color_mode = int(m_disp_color_mode);
 			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
 				m_disp_color_mode = model_color_mode(cur_color_mode);
-				if (m_disp_color_mode != model_color_mode::none) invalidate_saliency_vbo();
+				invalidate_saliency_vbo();
 			}
 
 			Separator();
