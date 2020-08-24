@@ -684,16 +684,18 @@ namespace green {
 			}
 
 			if (CollapsingHeader("Rendering")) {
-				Checkbox("Color Faces", &m_color_faces);
+				bool r = false;
+				r |= Checkbox("Color Faces", &m_color_faces);
 				SetHoveredTooltip("Apply color mode to faces");
 				SameLine();
-				Checkbox("Color Verts", &m_color_verts);
+				r |= Checkbox("Color Verts", &m_color_verts);
 				SetHoveredTooltip("Apply color mode to vertices");
-				Checkbox("Cull Faces", &m_cull_faces);
+				r |= Checkbox("Cull Faces", &m_cull_faces);
 				SameLine();
-				Checkbox("Cull Edges", &m_cull_edges);
-				SliderInt("Point Size", &m_vert_point_size, 1, 5);
+				r |= Checkbox("Cull Edges", &m_cull_edges);
+				r |= SliderInt("Point Size", &m_vert_point_size, 1, 5);
 				m_vert_point_size = std::max(1, m_vert_point_size);
+				if (r) invalidate_scene();
 			}
 
 			Separator();
