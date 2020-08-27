@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <memory>
 #include <charconv>
+#include <string_view>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -20,6 +21,7 @@
 
 #include "imguiex.hpp"
 #include "main.hpp"
+#include "curvature.hpp"
 
 #include "model.glsl.hpp"
 
@@ -38,6 +40,71 @@ namespace {
 	auto & saliency_clipboard() {
 		static saliency_clipboard_data d;
 		return d;
+	}
+
+	template <size_t NBins>
+	float histogram_entropy(const std::array<float, NBins> &hist) {
+		float atot = 0;
+		for (auto &a : hist) atot += a;
+		const float iatot = 1.f / atot;
+		float s = 0;
+		const float nilog2 = -1.f / log(2.f);
+		for (auto &a : hist) {
+			// limit of p*log(p) as p tends to 0 is 0
+			// so we can safely discard anything very small
+			const float p = a * iatot;
+			if (!(p > 1e-6f)) continue;
+			s += p * log(p) * nilog2;
+		}
+		return s;
+	}
+
+	template <size_t NBins>
+	void print_histogram(const std::array<float, NBins> &hist) {
+		using namespace std;
+		float atot = 0;
+		for (auto &a : hist) atot += a;
+		const float iatot = 1.f / atot;
+		for (int i = 0; i < NBins; i++) {
+			cout << setw(3) << i << " | ";
+			const string_view maxbar = "================================================================================";
+			int c = maxbar.size() * hist[i] * iatot;
+			cout << maxbar.substr(0, c) << endl;
+		}
+	}
+
+	// by area, normalized
+	template <size_t NBins = 256, typename URNG>
+	inline std::array<float, NBins> maxdon_histogram(
+		const green::TriMesh &mesh,
+		OpenMesh::VPropHandleT<float> vertexAreasProperty,
+		float normalPower,
+		float maxval,
+		URNG &&rand,
+		const std::vector<int> &shuffled_samples
+	) {
+		using namespace green;
+		constexpr size_t maxsamples = 100000;
+		size_t start = 0;
+		if (mesh.n_vertices() > maxsamples) start = std::uniform_int_distribution<size_t>(0, mesh.n_vertices() - maxsamples)(rand);
+		assert(mesh.has_vertex_normals());
+		const float hist_irange = (NBins - 1) / maxval;
+		std::array<float, NBins> hist{};
+		float atot = 0;
+		// note: this sampling is not area-uniform
+		for (size_t i = start; i < std::min(start + maxsamples, mesh.n_vertices()); i++) {
+			TriMesh::VertexHandle v(shuffled_samples[i]);
+			const float area = mesh.property(vertexAreasProperty, v);
+			const float don = std::min(maxdon(mesh, v, normalPower), maxval);
+			const auto bin = intptr_t(hist_irange * don);
+			hist[bin] += area;
+			atot += area;
+		}
+		const float iatot = 1.f / atot;
+		for (auto &a : hist) {
+			a *= iatot;
+		}
+		return hist;
 	}
 
 }
@@ -149,6 +216,39 @@ namespace green {
 			m_saliency.push_back(std::move(sd));
 		}
 
+		{
+			// experimental auto contrast
+			// TODO run this after decimation too
+			static constexpr int hist_bits = 8;
+			std::minstd_rand rand{std::random_device{}()};
+			std::vector<int> samples(m_trimesh.n_vertices());
+			std::iota(samples.begin(), samples.end(), 0);
+			std::shuffle(samples.begin(), samples.end(), rand);
+			auto eval_entropy = [&](float contrast) {
+				//std::cout << "computing entropy for contrast=" << contrast << std::endl;
+				// use upper bound of 1 (and saliency now always uses 0-1 binning too)
+				// (determining the upper bound exactly would need a prepass to calculate the range before binning)
+				auto hist = maxdon_histogram<(1 << hist_bits)>(m_trimesh, m_prop_vertex_area, contrast, 1.f, rand, samples);
+				float s = histogram_entropy(hist);
+				//std::cout << "entropy=" << s << std::endl;
+				return s;
+			};
+			auto eval_entropy_gradient = [&](float contrast, float delta) {
+				float s0 = eval_entropy(contrast);
+				float s1 = eval_entropy(contrast + delta);
+				return std::pair{s0, (s1 - s0) / delta};
+			};
+			const float target_entropy = float(hist_bits) * 0.45f;
+			float best_contrast = 1;
+			float contrast_delta = 0.1f;
+			for (int i = 0; i < 5; i++) {
+				auto [s, dsdc] = eval_entropy_gradient(best_contrast, contrast_delta);
+				best_contrast = best_contrast - (s - target_entropy) / dsdc;
+				contrast_delta *= 0.7f;
+			}
+			std::cout << "auto contrast=" << best_contrast << std::endl;
+			m_auto_contrast = best_contrast;
+		}
 	}
 
 	void Model::save(const std::filesystem::path &fpath, const model_save_params &sparams0) {
@@ -1136,13 +1236,15 @@ namespace green {
 		if (xform0 != xform1) invalidate_scene();
 	}
 
-	std::future<saliency_result> ModelEntity::compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) {
+	std::future<saliency_result> ModelEntity::compute_saliency_async(const saliency_user_params &uparams0, saliency_progress &progress) {
 		if (!m_model) return {};
 		std::unique_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) {
 			spawn_locked_notification();
 			return {};
 		}
+		saliency_user_params uparams = uparams0;
+		if (uparams.auto_contrast) uparams.normal_power = m_model->auto_contrast();
 		saliency_mesh_params mparams;
 		mparams.mesh = &m_model->trimesh();
 		mparams.prop_vertex_area = m_model->prop_vertex_area();

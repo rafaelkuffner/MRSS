@@ -168,6 +168,7 @@ namespace green {
 		{
 			// ensure params are valid
 			m_uparams.sanitize();
+			std::cout << "Contrast: " << m_uparams.normal_power << std::endl;
 			
 			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
 			m_thread_stats.assign(omp_get_max_threads(), {});
@@ -181,10 +182,16 @@ namespace green {
 			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, m_uparams.normal_power);
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
 
-			m_hMin = curvhist.getMin();
-			m_hMax = curvhist.getMax();
-			std::cout << "Curv min: " << m_hMin << std::endl;
-			std::cout << "Curv max: " << m_hMax << std::endl;
+			//m_hMin = curvhist.getMin();
+			//m_hMax = curvhist.getMax();
+			// force 0-1 histogram range (for entropy calc)
+			// lower bound is pretty much always very near zero
+			// upper bound is often very near 1 (kinda weird - thats adjacent vertices with anti-parallel normals)
+			// using constant histogram range makes things more predictable
+			m_hMin = 0;
+			m_hMax = 1;
+			std::cout << "Curv min: " << curvhist.getMin() << std::endl;
+			std::cout << "Curv max: " << curvhist.getMax() << std::endl;
 
 			m_progress.state = saliency_computation_state::area;
 			std::cout << "Computing surface area" << std::endl;

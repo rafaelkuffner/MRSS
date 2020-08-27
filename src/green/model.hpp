@@ -110,6 +110,7 @@ namespace green {
 		std::vector<model_saliency_data> m_saliency;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
+		float m_auto_contrast = 1;
 
 		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
 		cgu::gl_object m_vao;
@@ -195,6 +196,10 @@ namespace green {
 				xmin = std::min(f, xmin);
 			}
 			return xmin;
+		}
+
+		float auto_contrast() const {
+			return m_auto_contrast;
 		}
 
 		GLuint vbo_color() const {

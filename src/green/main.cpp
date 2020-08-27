@@ -1456,6 +1456,7 @@ namespace ImGui {
 	}
 
 	bool edit_saliency_params(green::saliency_user_params &uparams) {
+		const Model *model = select_model ? select_model->model() : nullptr;
 		using green::saliency_user_params;
 		using namespace green::uistrings;
 		const uilocale &loc = uilocale_en();
@@ -1473,8 +1474,14 @@ namespace ImGui {
 		SetHoveredTooltip(loc, help_sal_area);
 		widgets.slider(param_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
 		SetHoveredTooltip(loc, help_sal_curvweight);
-		widgets.slider(param_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);
-		SetHoveredTooltip(loc, help_sal_normpower);
+		widgets.checkbox(param_sal_autocontrast, &saliency_user_params::auto_contrast);
+		//SetHoveredTooltip(loc, "TODO");
+		if (uparams.auto_contrast) {
+			if (model) Text("Current automatic contrast: %.3f", model->auto_contrast());
+		} else {
+			widgets.slider(param_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);
+			SetHoveredTooltip(loc, help_sal_normpower);
+		}
 		widgets.checkbox(param_sal_noisefilter, &saliency_user_params::normalmap_filter);
 		SetHoveredTooltip(loc, help_sal_noisefilter);
 		if (uparams.normalmap_filter) {

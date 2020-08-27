@@ -46,6 +46,7 @@ namespace green {
 			param_sal_noiseheight,
 			param_sal_samplespern,
 			param_sal_subsample,
+			param_sal_autocontrast,
 			// decimation
 			help_cli_opts_decimate,
 			help_dec_go,

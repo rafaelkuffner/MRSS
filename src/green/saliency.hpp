@@ -97,6 +97,8 @@ namespace green {
 		bool subsample_manual = false;
 		// enable auto subsampling
 		bool subsample_auto = true;
+		// use automatic contrast (normal_power ignored if true)
+		bool auto_contrast = true;
 		// command line progress output
 		bool show_progress = true;
 		// interactive previewing

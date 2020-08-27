@@ -18,6 +18,9 @@
 #include "model.hpp"
 #include "Histogram.h"
 
+#include <random>
+#include <algorithm>
+
 namespace green {
 
 	bool computeCurvature(
@@ -41,12 +44,14 @@ namespace green {
 		lce::Histogram &hCurvature
 	);
 
+	float maxdon(const TriMesh& mesh, TriMesh::VertexHandle v, float normalPower);
+
 	bool computeDoNMaxDiffs(
 		TriMesh &mesh,
 		OpenMesh::VPropHandleT<float> &DoN,
 		lce::Histogram &hDoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
-		float normalPowe
+		float normalPower
 	);
 
 	bool computeDoN(

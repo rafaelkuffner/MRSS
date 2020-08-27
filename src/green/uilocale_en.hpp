@@ -50,6 +50,7 @@ namespace green {
 		loc[param_sal_noiseheight] = "Noise Height";
 		loc[param_sal_samplespern] = "S/N";
 		loc[param_sal_subsample] = "Subsample";
+		loc[param_sal_autocontrast] = "Automatic contrast";
 		// decimation
 		loc[help_cli_opts_decimate] = "Decimation options (Work in Progress):";
 		loc[help_dec_go] = "Perform decimation";

@@ -16,6 +16,7 @@
 #include <cmath>
 #include <float.h>
 #include <map>
+#include <array>
 
 #include <OpenMesh/Tools/Smoother/JacobiLaplaceSmootherT.hh>
 
@@ -579,57 +580,50 @@ namespace green {
 
 		return true;
 	}
-	bool computeDoNMaxDiffs(TriMesh& mesh,
-		OpenMesh::VPropHandleT<float>& DoN, Histogram& hDoN, OpenMesh::VPropHandleT<float> vertexAreasProperty, float normalPower)
-	{
-		mesh.request_face_normals();
-		mesh.request_vertex_normals();
-		mesh.update_face_normals();
-		mesh.update_vertex_normals();
 
-
-		mesh.add_property(DoN);
-
-
-		TriMesh::VertexIter vIt, vEnd;
-
-		//finally, compute final curvature values for vertices
-
-
-		for (vIt = mesh.vertices_begin(), vEnd = mesh.vertices_end(); vIt != vEnd; ++vIt)
-		{
-			float maxDiff = 1.0f;
-			for (TriMesh::ConstVertexOHalfedgeIter vohIt = mesh.cvoh_iter(TriMesh::VertexHandle(vIt)); vohIt.is_valid(); ++vohIt) {
-				auto nv = mesh.to_vertex_handle(*vohIt);
-				auto norm1 = mesh.normal(nv);
-				for (TriMesh::ConstVertexOHalfedgeIter vohIt2 = mesh.cvoh_iter(TriMesh::VertexHandle(vIt)); vohIt2.is_valid(); ++vohIt2) {
-					auto nv2 = mesh.to_vertex_handle(*vohIt2);
-					auto norm2 = mesh.normal(nv2);
-					maxDiff = std::min(OpenMesh::dot(norm1, norm2), maxDiff);
-				}
+	float maxdon(const TriMesh& mesh, TriMesh::VertexHandle v, float normalPower) {
+		float maxDiff = 1.0f;
+		for (TriMesh::ConstVertexOHalfedgeIter vohIt = mesh.cvoh_iter(v); vohIt.is_valid(); ++vohIt) {
+			auto nv = mesh.to_vertex_handle(*vohIt);
+			auto norm1 = mesh.normal(nv);
+			for (TriMesh::ConstVertexOHalfedgeIter vohIt2 = mesh.cvoh_iter(v); vohIt2.is_valid(); ++vohIt2) {
+				auto nv2 = mesh.to_vertex_handle(*vohIt2);
+				auto norm2 = mesh.normal(nv2);
+				maxDiff = std::min(OpenMesh::dot(norm1, norm2), maxDiff);
 			}
+		}
+		maxDiff = pow(((1 - (maxDiff)) / 2), normalPower); //Divided by two to get 0-1 range so our power parameter works :)
+		maxDiff = std::clamp(maxDiff, 0.f, 1.f);
+		if (!isfinite(maxDiff)) maxDiff = 0;
+		return maxDiff;
+	}
 
-			maxDiff = pow(((1 - (maxDiff)) / 2), normalPower); //Divided by two to get 0-1 range so our power parameter works :)
-			if (!isfinite(maxDiff)) maxDiff = 0;
+	bool computeDoNMaxDiffs(
+		TriMesh& mesh,
+		OpenMesh::VPropHandleT<float>& DoN,
+		Histogram& hDoN,
+		OpenMesh::VPropHandleT<float> vertexAreasProperty,
+		float normalPower
+	) {
+		assert(mesh.has_vertex_normals());
+		mesh.add_property(DoN);
+		for (auto vIt = mesh.vertices_begin(); vIt != mesh.vertices_end(); ++vIt) {
+			float maxDiff = maxdon(mesh, *vIt, normalPower);
 			mesh.property(DoN, *vIt) = maxDiff;
 			hDoN.add(maxDiff);
 		}
-
 		return true;
 	}
 
-
-	bool computeDoN(TriMesh & mesh,
-		OpenMesh::VPropHandleT<float> & DoN, Histogram &hDoN, OpenMesh::VPropHandleT<float> vertexAreasProperty, float normalPower)
-	{
-		mesh.request_face_normals();
-		mesh.request_vertex_normals();
-		mesh.update_face_normals();
-		mesh.update_vertex_normals();
-
-
+	bool computeDoN(
+		TriMesh & mesh,
+		OpenMesh::VPropHandleT<float> & DoN,
+		Histogram &hDoN,
+		OpenMesh::VPropHandleT<float> vertexAreasProperty,
+		float normalPower
+	) {
+		assert(mesh.has_vertex_normals());
 		mesh.add_property(DoN);
-
 
 		TriMesh::VertexIter vIt, vEnd;
 
