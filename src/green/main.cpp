@@ -522,6 +522,13 @@ namespace {
 				Checkbox("Show Focus", &show_focus);
 				Separator();
 				PushStyleVar(ImGuiStyleVar_ItemSpacing, normal_item_spacing);
+				if (Button("Reset")) {
+					cam.focus = glm::vec3{0, 1, 0};
+					cam.cam_distance = 5;
+					cam.cam_yaw = -glm::pi<float>() / 4;
+					cam.cam_pitch = glm::pi<float>() / 8;
+				}
+				SameLine();
 				Text("Camera");
 				InputFloat3("Focus", value_ptr(cam.focus));
 				SliderAngle("Yaw", &cam.cam_yaw, -180, 180);
