@@ -367,7 +367,9 @@ namespace {
 			sal_need_preview |= edit_saliency_params(sal_uparams);
 			Separator();
 			draw_saliency_progress(sal_progress);
-			if (Button("Clear", {-1, 0})) sal_progress = {};
+			if (!sal_future.valid()) {
+				if (Button("Clear", {-1, 0})) sal_progress = {};
+			}
 			if (sal_need_preview && sal_uparams.preview) {
 				// user params edited and preview enabled, try launch preview
 				if (sal_future.valid()) {
