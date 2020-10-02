@@ -215,7 +215,16 @@ namespace green {
 			sd.prop_saliency = ph;
 			m_saliency.push_back(std::move(sd));
 		}
+		
+		// move original vids to unnamed property
+		if (OpenMesh::VPropHandleT<int> pvid; m_trimesh.get_property_handle(pvid, "original_vid")) {
+			std::cout << "Found original vertex ids property" << std::endl;
+			m_trimesh.add_property(m_prop_vid_original);
+			m_trimesh.property(m_prop_vid_original).data_vector() = std::move(m_trimesh.property(pvid).data_vector());
+			m_trimesh.remove_property(pvid);
+		}
 
+		// TODO move autocontrast to a function
 		{
 			// experimental auto contrast
 			// TODO run this after decimation too
@@ -315,6 +324,14 @@ namespace green {
 			// note - copying saliency data, not exactly efficient
 			m_trimesh.property(p).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
 		}
+		// copy original vids to named property
+		OpenMesh::VPropHandleT<int> exprop_vid;
+		if (sparams.original_vids && m_prop_vid_original.is_valid()) {
+			std::cout << "Export property for original vertex ids" << std::endl;
+			m_trimesh.add_property(exprop_vid, "original_vid");
+			m_trimesh.property(exprop_vid).set_persistent(true);
+			m_trimesh.property(exprop_vid).data_vector() = m_trimesh.property(m_prop_vid_original).data_vector();
+		}
 		// export!
 		OpenMesh::IO::Options opts{};
 		if (exprops.size()) opts = opts | OpenMesh::IO::Options::Custom;
@@ -323,6 +340,7 @@ namespace green {
 		std::cerr << "Saving model " << fpath.u8string() << std::endl;
 		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath, opts);
 		// remove temp named properties
+		m_trimesh.remove_property(exprop_vid);
 		for (auto &p : exprops) {
 			m_trimesh.remove_property(p);
 		}
@@ -346,6 +364,8 @@ namespace green {
 			m.m_trimesh.add_property(m.m_prop_vcolor_original);
 			m.m_trimesh.property(m.m_prop_vcolor_original).data_vector() = m_trimesh.property(m_prop_vcolor_original).data_vector();
 		}
+		// TODO not currently copying existing original vids
+		// (would need a nice way of choosing when to keep or regen)
 		// copy specified saliency properties
 		for (auto &sd : sdv) {
 			model_saliency_data sd2 = sd;
@@ -363,6 +383,14 @@ namespace green {
 	}
 
 	bool Model::decimate(const decimate_user_params &uparams, decimate_progress &progress) {
+		// generate original vertex ids if not present
+		// never present atm
+		if (!m_prop_vid_original.is_valid()) {
+			m_trimesh.add_property(m_prop_vid_original);
+			for (auto v : m_trimesh.vertices()) {
+				m_trimesh.property(m_prop_vid_original, v) = v.idx();
+			}
+		}
 		// decimate!
 		std::cout << "Decimating model" << std::endl;
 		decimate_mesh_params mparams;
@@ -548,6 +576,7 @@ namespace green {
 			sparams.prop_saliency = sdcolor.prop_saliency;
 			sparams.prop_saliency_baseline = sdbase.prop_saliency;
 			sparams.color_mode = m_exp_color_mode;
+			sparams.original_vids = m_save_original_vids;
 			sparams.binary = m_save_binary;
 			m_model->save(fpath, sparams);
 			return true;
@@ -1058,6 +1087,9 @@ namespace green {
 			// other options
 			Checkbox("Binary", &m_save_binary);
 			SetHoveredTooltip("Save file as binary if supported");
+			SameLine();
+			Checkbox("Original Vertex IDs", &m_save_original_vids);
+			SetHoveredTooltip("Export extra property with original vertex ids from before decimation");
 			// validate path and maybe export
 			auto fpath = std::filesystem::u8path(pathbuf);
 			auto stat = std::filesystem::status(fpath);

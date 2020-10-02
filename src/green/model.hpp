@@ -42,6 +42,7 @@ namespace green {
 		saliency_prop_t prop_saliency_baseline;
 		model_color_mode color_mode = model_color_mode::none;
 		float error_scale = 1;
+		bool original_vids = false;
 		bool binary = true;
 	};
 
@@ -106,6 +107,7 @@ namespace green {
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
+		OpenMesh::VPropHandleT<int> m_prop_vid_original;
 		saliency_prop_t m_prop_sal_dec;
 		std::vector<model_saliency_data> m_saliency;
 
@@ -235,6 +237,7 @@ namespace green {
 
 		std::filesystem::path m_fpath_save;
 		bool m_save_binary = true;
+		bool m_save_original_vids = false;
 		bool m_save_ok = false;
 		std::future<bool> m_pending_save;
 
