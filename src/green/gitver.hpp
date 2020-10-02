@@ -16,6 +16,8 @@ namespace green {
 
 	bool git_has_changes();
 
+	bool git_is_release();
+
 }
 
 #endif
