@@ -19,6 +19,7 @@ namespace green {
 			help_cli_version,
 			help_cli_help,
 			help_cli_ascii,
+			help_cli_original_vids,
 			help_cli_gui,
 			help_cli_noprogress,
 			help_cli_color,

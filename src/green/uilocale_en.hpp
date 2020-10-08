@@ -16,6 +16,7 @@ namespace green {
 		loc[help_cli_version] = "Show version";
 		loc[help_cli_help] = "Show help";
 		loc[help_cli_ascii] = "Save in plaintext instead of binary if possible";
+		loc[help_cli_original_vids] = "Save extra vertex property with original pre-decimation vertex ids";
 		loc[help_cli_gui] = "Show result in gui when done";
 		loc[help_cli_noprogress] = "Suppress progress output (useful for automation)";
 		loc[help_cli_color] = "How to colorize the model (vertex colors) when saving. Options are:\n"

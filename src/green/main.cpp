@@ -1060,6 +1060,7 @@ namespace {
 		bool show_gui = false;
 		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
 		bool save_ascii = false;
+		bool save_original_vids = false;
 		int threads = 0;
 
 		auto alt_opts = group{
@@ -1078,6 +1079,8 @@ namespace {
 				.doc(loc[help_threads].clone()),
 			option("--ascii").set(save_ascii)
 				.doc(loc[help_cli_ascii].clone()),
+			option("--original-vids").set(save_original_vids)
+				.doc(loc[help_cli_original_vids].clone()),
 			option("--gui").set(show_gui)
 				.doc(loc[help_cli_gui].clone()),
 			option("--noprogress").call([]{
@@ -1287,6 +1290,7 @@ namespace {
 				model_save_params sparams;
 				sparams.binary = !save_ascii;
 				sparams.color_mode = model_color_mode::saliency;
+				sparams.original_vids = save_original_vids;
 				if (auto it = pmr->find_saliency(colorprop); it != pmr->saliency().end()) {
 					cout << "colorizing using saliency property '" << colorprop << "' : " << it->str() << endl;
 					sparams.prop_saliency = it->prop_saliency;
