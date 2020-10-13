@@ -1099,7 +1099,7 @@ namespace {
 				.doc(loc[help_sal_area].clone()),
 			(option("-l", "--levels") & integer("levels", sal_uparams.levels))
 				.doc(loc[help_sal_levels].clone()),
-			(option("-r", "--contrast") & number("contrast", sal_uparams.normal_power))
+			(option("-r", "--contrast") & number("contrast", sal_uparams.normal_power).set(sal_uparams.auto_contrast, false))
 				.doc(loc[help_sal_normpower].clone()),
 			(option("-c", "--contour") & number("contour", sal_uparams.curv_weight))
 				.doc(loc[help_sal_curvweight].clone()),
@@ -1181,8 +1181,9 @@ namespace {
 			cout << man << endl;
 		}
 
-		std::cout << "saliency enabled=" << do_sal << "; params: " << sal_uparams.str(true) << std::endl;
-		std::cout << "decimate enabled=" << do_dec << "; params: " << dec_uparams.str() << std::endl;
+		cout << "saliency enabled=" << do_sal << "; params: " << sal_uparams.str(true) << endl;
+		cout << "decimate enabled=" << do_dec << "; params: " << dec_uparams.str() << endl;
+		cout << "saliency automatic contrast enabled=" << sal_uparams.auto_contrast << endl;
 		
 		if (!(do_sal || do_dec || show_gui || infile.size() || outfile.size())) {
 			if (!do_help && !do_version) cout << "nothing to do" << endl;
@@ -1210,6 +1211,8 @@ namespace {
 			cout << "failed to load model: " << e.what() << endl;
 			exit(1);
 		}
+
+		if (sal_uparams.auto_contrast) sal_uparams.normal_power = m.auto_contrast();
 
 		decimate_progress dec_progress;
 		model_saliency_data sd;
