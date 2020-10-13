@@ -98,40 +98,26 @@ namespace green {
 		}
 	};
 
-	class Model {
-	private:
-		Model(const Model &) = delete;
-		Model & operator=(const Model &) = delete;
+	// this class exists to separate the minimal loading of a model from file
+	// from any computations that we do once the model is loaded (vertex areas, auto contrast).
+	// one good reason for this is to exclude only the initial load from timing.
+	class ModelBase {
+	protected:
+		ModelBase(const ModelBase &) = delete;
+		ModelBase & operator=(const ModelBase &) = delete;
 
 		TriMesh m_trimesh;
-		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
-		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
 		OpenMesh::VPropHandleT<int> m_prop_vid_original;
-		saliency_prop_t m_prop_sal_dec;
 		std::vector<model_saliency_data> m_saliency;
 
-		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
-		float m_auto_contrast = 1;
-
-		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
-		cgu::gl_object m_vao;
-		cgu::gl_object m_ibo;
-		cgu::gl_object m_vbo_pos, m_vbo_norm, m_vbo_col;
-
 	public:
-		Model() {}
+		ModelBase() {}
 
-		Model(Model &&other) = default;
-		Model & operator=(Model &&other) = default;
+		ModelBase(ModelBase &&) = default;
+		ModelBase & operator=(ModelBase &&) = default;
 
-		Model(const std::filesystem::path &fpath);
-
-		void save(const std::filesystem::path &fpath, const model_save_params &sparams);
-
-		Model prepare_decimate(saliency_prop_t prop_saliency, const std::vector<model_saliency_data> &sdv) const;
-
-		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
+		ModelBase(const std::filesystem::path &fpath);
 
 		const TriMesh & trimesh() const {
 			return m_trimesh;
@@ -139,18 +125,6 @@ namespace green {
 
 		TriMesh & trimesh() {
 			return m_trimesh;
-		}
-
-		OpenMesh::VPropHandleT<float> prop_vertex_area() const {
-			return m_prop_vertex_area;
-		}
-
-		OpenMesh::EPropHandleT<float> prop_edge_length() const {
-			return m_prop_edge_length;
-		}
-
-		saliency_prop_t prop_sal_dec() const {
-			return m_prop_sal_dec;
 		}
 
 		std::vector<model_saliency_data> & saliency() {
@@ -173,6 +147,53 @@ namespace green {
 
 		OpenMesh::VPropHandleT<TriMesh::Color> prop_vcolor_original() const {
 			return m_prop_vcolor_original;
+		}
+
+	};
+
+	class Model : public ModelBase {
+	private:
+		Model(const Model &) = delete;
+		Model & operator=(const Model &) = delete;
+
+		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
+		OpenMesh::EPropHandleT<float> m_prop_edge_length;
+		saliency_prop_t m_prop_sal_dec;
+
+		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
+		float m_auto_contrast = 1;
+
+		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
+		cgu::gl_object m_vao;
+		cgu::gl_object m_ibo;
+		cgu::gl_object m_vbo_pos, m_vbo_norm, m_vbo_col;
+
+	public:
+		Model() {}
+
+		Model(Model &&) = default;
+		Model & operator=(Model &&) = default;
+
+		Model(ModelBase &&base);
+
+		Model(const std::filesystem::path &fpath);
+
+		void save(const std::filesystem::path &fpath, const model_save_params &sparams);
+
+		Model prepare_decimate(saliency_prop_t prop_saliency, const std::vector<model_saliency_data> &sdv) const;
+
+		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
+
+		OpenMesh::VPropHandleT<float> prop_vertex_area() const {
+			return m_prop_vertex_area;
+		}
+
+		OpenMesh::EPropHandleT<float> prop_edge_length() const {
+			return m_prop_edge_length;
+		}
+
+		saliency_prop_t prop_sal_dec() const {
+			return m_prop_sal_dec;
 		}
 
 		glm::vec3 bound_min() const {

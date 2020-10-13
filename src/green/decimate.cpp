@@ -236,9 +236,9 @@ namespace green {
 		}
 
 		std::cout << "final vertices: " << mparams.mesh->n_vertices() << std::endl;
-
 		progress.completed_collapses = decimater.module(hModWeighting).collapses;
 		progress.elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
+		std::cout << "decimate time: " << (progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 		progress.state = progress.should_cancel ? decimation_state::cancelled : decimation_state::done;
 		return !progress.should_cancel;
 	}

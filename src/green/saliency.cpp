@@ -179,8 +179,11 @@ namespace green {
 			m_progress.state = saliency_computation_state::curv;
 			std::cout << "Computing curvature" << std::endl;
 			// TODO curv selection param
+			const auto time_curv_start = std::chrono::steady_clock::now();
 			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, m_uparams.normal_power);
-			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
+			const auto time_curv_finish = std::chrono::steady_clock::now();
+			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(time_curv_finish - m_time_start);
+			std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 
 			//m_hMin = curvhist.getMin();
 			//m_hMax = curvhist.getMax();
@@ -203,8 +206,11 @@ namespace green {
 			std::cout << "Real noise height: " << m_real_noise_height << std::endl;
 
 			m_progress.state = saliency_computation_state::nhprep;
+			const auto time_nhprep_start = std::chrono::steady_clock::now();
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
-			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
+			const auto time_nhprep_finish = std::chrono::steady_clock::now();
+			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(time_nhprep_finish - m_time_start);
+			std::cout << "Neighborhood search prep took " << ((time_nhprep_finish - time_nhprep_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 			//m_meshcache.dump_to_file();
 
 			m_progress.state = saliency_computation_state::cand;
@@ -332,7 +338,7 @@ namespace green {
 			auto now = std::chrono::steady_clock::now();
 			std::cout << "Saliency computation finished" << std::endl;
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(now - m_time_start);
-			std::cout << "Overall: " << (m_progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+			std::cout << "Saliency time: " << (m_progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 			m_progress.state = saliency_computation_state::done;
 
 			return true;

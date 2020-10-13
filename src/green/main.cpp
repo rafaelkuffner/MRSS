@@ -1184,7 +1184,7 @@ namespace {
 		std::cout << "saliency enabled=" << do_sal << "; params: " << sal_uparams.str(true) << std::endl;
 		std::cout << "decimate enabled=" << do_dec << "; params: " << dec_uparams.str() << std::endl;
 		
-		if (!(do_sal || do_dec || show_gui || outfile.size())) {
+		if (!(do_sal || do_dec || show_gui || infile.size() || outfile.size())) {
 			if (!do_help && !do_version) cout << "nothing to do" << endl;
 			exit(0);
 		}
@@ -1194,14 +1194,18 @@ namespace {
 		dec_uparams.sanitize();
 		sal_progress.levels.resize(sal_uparams.levels);
 
-		const auto inpath = std::filesystem::u8path(infile);
+		const auto inpath = filesystem::u8path(infile);
 
+		chrono::steady_clock::time_point time_compute_start;
 		Model m;
 		Model md;
 		Model *pmr = &m;
 
 		try {
-			m = Model{inpath};
+			ModelBase base{inpath};
+			// start timing after initial model load
+			time_compute_start = chrono::steady_clock::now();
+			m = Model(move(base));
 		} catch (exception &e) {
 			cout << "failed to load model: " << e.what() << endl;
 			exit(1);
@@ -1227,8 +1231,8 @@ namespace {
 
 			if (!salprop.empty()) {
 				const char *badchars = " \t@[]";
-				if (salprop.find_first_of(badchars) != std::string::npos) {
-					std::cout << "bad char in property name '" << salprop << "'" << std::endl;
+				if (salprop.find_first_of(badchars) != string::npos) {
+					cout << "bad char in property name '" << salprop << "'" << endl;
 					exit(1);
 				}
 			}
@@ -1284,6 +1288,8 @@ namespace {
 		if (colorprop.empty()) {
 			colorprop = do_dec ? decprop : do_sal ? "@-1" : "@0";
 		}
+
+		std::cout << "overall computation time: " << ((std::chrono::steady_clock::now() - time_compute_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 
 		if (outfile.size()) {
 			try {

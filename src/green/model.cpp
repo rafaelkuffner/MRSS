@@ -111,7 +111,7 @@ namespace {
 
 namespace green {
 
-	Model::Model(const std::filesystem::path &fpath) {
+	ModelBase::ModelBase(const std::filesystem::path &fpath) {
 		m_trimesh.request_face_normals();
 		m_trimesh.request_vertex_normals();
 		m_trimesh.request_vertex_colors();
@@ -134,24 +134,7 @@ namespace green {
 		// TODO necessary? optional?
 		// NOTE currently done by assimp too
 		m_trimesh.triangulate();
-
-		// calculate normals always
-		std::cout << "Computing vertex normals" << std::endl;
-		m_trimesh.update_face_normals();
-		m_trimesh.update_vertex_normals();
-
-		// bounding box
-		for (auto vit = m_trimesh.vertices_begin(); vit != m_trimesh.vertices_end(); ++vit) {
-			m_bound_min = min(m_bound_min, om2glm(m_trimesh.point(*vit)));
-			m_bound_max = max(m_bound_max, om2glm(m_trimesh.point(*vit)));
-		}
-
-		std::cout << "Computing vertex areas" << std::endl;
-		m_prop_vertex_area = computeVertexAreas(m_trimesh);
-
-		std::cout << "Computing edge lengths" << std::endl;
-		m_prop_edge_length = computeEdgeLengths(m_trimesh);
-
+		
 		// copy original vertex colors
 		// (because we need to be able to overwrite the actual vertex colors during export)
 		if (readOptions.check(OpenMesh::IO::Options::VertexColor)) {
@@ -162,9 +145,8 @@ namespace green {
 			}
 		}
 
-		std::vector<std::pair<saliency_prop_t, model_saliency_data>> sprops;
-
 		// check for 'raw' saliency properties
+		std::vector<std::pair<saliency_prop_t, model_saliency_data>> sprops;
 		for (auto it = m_trimesh.vprops_begin(); it != m_trimesh.vprops_end(); ++it) {
 			// TODO any way to do this other than dynamic cast?
 			auto prop = dynamic_cast<OpenMesh::PropertyT<float> *>(*it);
@@ -215,7 +197,7 @@ namespace green {
 			sd.prop_saliency = ph;
 			m_saliency.push_back(std::move(sd));
 		}
-		
+
 		// move original vids to unnamed property
 		if (OpenMesh::VPropHandleT<int> pvid; m_trimesh.get_property_handle(pvid, "original_vid")) {
 			std::cout << "Found original vertex ids property" << std::endl;
@@ -224,7 +206,48 @@ namespace green {
 			m_trimesh.remove_property(pvid);
 		}
 
+	}
+
+	std::vector<model_saliency_data>::const_iterator ModelBase::find_saliency(std::string_view name) const {
+		if (name.size() > 0 && name.front() == '@') {
+			// parse index
+			int i = 0;
+			auto r = std::from_chars(&*name.begin() + 1, &*name.end(), i);
+			if (r.ec != std::errc{}) return m_saliency.end();
+			if (i < 0) i = int(m_saliency.size()) + i;
+			if (i < 0) return m_saliency.begin();
+			if (i >= m_saliency.size()) return m_saliency.end();
+			return m_saliency.begin() + i;
+		} else {
+			// search by name
+			for (auto it = m_saliency.begin(); it != m_saliency.end(); ++it) {
+				if (it->dispname == name) return it;
+			}
+			return m_saliency.end();
+		}
+	}
+
+	Model::Model(ModelBase &&base) : ModelBase(std::move(base)) {
+		
+		// calculate normals always
+		std::cout << "Computing vertex normals" << std::endl;
+		m_trimesh.update_face_normals();
+		m_trimesh.update_vertex_normals();
+
+		std::cout << "Computing bounding box" << std::endl;
+		for (auto vit = m_trimesh.vertices_begin(); vit != m_trimesh.vertices_end(); ++vit) {
+			m_bound_min = min(m_bound_min, om2glm(m_trimesh.point(*vit)));
+			m_bound_max = max(m_bound_max, om2glm(m_trimesh.point(*vit)));
+		}
+
+		std::cout << "Computing vertex areas" << std::endl;
+		m_prop_vertex_area = computeVertexAreas(m_trimesh);
+
+		std::cout << "Computing edge lengths" << std::endl;
+		m_prop_edge_length = computeEdgeLengths(m_trimesh);
+
 		// TODO move autocontrast to a function
+		std::cout << "Computing auto contrast for saliency" << std::endl;
 		{
 			// experimental auto contrast
 			// TODO run this after decimation too
@@ -258,6 +281,10 @@ namespace green {
 			std::cout << "auto contrast=" << best_contrast << std::endl;
 			m_auto_contrast = best_contrast;
 		}
+	}
+
+	Model::Model(const std::filesystem::path &fpath) : Model(ModelBase(fpath)) {
+		
 	}
 
 	void Model::save(const std::filesystem::path &fpath, const model_save_params &sparams0) {
@@ -409,25 +436,6 @@ namespace green {
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_trimesh);
 		return true;
-	}
-
-	std::vector<model_saliency_data>::const_iterator Model::find_saliency(std::string_view name) const {
-		if (name.size() > 0 && name.front() == '@') {
-			// parse index
-			int i = 0;
-			auto r = std::from_chars(&*name.begin() + 1, &*name.end(), i);
-			if (r.ec != std::errc{}) return m_saliency.end();
-			if (i < 0) i = int(m_saliency.size()) + i;
-			if (i < 0) return m_saliency.begin();
-			if (i >= m_saliency.size()) return m_saliency.end();
-			return m_saliency.begin() + i;
-		} else {
-			// search by name
-			for (auto it = m_saliency.begin(); it != m_saliency.end(); ++it) {
-				if (it->dispname == name) return it;
-			}
-			return m_saliency.end();
-		}
 	}
 
 	void Model::update_vao() {
