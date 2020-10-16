@@ -412,10 +412,10 @@ namespace green {
 	bool computeMeanCurvature(TriMesh & mesh,
 		OpenMesh::VPropHandleT<float> & meanCurvatureProperty, Histogram &hCurvature,float scale)
 	{
-		mesh.request_face_normals();
-		mesh.request_vertex_normals();
-		mesh.update_face_normals();
-		mesh.update_vertex_normals();
+		//mesh.request_face_normals();
+		//mesh.request_vertex_normals();
+		//mesh.update_face_normals();
+		//mesh.update_vertex_normals();
 
 
 		mesh.add_property(meanCurvatureProperty);

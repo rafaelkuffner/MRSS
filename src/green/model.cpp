@@ -115,6 +115,8 @@ namespace green {
 		m_trimesh.request_face_normals();
 		m_trimesh.request_vertex_normals();
 		m_trimesh.request_vertex_colors();
+		// face status is for mean curvature computation
+		m_trimesh.request_face_status();
 		// load custom "quality" property and vertex colors if they exist
 		// FIXME what else do we need to ask for and preserve on export? texcoords?
 		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom | OpenMesh::IO::Options::VertexColor;

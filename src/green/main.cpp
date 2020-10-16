@@ -23,6 +23,7 @@
 #include "imguiex.hpp"
 #include "dialog.hpp"
 #include "model.hpp"
+#include "curvature.hpp"
 #include "saliency.hpp"
 #include "clipp.h"
 #include "uilocale.hpp"
@@ -836,6 +837,21 @@ namespace {
 		);
 	}
 
+	void dump_curvature(const filesystem::path &outpath, Model &m, float contrast) {
+		std::cout << "dumping per-vertex area,meancurv,doncurv to " << outpath.u8string() << std::endl;
+		std::ofstream out(outpath);
+		lce::Histogram curvhist, donhist;
+		OpenMesh::VPropHandleT<float> curvprop, donprop;
+		computeMeanCurvature(m.trimesh(), curvprop, curvhist, 1);
+		computeDoNMaxDiffs(m.trimesh(), donprop, donhist, m.prop_vertex_area(), contrast);
+		for (auto &v : m.trimesh().vertices()) {
+			const float area = m.trimesh().property(m.prop_vertex_area(), v);
+			const float curv = m.trimesh().property(curvprop, v);
+			const float don = m.trimesh().property(donprop, v);
+			out << area << "," << curv << "," << don << "\n";
+		}
+	}
+
 	void main_gui() {
 
 #ifdef _WIN32
@@ -1052,7 +1068,7 @@ namespace {
 
 		const uilocale &loc = uilocale_en();
 
-		string infile, outfile;
+		string infile, outfile, dumpcurvfile;
 		string decprop = "@0";
 		string salprop;
 		string colorprop;
@@ -1089,7 +1105,9 @@ namespace {
 				})
 				.doc(loc[help_cli_noprogress].clone()),
 			(option("--color") & value("mode", colormode))
-				.doc(loc[help_cli_color].clone())
+				.doc(loc[help_cli_color].clone()),
+			(option("--dumpcurv") & value("curvfile", dumpcurvfile))
+				.doc("Debugging use only")
 		}.doc(loc[help_cli_opts_common].clone());
 
 		auto sal_opts = group{
@@ -1213,6 +1231,8 @@ namespace {
 		}
 
 		if (sal_uparams.auto_contrast) sal_uparams.normal_power = m.auto_contrast();
+
+		if (!dumpcurvfile.empty()) dump_curvature(dumpcurvfile, m, sal_uparams.normal_power);
 
 		decimate_progress dec_progress;
 		model_saliency_data sd;
