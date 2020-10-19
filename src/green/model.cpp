@@ -248,6 +248,17 @@ namespace green {
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_trimesh);
 
+		std::cout << "Computing raw don curvature" << std::endl;
+		// TODO what if we didnt want this? (to run and time with a difference curv measure)
+		const auto time_curv_start = std::chrono::steady_clock::now();
+		// TODO do away with this histogram thing
+		lce::Histogram curvhist;
+		computeDoNMaxDiffs(m_trimesh, m_prop_doncurv_raw, curvhist, m_prop_vertex_area, 1);
+		const auto time_curv_finish = std::chrono::steady_clock::now();
+		std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+		m_don_raw_min = curvhist.getMin();
+		m_don_raw_max = curvhist.getMax();
+
 		// TODO move autocontrast to a function
 		std::cout << "Computing auto contrast for saliency" << std::endl;
 		{
@@ -280,7 +291,7 @@ namespace green {
 				best_contrast = best_contrast - (s - target_entropy) / dsdc;
 				contrast_delta *= 0.7f;
 			}
-			std::cout << "auto contrast=" << best_contrast << std::endl;
+			std::cout << "Auto contrast: " << best_contrast << std::endl;
 			m_auto_contrast = best_contrast;
 		}
 	}
@@ -292,13 +303,27 @@ namespace green {
 	void Model::save(const std::filesystem::path &fpath, const model_save_params &sparams0) {
 		auto sparams = sparams0;
 		if (sparams.color_mode == model_color_mode::saliency) {
-			if (!sparams.prop_saliency.is_valid()) sparams.color_mode = model_color_mode::none;
-			std::cout << "Colorizing saliency" << std::endl;
+			if (!sparams.prop_saliency.is_valid()) {
+				sparams.color_mode = model_color_mode::none;
+			} else {
+				std::cout << "Colorizing saliency" << std::endl;
+			}
 		}
 		if (sparams.color_mode == model_color_mode::saliency_comparison) {
-			if (!sparams.prop_saliency.is_valid()) sparams.color_mode = model_color_mode::none;
-			if (!sparams.prop_saliency_baseline.is_valid()) sparams.color_mode = model_color_mode::none;
-			std::cout << "Colorizing saliency comparison" << std::endl;
+			if (!sparams.prop_saliency.is_valid()) {
+				sparams.color_mode = model_color_mode::none;
+			} else if (!sparams.prop_saliency_baseline.is_valid()) {
+				sparams.color_mode = model_color_mode::none;
+			} else {
+				std::cout << "Colorizing saliency comparison" << std::endl;
+			}
+		}
+		if (sparams.color_mode == model_color_mode::doncurv) {
+			if (!m_prop_doncurv_raw.is_valid()) {
+				sparams.color_mode == model_color_mode::none;
+			} else {
+				std::cout << "Colorizing don curvature" << std::endl;
+			}
 		}
 		// assign vertex colors
 		if (sparams.color_mode != model_color_mode::none) {
@@ -325,6 +350,13 @@ namespace green {
 				{
 					col = m_trimesh.property(m_prop_vcolor_original, *vIt);
 					usev = false;
+					break;
+				}
+				case model_color_mode::doncurv:
+				{
+					// note: need much lower contrast for display than for saliency
+					const float c = std::pow(m_trimesh.property(m_prop_doncurv_raw, *vIt), m_auto_contrast * 0.2f);
+					mapScalarToColor(v, c, TransferFunction::ZBRUSH);
 					break;
 				}
 				default:
@@ -636,6 +668,7 @@ namespace green {
 		if (m_disp_color_mode == model_color_mode::vcolor && !m_model->prop_vcolor_original().is_valid()) return;
 		if (m_disp_color_mode == model_color_mode::saliency_comparison && m_saliency_index >= saliency_outputs.size()) return;
 		if (m_disp_color_mode == model_color_mode::saliency_comparison && m_saliency_baseline_index >= saliency_outputs.size()) return;
+		if (m_disp_color_mode == model_color_mode::doncurv && !m_model->prop_doncurv_raw().is_valid()) return;
 		GLuint vbo_col = m_model->vbo_color();
 		if (!vbo_col) return;
 		const auto &mesh = m_model->trimesh();
@@ -679,6 +712,13 @@ namespace green {
 				const auto col = mesh.property(m_model->prop_vcolor_original(), v);
 				// need to gamma decode the color because the shader expects linear
 				data[i] = glm::vec4(pow(glm::vec3(col[0], col[1], col[2]) / 255.f, glm::vec3(2.2f)), 1);
+			}
+		} else if (m_disp_color_mode == model_color_mode::doncurv) {
+			for (size_t i = 0; i < nverts; i++) {
+				const auto v = OpenMesh::VertexHandle(i);
+				// note: need much lower contrast for display than for saliency
+				const float c = std::pow(mesh.property(m_model->prop_doncurv_raw(), v), m_model->auto_contrast() * 0.2f);
+				data[i] = glm::vec4(c, 0, 0, 0);
 			}
 		}
 		glUnmapBuffer(GL_ARRAY_BUFFER);
@@ -841,7 +881,7 @@ namespace green {
 
 			//SetNextItemWidth(GetContentRegionAvail().x);
 			int cur_color_mode = int(m_disp_color_mode);
-			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
+			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0Curvature (DoN)\0")) {
 				m_disp_color_mode = model_color_mode(cur_color_mode);
 				invalidate_saliency_vbo();
 			}
@@ -1041,7 +1081,7 @@ namespace green {
 			InputText("Path", pathbuf, sizeof(pathbuf));
 			// export color mode
 			int cur_color_mode = int(m_exp_color_mode);
-			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0")) {
+			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0Curvature (DoN)\0")) {
 				m_exp_color_mode = model_color_mode(cur_color_mode);
 			}
 			if (m_exp_color_mode == model_color_mode::saliency_comparison) {
@@ -1237,6 +1277,7 @@ namespace green {
 				if (m_disp_color_mode == model_color_mode::saliency && sal_valid) color_map = 3;
 				if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
 				if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
+				if (m_disp_color_mode == model_color_mode::doncurv) color_map = 3;
 				// prepare to draw
 				model_draw_params params;
 				params.sel = sel;
@@ -1290,6 +1331,7 @@ namespace green {
 		saliency_mesh_params mparams;
 		mparams.mesh = &m_model->trimesh();
 		mparams.prop_vertex_area = m_model->prop_vertex_area();
+		mparams.prop_doncurv_raw = m_model->prop_doncurv_raw();
 		mparams.prop_edge_length = m_model->prop_edge_length();
 		// create properties
 		mparams.prop_saliency_levels.resize(uparams.levels);

@@ -173,17 +173,19 @@ namespace green {
 			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
 			m_thread_stats.assign(omp_get_max_threads(), {});
 
-			lce::Histogram curvhist;
-
-			// note: we can't cache the curvature because we couldn't adjust the normal power etc
+			// TODO curv selection param
+			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
 			m_progress.state = saliency_computation_state::curv;
 			std::cout << "Computing curvature" << std::endl;
-			// TODO curv selection param
-			const auto time_curv_start = std::chrono::steady_clock::now();
-			computeDoNMaxDiffs(*m_mparams.mesh, m_mparams.prop_curvature, curvhist, m_mparams.prop_vertex_area, m_uparams.normal_power);
-			const auto time_curv_finish = std::chrono::steady_clock::now();
-			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(time_curv_finish - m_time_start);
-			std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+			float curvmax = -9001e19;
+			float curvmin = 9001e19;
+			for (auto &v : m_mparams.mesh->vertices()) {
+				float c = m_mparams.mesh->property(m_mparams.prop_doncurv_raw, v);
+				c = std::pow(c, m_uparams.normal_power);
+				curvmax = std::max(curvmax, c);
+				curvmin = std::min(curvmin, c);
+				m_mparams.mesh->property(m_mparams.prop_curvature, v) = c;
+			}
 
 			//m_hMin = curvhist.getMin();
 			//m_hMax = curvhist.getMax();
@@ -193,8 +195,8 @@ namespace green {
 			// using constant histogram range makes things more predictable
 			m_hMin = 0;
 			m_hMax = 1;
-			std::cout << "Curv min: " << curvhist.getMin() << std::endl;
-			std::cout << "Curv max: " << curvhist.getMax() << std::endl;
+			std::cout << "Curv min: " << curvmin << std::endl;
+			std::cout << "Curv max: " << curvmax << std::endl;
 
 			m_progress.state = saliency_computation_state::area;
 			std::cout << "Computing surface area" << std::endl;

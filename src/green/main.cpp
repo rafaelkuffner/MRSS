@@ -1263,6 +1263,7 @@ namespace {
 			saliency_mesh_params mparams;
 			mparams.mesh = &m.trimesh();
 			mparams.prop_vertex_area = m.prop_vertex_area();
+			mparams.prop_doncurv_raw = m.prop_doncurv_raw();
 			mparams.prop_edge_length = m.prop_edge_length();
 
 			// create properties

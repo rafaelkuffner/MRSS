@@ -132,6 +132,8 @@ namespace green {
 		// input
 		OpenMesh::VPropHandleT<float> prop_vertex_area;
 		// input
+		OpenMesh::VPropHandleT<float> prop_doncurv_raw;
+		// input
 		OpenMesh::EPropHandleT<float> prop_edge_length;
 		// output: saliency
 		saliency_prop_t prop_saliency;

@@ -25,7 +25,7 @@
 namespace green {
 
 	enum class model_color_mode : unsigned char {
-		none, vcolor, saliency, saliency_comparison
+		none, vcolor, saliency, saliency_comparison, doncurv
 	};
 
 	struct model_draw_params {
@@ -157,11 +157,14 @@ namespace green {
 		Model & operator=(const Model &) = delete;
 
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
+		OpenMesh::VPropHandleT<float> m_prop_doncurv_raw;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		saliency_prop_t m_prop_sal_dec;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 		float m_auto_contrast = 1;
+		float m_don_raw_min = 0;
+		float m_don_raw_max = 0;
 
 		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
 		cgu::gl_object m_vao;
@@ -186,6 +189,10 @@ namespace green {
 
 		OpenMesh::VPropHandleT<float> prop_vertex_area() const {
 			return m_prop_vertex_area;
+		}
+
+		OpenMesh::VPropHandleT<float> prop_doncurv_raw() const {
+			return m_prop_doncurv_raw;
 		}
 
 		OpenMesh::EPropHandleT<float> prop_edge_length() const {
