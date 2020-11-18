@@ -228,14 +228,14 @@ namespace green {
 			{
 				float aa = 0;
 				for (auto &cand : m_candidates0) {
-					const float a = m_meshcache.get_vertex(cand.vdi).props[MeshCache::vertex_prop_area];
+					const float a = m_meshcache.get_vertex(cand.vdi).area;
 					cand.area = a;
 					cand.summedarea = aa;
 					aa += a;
 				}
 				m_total_vertex_area = aa;
 				for (auto &cand : m_candidates0) {
-					TriMesh::VertexHandle v(m_meshcache.get_vertex(cand.vdi).vi);
+					TriMesh::VertexHandle v(m_meshcache.get_vertex_aux(cand.vdi).vi);
 					// normalize areas
 					cand.area /= aa;
 					cand.summedarea /= aa;
@@ -382,7 +382,7 @@ namespace green {
 				for (int j = 0; j < simd_traits::simd_size; j++) {
 					if (vdis[j] == -1) break;
 
-					TriMesh::VertexHandle v(m_meshcache.get_vertex(vdis[j]).vi);
+					TriMesh::VertexHandle v(m_meshcache.get_vertex_aux(vdis[j]).vi);
 
 					//const float sal = computeSaliency(j, meshcache, neighbors, zero1, zero9);
 
@@ -447,7 +447,7 @@ namespace green {
 
 			// map vertices to candidates
 			for (auto it = candidates.begin(); it != candidates.end(); ++it) {
-				TriMesh::VertexHandle v(m_meshcache.get_vertex(it->vdi).vi);
+				TriMesh::VertexHandle v(m_meshcache.get_vertex_aux(it->vdi).vi);
 				candidateProperty[v.idx()] = it;
 			}
 
@@ -565,8 +565,8 @@ namespace green {
 					}
 
 					const auto visitor = [&](unsigned vdi, float r, float s) {
-						auto &vert = m_meshcache.get_vertex(vdi);
-						TriMesh::VertexHandle v(vert.vi);
+						auto &vadata = m_meshcache.get_vertex_aux(vdi);
+						TriMesh::VertexHandle v(vadata.vi);
 						// record sampled vertices
 						if (vdi == rootvdi) m_mparams.mesh->property(m_mparams.prop_sampled, v) = true;
 						//const float w = rootvdi == vdi;

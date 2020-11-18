@@ -68,26 +68,30 @@ namespace green {
 		// (this is checked on construction, just to be sure)
 		static constexpr int vdi_shift = 4;
 
-		enum {
-			vertex_prop_area, vertex_prop_curv
-		};
-
 		struct edge {
 			unsigned ndi; // data index, not vertex index!
 			float cost;
 		};
 
 		struct vertex {
-			int vi; // actual vertex index
 			unsigned nedges;
-			float props[2];
-			OpenMesh::Vec3f pos, norm;
+			float area;
+			float curv;
 			// actual size == nedges (extends past struct end)
 			edge edges[0];
 		};
+
+		struct vertex_aux {
+			OpenMesh::Vec3f pos, norm;
+			int vi; // actual vertex index
+		};
+
 		std::vector<unsigned> vi2di;
 		std::vector<unsigned> vdis;
+
+		// TODO would be less naughty if these were vector<std::byte>
 		std::vector<unsigned> data;
+		std::vector<unsigned> dataaux;
 
 		MeshCache() = default;
 
@@ -98,8 +102,20 @@ namespace green {
 			OpenMesh::VPropHandleT<float> curvatureMeasure
 		);
 
-		const vertex & get_vertex(unsigned vdi) const {
+		vertex & get_vertex(unsigned vdi) noexcept {
+			return reinterpret_cast<vertex &>(data[vdi]);
+		}
+
+		const vertex & get_vertex(unsigned vdi) const noexcept {
 			return reinterpret_cast<const vertex &>(data[vdi]);
+		}
+
+		vertex_aux & get_vertex_aux(unsigned vdi) noexcept {
+			return reinterpret_cast<vertex_aux &>(dataaux[(vdi >> vdi_shift) * (sizeof(vertex_aux) / sizeof(unsigned))]);
+		}
+
+		const vertex_aux & get_vertex_aux(unsigned vdi) const noexcept {
+			return reinterpret_cast<const vertex_aux &>(dataaux[(vdi >> vdi_shift) * (sizeof(vertex_aux) / sizeof(unsigned))]);
 		}
 
 		void dump_to_file() const;
