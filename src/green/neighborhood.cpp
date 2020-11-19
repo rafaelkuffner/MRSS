@@ -548,7 +548,6 @@ namespace green {
 		// work out precisely how big the data vectors actually need to be
 		size_t datasize = 0;
 		for (auto vit = mesh.vertices_begin(); vit != mesh.vertices_end(); ++vit) {
-			datasize += sizeof(vertex) / sizeof(unsigned);
 			unsigned nedges = 0;
 			for (auto vohIt = mesh.cvoh_iter(vit); vohIt.is_valid(); ++vohIt) {
 				nedges++;
@@ -582,10 +581,12 @@ namespace green {
 		auto dovertex = [&](int vi0) {
 			open_vertices_outer.clear();
 			open_vertices_outer.push_back(vi0);
-			for (int i = 0; i < 16 && open_vertices_outer.size(); i++) {
+			for (int i = 0; i < 128 && open_vertices_outer.size(); ) {
 				const int ovi = open_vertices_outer.front();
 				open_vertices_outer.pop_front();
 				if (visited[ovi]) continue;
+				// only count unvisited to group size
+				i++;
 				inner_loop_count++;
 				open_vertices_inner.clear();
 				open_vertices_inner.push_back(ovi);
