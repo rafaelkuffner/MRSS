@@ -37,11 +37,15 @@ namespace green {
 	using simd::simd8_int;
 	using simd::simd8_float;
 
+	struct simple_neighborhood_queue;
+	struct priority_neighborhood_queue;
+
 	struct simd1_traits {
 		static constexpr int simd_size = 1;
 		using mask_t = bool;
 		using index_t = int;
 		using dist_t = float;
+		using neighborhood_queue_t = simple_neighborhood_queue;
 	};
 
 	struct simd4_traits {
@@ -49,6 +53,7 @@ namespace green {
 		using mask_t = simd4_int;
 		using index_t = simd4_int;
 		using dist_t = simd4_float;
+		using neighborhood_queue_t = simple_neighborhood_queue;
 	};
 
 	struct simd8_traits {
@@ -56,6 +61,7 @@ namespace green {
 		using mask_t = simd8_int;
 		using index_t = simd8_int;
 		using dist_t = simd8_float;
+		using neighborhood_queue_t = simple_neighborhood_queue;
 	};
 
 	// simd8 has minimal gain over simd4 when multithreaded

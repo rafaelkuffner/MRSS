@@ -85,14 +85,14 @@ namespace green {
 		}
 
 		template <typename U>
-		void push_back_unchecked(U &&u) {
+		void push_back_unchecked(U &&u) noexcept {
 			::new(static_cast<void *>(&m_data[m_end].as_t())) T(std::forward<U>(u));
 			m_end = m_mask & (m_end + 1);
 			m_size++;
 		}
 
 		template <typename U>
-		void push_front_unchecked(U &&u) {
+		void push_front_unchecked(U &&u) noexcept {
 			m_begin = m_mask & (m_begin - 1);
 			::new(static_cast<void *>(&m_data[m_begin].as_t())) T(std::forward<U>(u));
 			m_size++;
@@ -128,7 +128,7 @@ namespace green {
 			return t;
 		}
 
-		const T & top() const {
+		const T & front() const noexcept {
 			return m_data[m_begin].as_t();
 		}
 
@@ -140,12 +140,56 @@ namespace green {
 
 	};
 
+	struct simple_neighborhood_queue {
+		simple_queue<unsigned> queue;
+
+		simple_neighborhood_queue() {
+			queue.reserve(256);
+		}
+
+		size_t size() const noexcept {
+			return queue.size();
+		}
+
+		unsigned pop() noexcept {
+			return queue.pop_front();
+		}
+
+		unsigned top() const noexcept {
+			return queue.front();
+		}
+
+		void reserve_neighbors(size_t s) {
+			queue.reserve_additional(s);
+		}
+
+		bool push(unsigned x) {
+			queue.push_back(x);
+			return true;
+		}
+
+		bool push_neighbor(unsigned x, int statediff) {
+			// only add to queue if not already in it
+			if (statediff < 0) {
+				queue.push_back_unchecked(x);
+				return true;
+			} else if (statediff > 0) {
+				queue.push_front_unchecked(x);
+				return true;
+			}
+			return false;
+		}
+	};
+
 	template <typename SimdTraits = simd_traits>
 	struct neighborhood_search {
 
 		using mask_t = typename SimdTraits::mask_t;
 		using index_t = typename SimdTraits::index_t;
 		using dist_t = typename SimdTraits::dist_t;
+		using neighborhood_queue_t = typename SimdTraits::neighborhood_queue_t;
+
+		static constexpr auto null_visitor = [](unsigned vdi, mask_t m) {};
 
 		static constexpr int NUM_VERTEX_STATES = 2;
 		int VERTEX_OPEN = 1;
@@ -161,7 +205,7 @@ namespace green {
 		std::vector<per_vertex> vertexData;
 		//ska::flat_hash_map<unsigned, per_vertex> vertexData;
 
-		template <int Phase, typename VisitorF>
+		template <int Phase, typename VisitorF = decltype(null_visitor)>
 		void run(const MeshCache &mesh, CalculationStats &stats, const std::array<unsigned, SimdTraits::simd_size> &rootvdis, float radius, const VisitorF &visitor) {
 
 			using namespace simd;
@@ -177,8 +221,7 @@ namespace green {
 			VERTEX_CLOSED += NUM_VERTEX_STATES;
 			// TODO vertex state overflow
 
-			simple_queue<unsigned> openVertices;
-			openVertices.reserve(256);
+			neighborhood_queue_t open_vertices;
 
 			// initialize distances for root vertices
 			for (unsigned i = 0; i < SimdTraits::simd_size; i++) {
@@ -196,7 +239,7 @@ namespace green {
 			for (unsigned i = 0; i < SimdTraits::simd_size; i++) {
 				const unsigned vdi = rootvdis[i];
 				if (vdi == -1) continue;
-				openVertices.push_back(vdi);
+				open_vertices.push(vdi);
 				auto &vdata = vertexData[mesh.vdi_uid(vdi)];
 				vdata.flags = 0;
 				vdata.state = VERTEX_OPEN;
@@ -212,10 +255,10 @@ namespace green {
 					if (phase_i > SimdTraits::simd_size * 3) break;
 				}
 
-				const unsigned cvdi = openVertices.pop_front();
+				const unsigned cvdi = open_vertices.pop();
 
-				if (openVertices.size()) {
-					const unsigned xvdi = openVertices.top();
+				if (open_vertices.size()) {
+					const unsigned xvdi = open_vertices.top();
 					_mm_prefetch((const char *)(mesh.data.data() + xvdi), _mm_hint(1));
 					_mm_prefetch(64 + (const char *)(mesh.data.data() + xvdi), _mm_hint(1));
 					//_mm_prefetch((const char *)(vertexData.data() + (xvdi >> MeshCache::vdi_shift)), 1);
@@ -251,7 +294,7 @@ namespace green {
 
 				// visit direct neighbors
 				const unsigned nedges = vert.nedges;
-				openVertices.reserve_additional(nedges);
+				open_vertices.reserve_neighbors(nedges);
 				for (unsigned i = 0; i < nedges; i++) {
 					const auto &edge = vert.edges[i];
 					const float ecost = mesh.decode_cost(edge.costx);
@@ -275,25 +318,14 @@ namespace green {
 					const auto m = cmplt(newCost, costthresh);
 					if (!none(m)) {
 						nData.flags = select(nData.flags, 0, unvisited);
-						// only add to queue if not already in it
-						//if (oldState != VERTEX_OPEN) {
-						//	stats.nh_record_push(m);
-						//	openVertices.push_back_unchecked(nv);
-						//	nData.state = VERTEX_OPEN;
-						//}
-						if (oldState < VERTEX_OPEN) {
+						if (open_vertices.push_neighbor(edge.ndi, oldState - VERTEX_OPEN)) {
 							stats.nh_record_push(m);
-							openVertices.push_back_unchecked(edge.ndi);
-							nData.state = VERTEX_OPEN;
-						} else if (oldState > VERTEX_OPEN) {
-							stats.nh_record_push(m);
-							openVertices.push_front_unchecked(edge.ndi);
 							nData.state = VERTEX_OPEN;
 						}
 					}
 				}
 
-			} while (openVertices.size());
+			} while (open_vertices.size());
 
 		}
 
