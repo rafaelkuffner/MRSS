@@ -9,6 +9,7 @@
 #include "neighborhood.hpp"
 
 #include <deque>
+#include <vector>
 
 namespace green {
 
@@ -141,6 +142,8 @@ namespace green {
 	};
 
 	struct simple_neighborhood_queue {
+		static constexpr bool unique_entries = true;
+
 		simple_queue<unsigned> queue;
 
 		simple_neighborhood_queue() {
@@ -151,7 +154,7 @@ namespace green {
 			return queue.size();
 		}
 
-		unsigned pop() noexcept {
+		unsigned pop() {
 			return queue.pop_front();
 		}
 
@@ -163,12 +166,16 @@ namespace green {
 			queue.reserve_additional(s);
 		}
 
-		bool push(unsigned x) {
+		template <typename CostT>
+		bool push(unsigned x, CostT cost) {
+			(void) cost;
 			queue.push_back(x);
 			return true;
 		}
 
-		bool push_neighbor(unsigned x, int statediff) {
+		template <typename CostT>
+		bool push_neighbor(unsigned x, CostT cost, int statediff) {
+			(void) cost;
 			// only add to queue if not already in it
 			if (statediff < 0) {
 				queue.push_back_unchecked(x);
@@ -178,6 +185,65 @@ namespace green {
 				return true;
 			}
 			return false;
+		}
+	};
+
+	struct priority_neighborhood_queue {
+		// TODO binary heap is not really that great; should try quaternary or something else
+
+		static constexpr bool unique_entries = true;
+
+		struct elem {
+			unsigned vdi;
+			float cost;
+
+			bool operator<(const elem &other) const noexcept {
+				// std uses max-heap
+				return cost > other.cost;
+			}
+		};
+
+		std::vector<elem> data;
+
+		priority_neighborhood_queue() {
+			data.reserve(256);
+		}
+
+		size_t size() const noexcept {
+			return data.size();
+		}
+
+		unsigned pop() {
+			std::pop_heap(data.begin(), data.end());
+			auto e = data.back();
+			data.pop_back();
+			return e.vdi;
+		}
+
+		unsigned top() const noexcept {
+			return data.front().vdi;
+		}
+
+		void reserve_neighbors(size_t s) {
+			data.reserve(data.size() + s);
+		}
+
+		bool push(unsigned x, float cost) {
+			data.push_back({x, cost});
+			std::push_heap(data.begin(), data.end());
+			return true;
+		}
+
+		bool push_neighbor(unsigned x, float cost, int statediff) {
+			(void) statediff;
+			data.push_back({x, cost});
+			std::push_heap(data.begin(), data.end());
+			return true;
+		}
+
+		bool push_neighbor(unsigned x, simd4_traits::dist_t cost, int statediff) {
+			// TODO for experimentation with prio queues and grouped traversal
+			std::abort();
 		}
 	};
 
@@ -239,7 +305,7 @@ namespace green {
 			for (unsigned i = 0; i < SimdTraits::simd_size; i++) {
 				const unsigned vdi = rootvdis[i];
 				if (vdi == -1) continue;
-				open_vertices.push(vdi);
+				open_vertices.push(vdi, 0.f);
 				auto &vdata = vertexData[mesh.vdi_uid(vdi)];
 				vdata.flags = 0;
 				vdata.state = VERTEX_OPEN;
@@ -248,7 +314,7 @@ namespace green {
 			// while there are open vertices, process them
 			int phase_i = 0;
 			do {
-				if (Phase == 0) {
+				if constexpr (Phase == 0) {
 					phase_i++;
 					// phase 0 does a minimal search to try and establish connectivity between root vertices
 					// ideally, the root vertices are closely connected (i.e. a surface patch)
@@ -258,23 +324,26 @@ namespace green {
 				const unsigned cvdi = open_vertices.pop();
 
 				if (open_vertices.size()) {
+					// TODO (re)test if this is actually worth it
 					const unsigned xvdi = open_vertices.top();
 					_mm_prefetch((const char *)(mesh.data.data() + xvdi), _mm_hint(1));
 					_mm_prefetch(64 + (const char *)(mesh.data.data() + xvdi), _mm_hint(1));
-					//_mm_prefetch((const char *)(vertexData.data() + (xvdi >> MeshCache::vdi_shift)), 1);
 				}
 
 				auto &cData = vertexData[mesh.vdi_uid(cvdi)];
 				auto &vert = mesh.get_vertex(cvdi);
 
-				// no longer in queue => closed
-				cData.state = VERTEX_CLOSED;
-
 				stats.nh_record_loop(cmplt(cData.dist, dist_t(radius)));
 
+				// with prio queues, a vertex could be closed while still in the queue (with a worse cost)
+				// in that case, we can safely skip it; if we needed to reprocess it, it would have been reopened
+				if constexpr (!neighborhood_queue_t::unique_entries) if (cData.state == VERTEX_CLOSED) continue;
+
+				// visited with best known cost => closed
+				cData.state = VERTEX_CLOSED;
 				// add to results
 				const mask_t resmask = andnot(cmplt(cData.dist, dist_t(radius)), bits2mask<index_t>(cData.flags));
-				if (Phase > 0) if (!none(resmask)) {
+				if constexpr (Phase > 0) if (!none(resmask)) {
 					// NOTE: now produces vertex data indices, not ordinary vertex indices
 					if constexpr (Phase == 1) {
 						// during search, distance should not be passed to the visitor
@@ -318,7 +387,7 @@ namespace green {
 					const auto m = cmplt(newCost, costthresh);
 					if (!none(m)) {
 						nData.flags = select(nData.flags, 0, unvisited);
-						if (open_vertices.push_neighbor(edge.ndi, oldState - VERTEX_OPEN)) {
+						if (open_vertices.push_neighbor(edge.ndi, newCost, oldState - VERTEX_OPEN)) {
 							stats.nh_record_push(m);
 							nData.state = VERTEX_OPEN;
 						}

@@ -45,7 +45,7 @@ namespace green {
 		using mask_t = bool;
 		using index_t = int;
 		using dist_t = float;
-		using neighborhood_queue_t = simple_neighborhood_queue;
+		using neighborhood_queue_t = priority_neighborhood_queue;
 	};
 
 	struct simd4_traits {
