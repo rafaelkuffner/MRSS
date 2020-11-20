@@ -193,6 +193,7 @@ namespace green {
 			// lower bound is pretty much always very near zero
 			// upper bound is often very near 1 (kinda weird - thats adjacent vertices with anti-parallel normals)
 			// using constant histogram range makes things more predictable
+			// note: range 0-1 currently hardcoded in MeshCache
 			m_hMin = 0;
 			m_hMax = 1;
 			std::cout << "Curv min: " << curvmin << std::endl;
@@ -228,7 +229,7 @@ namespace green {
 			{
 				float aa = 0;
 				for (auto &cand : m_candidates0) {
-					const float a = m_meshcache.get_vertex(cand.vdi).area;
+					const float a = m_meshcache.decode_area(m_meshcache.get_vertex(cand.vdi).areax);
 					cand.area = a;
 					cand.summedarea = aa;
 					aa += a;
@@ -375,7 +376,7 @@ namespace green {
 
 				// NOTE: now produces vertex data indices, not ordinary vertex indices
 				//getGeodesicNeighborhood(meshcache, stats, vdis, currentRadius, neighbors);
-				const auto sal = getGeodesicNeighborhoodSaliency(m_meshcache, stats, vdis, currentRadius, m_hMin, m_hMax, normalmap_filter * m_real_noise_height);
+				const auto sal = getGeodesicNeighborhoodSaliency(m_meshcache, stats, vdis, currentRadius, normalmap_filter * m_real_noise_height);
 
 				stats.nh_timer_end();
 
@@ -598,7 +599,7 @@ namespace green {
 
 					// could be up to exclusion_radius * 2 distance between samples, so distribute over that to ensure coverage
 					// need to go slightly more to avoid problems due to vertex discretization (to allow weight to reach zero)
-					subsampleGeodesicNeighborhoodSaliency(m_meshcache, stats, rootvdi, currentRadius, m_hMin, m_hMax, normalmap_filter * m_real_noise_height, exclusion_radius * 2.1f, visitor);
+					subsampleGeodesicNeighborhoodSaliency(m_meshcache, stats, rootvdi, currentRadius, normalmap_filter * m_real_noise_height, exclusion_radius * 2.1f, visitor);
 
 					stats.nh_timer_end();
 

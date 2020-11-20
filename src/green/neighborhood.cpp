@@ -170,7 +170,7 @@ namespace green {
 			const index_t invalid_idx{-1};
 
 			//vertexData.clear();
-			vertexData.resize(mesh.data.size() >> MeshCache::vdi_shift);
+			vertexData.resize(mesh.vdi_uid(mesh.data.size()) + 1);
 			//vertexData.reserve(1024);
 
 			VERTEX_OPEN += NUM_VERTEX_STATES;
@@ -184,7 +184,7 @@ namespace green {
 			for (unsigned i = 0; i < SimdTraits::simd_size; i++) {
 				const unsigned vdi = rootvdis[i];
 				if (vdi == -1) continue;
-				auto &vdata = vertexData[vdi >> MeshCache::vdi_shift];
+				auto &vdata = vertexData[mesh.vdi_uid(vdi)];
 				if (Phase == 0) vdata.dist = dist_t(huge_dist);
 				vdata.dist = simd_insert(vdata.dist, i, 0.f);
 			}
@@ -197,7 +197,7 @@ namespace green {
 				const unsigned vdi = rootvdis[i];
 				if (vdi == -1) continue;
 				openVertices.push_back(vdi);
-				auto &vdata = vertexData[vdi >> MeshCache::vdi_shift];
+				auto &vdata = vertexData[mesh.vdi_uid(vdi)];
 				vdata.flags = 0;
 				vdata.state = VERTEX_OPEN;
 			}
@@ -221,7 +221,8 @@ namespace green {
 					//_mm_prefetch((const char *)(vertexData.data() + (xvdi >> MeshCache::vdi_shift)), 1);
 				}
 
-				auto &cData = vertexData[cvdi >> MeshCache::vdi_shift];
+				auto &cData = vertexData[mesh.vdi_uid(cvdi)];
+				auto &vert = mesh.get_vertex(cvdi);
 
 				// no longer in queue => closed
 				cData.state = VERTEX_CLOSED;
@@ -232,8 +233,6 @@ namespace green {
 				const mask_t resmask = andnot(cmplt(cData.dist, dist_t(radius)), bits2mask<index_t>(cData.flags));
 				if (Phase > 0) if (!none(resmask)) {
 					// NOTE: now produces vertex data indices, not ordinary vertex indices
-					// mesh.get_vertex(cvdi).vi
-					//neighbors.push_back(select(invalid_idx, index_t{int(cvdi)}, resmask));
 					if constexpr (Phase == 1) {
 						// during search, distance should not be passed to the visitor
 						// as the vertex could be revisited later with a smaller distance
@@ -251,13 +250,13 @@ namespace green {
 				const auto cDist = cData.dist;
 
 				// visit direct neighbors
-				const unsigned nedges = mesh.get_vertex(cvdi).nedges;
+				const unsigned nedges = vert.nedges;
 				openVertices.reserve_additional(nedges);
 				for (unsigned i = 0; i < nedges; i++) {
-					const unsigned nv = mesh.get_vertex(cvdi).edges[i].ndi;
-					const float ecost = mesh.get_vertex(cvdi).edges[i].cost;
+					const auto &edge = vert.edges[i];
+					const float ecost = mesh.decode_cost(edge.costx);
 
-					auto &nData = vertexData[nv >> MeshCache::vdi_shift];
+					auto &nData = vertexData[mesh.vdi_uid(edge.ndi)];
 					const auto oldState = nData.state;
 					const bool unvisited = oldState < VERTEX_OPEN;
 
@@ -284,11 +283,11 @@ namespace green {
 						//}
 						if (oldState < VERTEX_OPEN) {
 							stats.nh_record_push(m);
-							openVertices.push_back_unchecked(nv);
+							openVertices.push_back_unchecked(edge.ndi);
 							nData.state = VERTEX_OPEN;
 						} else if (oldState > VERTEX_OPEN) {
 							stats.nh_record_push(m);
-							openVertices.push_front_unchecked(nv);
+							openVertices.push_front_unchecked(edge.ndi);
 							nData.state = VERTEX_OPEN;
 						}
 					}
@@ -362,8 +361,6 @@ namespace green {
 		CalculationStats &stats,
 		const std::array<unsigned, SimdTraits::simd_size> &rootvdis,
 		float radius,
-		float curvmin,
-		float curvmax,
 		float noise_height
 	) {
 		// so we can use < instead of <=
@@ -373,8 +370,6 @@ namespace green {
 		using mask_t = typename SimdTraits::mask_t;
 		using index_t = typename SimdTraits::index_t;
 		using dist_t = typename SimdTraits::dist_t;
-
-		const float hist_irange = 255.f / (curvmax - curvmin);
 
 		dist_t hist[256]{};
 		dist_t totarea{0};
@@ -386,13 +381,12 @@ namespace green {
 		auto visitor = [&](unsigned vdi, mask_t m) {
 			using simd::select;
 #ifdef USE_VERTEX_AREA_WEIGHTING
-			const float area = mesh.get_vertex(vdi).area;
+			const float area = mesh.decode_area(mesh.get_vertex(vdi).areax);
 #elif
 			const float area = 1;
 #endif
 			totarea = select(totarea, totarea + dist_t{area}, m);
-			const float curv = simd::max(simd::min(mesh.get_vertex(vdi).curv, curvmax), curvmin);
-			const auto curvbin = intptr_t(hist_irange * (curv - curvmin));
+			const intptr_t curvbin = mesh.get_vertex(vdi).curvbin;
 			hist[curvbin] = select(hist[curvbin], hist[curvbin] + dist_t{area}, m);
 			const auto norm = mesh.get_vertex_aux(vdi).norm;
 			avg_normal_x = select(avg_normal_x, avg_normal_x + norm[0], m);
@@ -478,12 +472,10 @@ namespace green {
 		CalculationStats &stats,
 		const std::array<unsigned, simd_traits::simd_size> &rootvdis,
 		float radius,
-		float curvmin,
-		float curvmax,
 		float noise_height
 	) {
 		static thread_local neighborhood_search<> search;
-		return getGeodesicNeighborhoodSaliencyImpl(search, mesh, stats, rootvdis, radius, curvmin, curvmax, noise_height);
+		return getGeodesicNeighborhoodSaliencyImpl(search, mesh, stats, rootvdis, radius, noise_height);
 	}
 
 	void subsampleGeodesicNeighborhoodSaliency(
@@ -491,14 +483,12 @@ namespace green {
 		CalculationStats &stats,
 		unsigned rootvdi,
 		float radius,
-		float curvmin,
-		float curvmax,
 		float noise_height,
 		float distribution_radius,
 		const std::function<void(unsigned vdi, float r, float s)> &distribute_saliency
 	) {
 		static thread_local neighborhood_search<simd1_traits> search;
-		const float s = getGeodesicNeighborhoodSaliencyImpl<simd1_traits>(search, mesh, stats, {rootvdi}, radius, curvmin, curvmax, noise_height)[0];
+		const float s = getGeodesicNeighborhoodSaliencyImpl<simd1_traits>(search, mesh, stats, {rootvdi}, radius, noise_height)[0];
 		using mask_t = simd1_traits::mask_t;
 		using dist_t = simd1_traits::dist_t;
 		if (distribution_radius <= radius) {
@@ -517,7 +507,7 @@ namespace green {
 			};
 			search.run<1>(mesh, stats, {rootvdi}, distribution_radius, visitor);
 			for (auto vdi : nvdis) {
-				auto &vdata = search.vertexData[vdi >> MeshCache::vdi_shift];
+				auto &vdata = search.vertexData[mesh.vdi_uid(vdi)];
 				distribute_saliency(vdi, vdata.dist, s);
 			}
 		}
@@ -538,11 +528,11 @@ namespace green {
 
 		// in data units (unsigned)
 		auto vertex_size = [&](unsigned nedges) {
-			// pad data so entire vertex is at least 1 << vdi_shift elements (64 bytes)
+			// pad data so entire vertex is at least the specified size
 			// 6 edges seems about average for triangulated meshes
-			const unsigned zvert = (sizeof(vertex) + sizeof(edge) * nedges) / sizeof(unsigned);
-			const unsigned zmin = (1 << vdi_shift);
-			return std::max(zvert, zmin);
+			// note: rounding up to alignment
+			const unsigned zvert = (sizeof(vertex) + sizeof(edge) * nedges + sizeof(unsigned) - 1) / sizeof(unsigned);
+			return std::max(zvert, vert_min_size);
 		};
 
 		// work out precisely how big the data vectors actually need to be
@@ -551,13 +541,19 @@ namespace green {
 			unsigned nedges = 0;
 			for (auto vohIt = mesh.cvoh_iter(vit); vohIt.is_valid(); ++vohIt) {
 				nedges++;
+				// get max cost for scaling
+				const float cost = mesh.property(edgeLengthProperty, mesh.edge_handle(*vohIt));
+				cost_scale = std::max(cost_scale, cost);
 			}
 			datasize += vertex_size(nedges);
+			// get max vertex area for scaling
+			const float area = mesh.property(vertexAreasProperty, TriMesh::VertexHandle(vit));
+			area_scale = std::max(area_scale, area);
 		}
 		
 		// alloc data vectors
 		data.resize(datasize);
-		dataaux.resize(((data.size() >> vdi_shift) + 1) * (sizeof(vertex_aux) / sizeof(unsigned)));
+		dataaux.resize((vdi_uid(datasize) + 1) * (sizeof(vertex_aux) / sizeof(unsigned)));
 
 		std::vector<unsigned char> visited(mesh.n_vertices(), false);
 		std::deque<int> open_vertices_outer;
@@ -571,7 +567,7 @@ namespace green {
 		auto alloc_data_index = [&]() {
 			unsigned di = 0;
 			if (prev_di != -1) di = prev_di + vertex_size(get_vertex(prev_di).nedges);
-			if ((prev_di >> vdi_shift) == (di >> vdi_shift)) std::abort();
+			if (vdi_uid(prev_di) == vdi_uid(di)) std::abort();
 			prev_di = di;
 			vdis.push_back(di);
 			vertices_added++;
@@ -601,20 +597,28 @@ namespace green {
 					{
 						vertex &vdata = get_vertex(di);
 						vertex_aux &vadata = get_vertex_aux(di);
-						vdata.area = mesh.property(vertexAreasProperty, TriMesh::VertexHandle(vi));
-						vdata.curv = mesh.property(curvatureMeasure, TriMesh::VertexHandle(vi));
-						vdata.nedges = 0;
+						const float area = std::max(mesh.property(vertexAreasProperty, TriMesh::VertexHandle(vi)), 0.f);
+						// encode area
+						vdata.areax = encode_area(area);
+						const float curv = std::clamp(mesh.property(curvatureMeasure, TriMesh::VertexHandle(vi)), 0.f, 1.f);
+						// bin curvature based on 0-1 range
+						vdata.curvbin = unsigned(255.f * curv);
 						vadata.vi = vi;
 						vadata.pos = mesh.point(TriMesh::VertexHandle(vi));
 						vadata.norm = mesh.normal(TriMesh::VertexHandle(vi));
 					}
+					unsigned nedges = 0;
 					for (auto vohIt = mesh.cvoh_iter(TriMesh::VertexHandle(vi)); vohIt.is_valid(); ++vohIt) {
 						const int nvi = mesh.to_vertex_handle(*vohIt).idx();
 						if (!visited[nvi]) open_vertices_inner.push_back(nvi);
 						// can't resolve neighbour data index on first pass, so use a second pass
-						get_vertex(di).nedges++;
+						nedges++;
 						total_edges++;
 					}
+					// FIXME what do about this?
+					// possibly just drop the excess edges and emit a warning
+					if (nedges > 255) std::abort();
+					get_vertex(di).nedges = nedges;
 					// loop until we have a simd-aligned set of near neighbors
 				} while (open_vertices_inner.size() && (vertices_added % simd_traits::simd_size != 0));
 				// carry over inner queue
@@ -622,22 +626,22 @@ namespace green {
 			}
 		};
 
-		// TODO could/should we randomize this order?
-		for (int vi = 0; vi < mesh.n_vertices(); vi++) {
+		for (auto v : mesh.vertices()) {
+			const auto vi = v.idx();
 			if (visited[vi]) continue;
 			dovertex(vi);
 		}
 
 		// resolve vertex neighbor indices
 		for (int vi = 0; vi < mesh.n_vertices(); vi++) {
-			const unsigned di = vi2di[vi];
-			auto &v = get_vertex(di);
+			const unsigned vdi = vi2di[vi];
+			auto &v = get_vertex(vdi);
 			int i = 0;
 			for (auto vohIt = mesh.cvoh_iter(TriMesh::VertexHandle(vi)); vohIt.is_valid(); ++vohIt, ++i) {
 				const int nV = mesh.to_vertex_handle(*vohIt).idx();
-				auto &e = v.edges[i];
-				e.cost = mesh.property(edgeLengthProperty, mesh.edge_handle(*vohIt));
+				edge &e = v.edges[i];
 				e.ndi = vi2di[nV];
+				e.costx = encode_cost(mesh.property(edgeLengthProperty, mesh.edge_handle(*vohIt)));
 			}
 		}
 
@@ -652,8 +656,8 @@ namespace green {
 		std::cout << "Mesh data padding: " << ((bytes_mesh_data_real - bytes_mesh_data_ideal) / (1024 * 1024)) << "MiB" << std::endl;
 		std::cout << "Mesh aux data size: " << (bytes_mesh_dataaux_real / (1024 * 1024)) << "MiB" << std::endl;
 
-		const size_t bytes_per_thread_full = (data.size() >> vdi_shift) * sizeof(neighborhood_search<>::per_vertex);
-		const size_t bytes_per_thread_subsampled = (data.size() >> vdi_shift) * sizeof(neighborhood_search<simd1_traits>::per_vertex);
+		const size_t bytes_per_thread_full = (vdi_uid(data.size()) + 1) * sizeof(neighborhood_search<>::per_vertex);
+		const size_t bytes_per_thread_subsampled = (vdi_uid(data.size()) + 1) * sizeof(neighborhood_search<simd1_traits>::per_vertex);
 		std::cout << "Neighborhood search memory per thread (full): " << (bytes_per_thread_full / (1024 * 1024)) << "MiB" << std::endl;
 		std::cout << "Neighborhood search memory per thread (subsampled): " << (bytes_per_thread_subsampled / (1024 * 1024)) << "MiB" << std::endl;
 
@@ -668,8 +672,8 @@ namespace green {
 			out << i << ":";
 			auto &v = get_vertex(vdi);
 			auto &va = get_vertex_aux(vdi);
-			out << " a=" << v.area;;
-			out << " c=" << v.curv;
+			out << " a=" << decode_area(v.areax);
+			out << " c=" << v.curvbin;
 			out << " p=(" << va.pos[0] << "," << va.pos[1] << "," << va.pos[2] << ")";
 			out << " n=(" << va.norm[0] << "," << va.norm[1] << "," << va.norm[2] << ")";
 			out << " [";
@@ -677,7 +681,7 @@ namespace green {
 				int ndi = v.edges[j].ndi;
 				int ni = get_vertex_aux(ndi).vi;
 				out << ni << ":";
-				out << " l=" << v.edges[j].cost;
+				out << " l=" << decode_cost(v.edges[i].costx);
 				out << "; ";
 			}
 			out << "]\n";

@@ -63,35 +63,51 @@ namespace green {
 
 	struct MeshCache {
 
-		// max right shift for vertex data indices that still gives unique ids
+		// min vertex size (in unsigned alloc units)
 		// vertex data is padded to ensure this
 		// (this is checked on construction, just to be sure)
-		static constexpr int vdi_shift = 4;
+		// reasonable values: {10,12,14,16}
+		static constexpr unsigned vert_min_size = 12;
 
+#pragma push(pack)
+#pragma pack(1)
 		struct edge {
-			unsigned ndi; // data index, not vertex index!
-			float cost;
+			// data index
+			// note: while we could theoretically store this more compactly (in most cases)
+			// as an offset from the current vertex, in practice this is extremely difficult
+			unsigned ndi;
+			// fixed-point sqrt cost in [0,1] (* cost_scale)
+			uint16_t costx;
 		};
+#pragma pop(pack)
 
 		struct vertex {
-			unsigned nedges;
-			float area;
-			float curv;
+			// FIXME 255 edge limit (could be reachable)
+			uint8_t nedges;
+			// binned curvature
+			uint8_t curvbin;
+			// fixed-point sqrt area in [0,1] (* area_scale)
+			uint16_t areax;
 			// actual size == nedges (extends past struct end)
 			edge edges[0];
 		};
 
 		struct vertex_aux {
-			OpenMesh::Vec3f pos, norm;
-			int vi; // actual vertex index
+			OpenMesh::Vec3f pos;
+			OpenMesh::Vec3f norm;
+			// actual vertex index
+			int vi;
 		};
-
+		
 		std::vector<unsigned> vi2di;
 		std::vector<unsigned> vdis;
 
 		// TODO would be less naughty if these were vector<std::byte>
 		std::vector<unsigned> data;
 		std::vector<unsigned> dataaux;
+
+		float area_scale = 1;
+		float cost_scale = 1;
 
 		MeshCache() = default;
 
@@ -102,6 +118,11 @@ namespace green {
 			OpenMesh::VPropHandleT<float> curvatureMeasure
 		);
 
+		unsigned vdi_uid(unsigned vdi) const noexcept {
+			// note: compiler optimization turns this into a bitshift or reciprocal multiplication
+			return vdi / vert_min_size;
+		}
+
 		vertex & get_vertex(unsigned vdi) noexcept {
 			return reinterpret_cast<vertex &>(data[vdi]);
 		}
@@ -111,15 +132,34 @@ namespace green {
 		}
 
 		vertex_aux & get_vertex_aux(unsigned vdi) noexcept {
-			return reinterpret_cast<vertex_aux &>(dataaux[(vdi >> vdi_shift) * (sizeof(vertex_aux) / sizeof(unsigned))]);
+			return reinterpret_cast<vertex_aux &>(dataaux[vdi_uid(vdi) * (sizeof(vertex_aux) / sizeof(unsigned))]);
 		}
 
 		const vertex_aux & get_vertex_aux(unsigned vdi) const noexcept {
-			return reinterpret_cast<const vertex_aux &>(dataaux[(vdi >> vdi_shift) * (sizeof(vertex_aux) / sizeof(unsigned))]);
+			return reinterpret_cast<const vertex_aux &>(dataaux[vdi_uid(vdi) * (sizeof(vertex_aux) / sizeof(unsigned))]);
 		}
 
 		void dump_to_file() const;
 
+		uint16_t encode_area(float area) const noexcept {
+			// prevent 0 area
+			return std::max(unsigned(65535 * sqrt(area / area_scale)), 1u);
+		}
+
+		float decode_area(uint16_t areax) const noexcept {
+			const float areaxf = areax * (1.f / 65535);
+			return area_scale * (areaxf * areaxf);
+		}
+
+		uint16_t encode_cost(float cost) const noexcept {
+			// prevent 0 cost
+			return std::max(unsigned(65535 * sqrt(cost / cost_scale)), 1u);
+		}
+
+		float decode_cost(uint16_t costx) const noexcept {
+			const float costxf = costx * (1.f / 65535);
+			return cost_scale * (costxf * costxf);
+		}
 	};
 
 	struct CalculationStats {
@@ -192,8 +232,6 @@ namespace green {
 		CalculationStats &stats,
 		const std::array<unsigned, simd_traits::simd_size> &rootvdis,
 		float radius,
-		float curvmin,
-		float curvmax,
 		float noise_height
 	);
 
@@ -202,8 +240,6 @@ namespace green {
 		CalculationStats &stats,
 		unsigned rootvdi,
 		float radius,
-		float curvmin,
-		float curvmax,
 		float noise_height,
 		float distribution_radius,
 		const std::function<void(unsigned vdi, float r, float s)> &distribute_saliency
