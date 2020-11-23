@@ -10,6 +10,7 @@
 
 #include <deque>
 #include <vector>
+#include <limits>
 
 namespace green {
 
@@ -321,15 +322,21 @@ namespace green {
 
 		static constexpr auto null_visitor = [](unsigned vdi, mask_t m) {};
 
-		static constexpr int NUM_VERTEX_STATES = 2;
-		int VERTEX_OPEN = 1;
-		int VERTEX_CLOSED = 2;
+		static constexpr int num_vertex_states = 2;
+		static constexpr int vertex_state_bits = 24;
+		static constexpr unsigned vertex_state_mask = (1u << vertex_state_bits) - 1;
+
+		// state < open => unvisited
+		// note: these get incremented before the first run so the first states are actually 1,2
+		unsigned vertex_open = unsigned(-1);
+		unsigned vertex_closed = 0;
 
 		struct per_vertex {
-			int state = 0;
-			int flags = 0;
-			dist_t dist{0};
-			// TODO maybe split to reduce memory consumption due to alignment
+			// bitfield packing to reduce memory use
+			uint32_t state : vertex_state_bits;
+			uint32_t flags : 8;
+			dist_t dist;
+			// TODO maybe split to reduce memory consumption due to alignment (simd > 1)
 		};
 
 		std::vector<per_vertex> vertexData;
@@ -342,11 +349,26 @@ namespace green {
 
 			constexpr float huge_dist = 9001e19f;
 
-			vertexData.resize(mesh.vdi_uid(mesh.data.size()) + 1);
+			// increment vertex states
+			// allows us to not have to clear the state data (unless they overflow)
+			vertex_open = (vertex_open + num_vertex_states) & vertex_state_mask;
+			vertex_closed = (vertex_closed + num_vertex_states) & vertex_state_mask;
 
-			VERTEX_OPEN += NUM_VERTEX_STATES;
-			VERTEX_CLOSED += NUM_VERTEX_STATES;
-			// TODO vertex state overflow
+			const size_t vertex_data_size = mesh.vdi_uid(mesh.data.size()) + 1;
+			if (vertexData.size() != vertex_data_size) {
+				// resize and clear vertex data
+				vertex_open = 1;
+				vertex_closed = 2;
+				vertexData.resize(vertex_data_size);
+				std::memset(vertexData.data(), 0, vertexData.size() * sizeof(per_vertex));
+			}
+
+			if (vertex_closed <= num_vertex_states) {
+				// handle vertex state overflow
+				vertex_open = 1;
+				vertex_closed = 2;
+				std::memset(vertexData.data(), 0, vertexData.size() * sizeof(per_vertex));
+			}
 
 			fifo_neighborhood_queue open_vertices;
 			//priority_neighborhood_queue open_vertices;
@@ -370,7 +392,7 @@ namespace green {
 				open_vertices.push(vdi, 0.f);
 				auto &vdata = vertexData[mesh.vdi_uid(vdi)];
 				vdata.flags = 0;
-				vdata.state = VERTEX_OPEN;
+				vdata.state = vertex_open;
 			}
 
 			// now run the search
@@ -415,10 +437,10 @@ namespace green {
 
 				// with prio queues, a vertex could be closed while still in the queue (with a worse cost)
 				// in that case, we can safely skip it; if we needed to reprocess it, it would have been reopened
-				if constexpr (!NeighborhoodQueueT::unique_entries) if (cData.state == VERTEX_CLOSED) continue;
+				if constexpr (!NeighborhoodQueueT::unique_entries) if (cData.state == vertex_closed) continue;
 
 				// visited with best known cost => closed
-				cData.state = VERTEX_CLOSED;
+				cData.state = vertex_closed;
 				// add to results
 				const mask_t resmask = andnot(cmplt(cData.dist, dist_t(radius)), bits2mask<index_t>(cData.flags));
 				if constexpr (Phase > 0) if (!none(resmask)) {
@@ -448,7 +470,7 @@ namespace green {
 
 					auto &nData = vertexData[mesh.vdi_uid(edge.ndi)];
 					const auto oldState = nData.state;
-					const bool unvisited = oldState < VERTEX_OPEN;
+					const bool unvisited = oldState < vertex_open;
 
 					// neighbour dist can end up set arbitrarily large, so we must ensure the thresh is <= radius
 					const dist_t costthresh = select(min(nData.dist, dist_t(radius)), dist_t(radius), mask_t(unvisited));
@@ -465,9 +487,9 @@ namespace green {
 					const auto m = cmplt(newCost, costthresh);
 					if (!none(m)) {
 						nData.flags = select(nData.flags, 0, unvisited);
-						if (open_vertices.push_neighbor(edge.ndi, newCost, oldState - VERTEX_OPEN)) {
+						if (open_vertices.push_neighbor(edge.ndi, newCost, oldState - vertex_open)) {
 							stats.nh_record_push(m);
-							nData.state = VERTEX_OPEN;
+							nData.state = vertex_open;
 						}
 					}
 				}
