@@ -139,14 +139,62 @@ namespace green {
 			}
 		}
 
+		class iterator {
+		private:
+			const elem *m_data = nullptr;
+			size_t m_it = 0;
+			size_t m_mask = 0;
+
+		public:
+			using difference_type = intptr_t;
+			using value_type = T;
+			using pointer = const T *;
+			using reference = const T &;
+			using iterator_category = std::bidirectional_iterator_tag;
+
+			iterator() = default;
+
+			iterator(const simple_queue &q, size_t it_) : m_data(q.m_data.data()), m_it(it_), m_mask(q.m_mask) {}
+
+			iterator & operator++() noexcept {
+				m_it = m_mask & (m_it + 1);
+				return *this;
+			}
+
+			iterator & operator--() noexcept {
+				m_it = m_mask & (m_it - 1);
+				return *this;
+			}
+
+			bool operator==(const iterator &other) const noexcept {
+				return m_data == other.m_data && m_it == other.m_it;
+			}
+
+			bool operator!=(const iterator &other) const noexcept {
+				return !(*this == other);
+			}
+
+			reference operator*() const noexcept {
+				return m_data[m_it].as_t();
+			}
+		};
+
+		iterator begin() const {
+			return iterator(*this, m_begin);
+		}
+
+		iterator end() const {
+			return iterator(*this, m_end);
+		}
 	};
 
-	struct simple_neighborhood_queue {
+	struct fifo_neighborhood_queue {
 		static constexpr bool unique_entries = true;
+		static constexpr size_t iteration_limit = 200000;
 
 		simple_queue<unsigned> queue;
 
-		simple_neighborhood_queue() {
+		fifo_neighborhood_queue() {
 			queue.reserve(256);
 		}
 
@@ -186,12 +234,21 @@ namespace green {
 			}
 			return false;
 		}
+
+		auto begin() const noexcept {
+			return queue.begin();
+		}
+
+		auto end() const noexcept {
+			return queue.end();
+		}
 	};
 
 	struct priority_neighborhood_queue {
 		// TODO binary heap is not really that great; should try quaternary or something else
-
+		
 		static constexpr bool unique_entries = true;
+		static constexpr size_t iteration_limit = size_t(-1);
 
 		struct elem {
 			unsigned vdi;
@@ -245,6 +302,14 @@ namespace green {
 			// TODO for experimentation with prio queues and grouped traversal
 			std::abort();
 		}
+
+		template <typename IteratorT, typename CostF>
+		void push_all(IteratorT it0, IteratorT it1, const CostF &costfunc) {
+			for (; it0 != it1; ++it0) {
+				data.push_back({*it0, costfunc(*it0)});
+			}
+			std::make_heap(data.begin(), data.end());
+		}
 	};
 
 	template <typename SimdTraits = simd_traits>
@@ -253,7 +318,6 @@ namespace green {
 		using mask_t = typename SimdTraits::mask_t;
 		using index_t = typename SimdTraits::index_t;
 		using dist_t = typename SimdTraits::dist_t;
-		using neighborhood_queue_t = typename SimdTraits::neighborhood_queue_t;
 
 		static constexpr auto null_visitor = [](unsigned vdi, mask_t m) {};
 
@@ -277,17 +341,15 @@ namespace green {
 			using namespace simd;
 
 			constexpr float huge_dist = 9001e19f;
-			const index_t invalid_idx{-1};
 
-			//vertexData.clear();
 			vertexData.resize(mesh.vdi_uid(mesh.data.size()) + 1);
-			//vertexData.reserve(1024);
 
 			VERTEX_OPEN += NUM_VERTEX_STATES;
 			VERTEX_CLOSED += NUM_VERTEX_STATES;
 			// TODO vertex state overflow
 
-			neighborhood_queue_t open_vertices;
+			fifo_neighborhood_queue open_vertices;
+			//priority_neighborhood_queue open_vertices;
 
 			// initialize distances for root vertices
 			for (unsigned i = 0; i < SimdTraits::simd_size; i++) {
@@ -311,14 +373,30 @@ namespace green {
 				vdata.state = VERTEX_OPEN;
 			}
 
+			// now run the search
+			stats.nh_record_search<Phase>();
+			run_loop<Phase>(mesh, stats, open_vertices, radius, visitor);
+
+		}
+
+		template <int Phase, typename NeighborhoodQueueT = fifo_neighborhood_queue, typename VisitorF = decltype(null_visitor)>
+		void run_loop(const MeshCache &mesh, CalculationStats &stats, NeighborhoodQueueT &open_vertices, float radius, const VisitorF &visitor) {
+			
+			using namespace simd;
+
+			// prio queue fallback:
+			// - currently need simd size 1 (ie no simd)
+			// - phase 1 because repeat searches can optimally use the fifo queue
+			// - check if iteration limit in place
+			constexpr bool enable_prio_fallback = SimdTraits::simd_size == 1 && Phase == 1 && NeighborhoodQueueT::iteration_limit < size_t(-1);
+			constexpr float huge_dist = 9001e19f;
+
 			// while there are open vertices, process them
-			int phase_i = 0;
-			do {
+			for (size_t phase_i = 0; open_vertices.size() && (!enable_prio_fallback || phase_i < NeighborhoodQueueT::iteration_limit); phase_i++) {
 				if constexpr (Phase == 0) {
-					phase_i++;
 					// phase 0 does a minimal search to try and establish connectivity between root vertices
 					// ideally, the root vertices are closely connected (i.e. a surface patch)
-					if (phase_i > SimdTraits::simd_size * 3) break;
+					if (phase_i >= SimdTraits::simd_size * 3) break;
 				}
 
 				const unsigned cvdi = open_vertices.pop();
@@ -337,7 +415,7 @@ namespace green {
 
 				// with prio queues, a vertex could be closed while still in the queue (with a worse cost)
 				// in that case, we can safely skip it; if we needed to reprocess it, it would have been reopened
-				if constexpr (!neighborhood_queue_t::unique_entries) if (cData.state == VERTEX_CLOSED) continue;
+				if constexpr (!NeighborhoodQueueT::unique_entries) if (cData.state == VERTEX_CLOSED) continue;
 
 				// visited with best known cost => closed
 				cData.state = VERTEX_CLOSED;
@@ -393,9 +471,26 @@ namespace green {
 						}
 					}
 				}
+			}
 
-			} while (open_vertices.size());
-
+			if constexpr (enable_prio_fallback) {
+				if (open_vertices.size()) {
+					// transfer to prio queue
+					priority_neighborhood_queue open_vertices2;
+					open_vertices2.push_all(open_vertices.begin(), open_vertices.end(), [&](unsigned vdi) {
+						auto &cData = vertexData[mesh.vdi_uid(vdi)];
+						return cData.dist;
+					});
+					// continue search
+					stats.nh_record_big_search<Phase>();
+					run_loop<Phase>(mesh, stats, open_vertices2, radius, visitor);
+				}
+			} else if constexpr (Phase == 0) {
+				// still open vertices left, ok
+			} else {
+				// should be no open vertices left
+				if (open_vertices.size()) std::abort();
+			}
 		}
 
 	};
@@ -793,12 +888,15 @@ namespace green {
 
 		using namespace std;
 
-		cout << "Neighborhood loop count: " << nh_loop_count
+		cout << "- Search count: " << nh_search_count <<
+			", " << nh_big_search_count << " big (" << (100.0 * double(nh_big_search_count) / nh_search_count) << "%)" << endl;
+
+		cout << "- Loop count: " << nh_loop_count
 			<< ", loop occupancy: " << (float(nh_loop_occupancy) / nh_loop_count)
 			<< ", push occupancy: " << (float(nh_push_occupancy) / nh_push_count)
 			<< endl;
 
-		cout << "Neighborhood: " << (nh_duration / (threadcount * 1.0s)) << "s (total " << (nh_duration / 1.0s) << "s)" << endl;
+		cout << "- Duration: " << (nh_duration / (threadcount * 1.0s)) << "s (total " << (nh_duration / 1.0s) << "s)" << endl;
 		//cout << "Saliency    : " << (sal_duration / (threadcount * 1.0s)) << "s (total " << (sal_duration / 1.0s) << "s)" << endl;
 
 	}

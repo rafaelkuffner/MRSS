@@ -171,7 +171,6 @@ namespace green {
 			std::cout << "Contrast: " << m_uparams.normal_power << std::endl;
 			
 			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
-			m_thread_stats.assign(omp_get_max_threads(), {});
 
 			// TODO curv selection param
 			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
@@ -260,9 +259,14 @@ namespace green {
 				: (m_uparams.subsample_auto ? m_uparams.samples_per_neighborhood : 0);
 			std::cout << "Saliency samples per neighbourhood: " << samples_per_neighbourhood << std::endl;
 
+			CalculationStats overall_stats;
+
 			// compute saliency at multiple levels
 			for (int currentLevel = 0; currentLevel < m_uparams.levels; currentLevel++)
 			{
+				// thread stats per level
+				m_thread_stats.assign(omp_get_max_threads(), {});
+				
 				const float currentRadius = MaxRadius / pow(2.0f, static_cast<float>(currentLevel));
 				const float currentArea = currentRadius * currentRadius * 3.14159265f;
 
@@ -289,15 +293,22 @@ namespace green {
 					run_level_full(currentLevel, currentRadius, normalmap_filter);
 				}
 
+				// merge and dump stats for this level
+				CalculationStats level_stats;
+				for (auto &ts : m_thread_stats) {
+					level_stats.merge(ts);
+				}
+				std::cout << "Level neighborhood stats:" << std::endl;
+				level_stats.dump_stats(omp_get_max_threads());
+				// then merge that to the overall stats
+				overall_stats.merge(level_stats);
+
 				m_progress.completed_levels = currentLevel + 1;
 				if (m_progress.should_cancel) return false;
 			}
 
-			CalculationStats stats;
-			for (auto &ts : m_thread_stats) {
-				stats.merge(ts);
-			}
-			stats.dump_stats(omp_get_max_threads());
+			std::cout << "Overall neighborhood stats:" << std::endl;
+			overall_stats.dump_stats(omp_get_max_threads());
 
 			// merge saliency values to a single score / property
 			m_progress.state = saliency_computation_state::merge;

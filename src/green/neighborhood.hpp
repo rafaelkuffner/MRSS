@@ -37,15 +37,11 @@ namespace green {
 	using simd::simd8_int;
 	using simd::simd8_float;
 
-	struct simple_neighborhood_queue;
-	struct priority_neighborhood_queue;
-
 	struct simd1_traits {
 		static constexpr int simd_size = 1;
 		using mask_t = bool;
 		using index_t = int;
 		using dist_t = float;
-		using neighborhood_queue_t = priority_neighborhood_queue;
 	};
 
 	struct simd4_traits {
@@ -53,7 +49,6 @@ namespace green {
 		using mask_t = simd4_int;
 		using index_t = simd4_int;
 		using dist_t = simd4_float;
-		using neighborhood_queue_t = simple_neighborhood_queue;
 	};
 
 	struct simd8_traits {
@@ -61,7 +56,6 @@ namespace green {
 		using mask_t = simd8_int;
 		using index_t = simd8_int;
 		using dist_t = simd8_float;
-		using neighborhood_queue_t = simple_neighborhood_queue;
 	};
 
 	// simd8 has minimal gain over simd4 when multithreaded
@@ -174,6 +168,8 @@ namespace green {
 		int64_t nh_loop_occupancy = 0;
 		int64_t nh_push_count = 0;
 		int64_t nh_push_occupancy = 0;
+		int64_t nh_search_count = 0;
+		int64_t nh_big_search_count = 0;
 
 		std::chrono::nanoseconds nh_duration{};
 		std::chrono::nanoseconds sal_duration{};
@@ -181,7 +177,7 @@ namespace green {
 		std::chrono::steady_clock::time_point time0;
 
 		template <typename MaskT>
-		void nh_record_loop(MaskT occupancy) {
+		void nh_record_loop(MaskT occupancy) noexcept {
 			using simd::mask2bits;
 			const int obits = mask2bits(occupancy);
 			nh_loop_count++;
@@ -189,11 +185,21 @@ namespace green {
 		}
 
 		template <typename MaskT>
-		void nh_record_push(MaskT occupancy) {
+		void nh_record_push(MaskT occupancy) noexcept {
 			using simd::mask2bits;
 			const int obits = mask2bits(occupancy);
 			nh_push_count++;
 			nh_push_occupancy += __popcnt(obits);
+		}
+
+		template <int Phase>
+		void nh_record_search() noexcept {
+			if constexpr (Phase == 1) nh_search_count++;
+		}
+
+		template <int Phase>
+		void nh_record_big_search() noexcept {
+			if constexpr (Phase == 1) nh_big_search_count++;
 		}
 
 		void merge(const CalculationStats &other) {
@@ -201,6 +207,8 @@ namespace green {
 			nh_loop_occupancy += other.nh_loop_occupancy;
 			nh_push_count += other.nh_push_count;
 			nh_push_occupancy += other.nh_push_occupancy;
+			nh_search_count += other.nh_search_count;
+			nh_big_search_count += other.nh_big_search_count;
 			nh_duration += other.nh_duration;
 			sal_duration += other.sal_duration;
 		}
