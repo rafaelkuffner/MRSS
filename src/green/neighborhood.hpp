@@ -69,7 +69,7 @@ namespace green {
 		// reasonable values: {10,12,14,16}
 		static constexpr unsigned vert_min_size = 12;
 
-#pragma push(pack)
+#pragma pack(push)
 #pragma pack(1)
 		struct edge {
 			// data index
@@ -79,7 +79,7 @@ namespace green {
 			// fixed-point sqrt cost in [0,1] (* cost_scale)
 			uint16_t costx;
 		};
-#pragma pop(pack)
+#pragma pack(pop)
 
 		struct vertex {
 			// FIXME 255 edge limit (could be reachable)

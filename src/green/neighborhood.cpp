@@ -191,7 +191,6 @@ namespace green {
 
 	struct fifo_neighborhood_queue {
 		static constexpr bool unique_entries = true;
-		static constexpr size_t iteration_limit = 200000;
 
 		simple_queue<unsigned> queue;
 
@@ -395,26 +394,46 @@ namespace green {
 				vdata.state = vertex_open;
 			}
 
-			// now run the search
-			stats.nh_record_search<Phase>();
-			run_loop<Phase>(mesh, stats, open_vertices, radius, visitor);
-
-		}
-
-		template <int Phase, typename NeighborhoodQueueT = fifo_neighborhood_queue, typename VisitorF = decltype(null_visitor)>
-		void run_loop(const MeshCache &mesh, CalculationStats &stats, NeighborhoodQueueT &open_vertices, float radius, const VisitorF &visitor) {
-			
-			using namespace simd;
-
 			// prio queue fallback:
 			// - currently need simd size 1 (ie no simd)
 			// - phase 1 because repeat searches can optimally use the fifo queue
-			// - check if iteration limit in place
-			constexpr bool enable_prio_fallback = SimdTraits::simd_size == 1 && Phase == 1 && NeighborhoodQueueT::iteration_limit < size_t(-1);
+			constexpr size_t fifo_iter_limit = 200000;
+			constexpr bool enable_prio_fallback = SimdTraits::simd_size == 1 && Phase == 1;
+
+			// start the search with the fifo queue
+			stats.nh_record_search<Phase>();
+			run_loop<Phase, (enable_prio_fallback ? fifo_iter_limit : size_t(-1))>(mesh, stats, open_vertices, radius, visitor);
+
+			if constexpr (enable_prio_fallback) {
+				if (open_vertices.size()) {
+					// transfer to prio queue
+					priority_neighborhood_queue open_vertices2;
+					open_vertices2.push_all(open_vertices.begin(), open_vertices.end(), [&](unsigned vdi) {
+						auto &cData = vertexData[mesh.vdi_uid(vdi)];
+						return cData.dist;
+					});
+					// continue search
+					stats.nh_record_big_search<Phase>();
+					run_loop<Phase>(mesh, stats, open_vertices2, radius, visitor);
+				}
+			} else if constexpr (Phase == 0) {
+				// still open vertices left, ok
+			} else {
+				// should be no open vertices left
+				if (open_vertices.size()) std::abort();
+			}
+
+		}
+
+		template <int Phase, size_t IterLimit = size_t(-1), typename NeighborhoodQueueT = fifo_neighborhood_queue, typename VisitorF = decltype(null_visitor)>
+		void run_loop(const MeshCache &mesh, CalculationStats &stats, NeighborhoodQueueT &open_vertices, float radius, const VisitorF &visitor) {
+			
+			using namespace simd;
+			
 			constexpr float huge_dist = 9001e19f;
 
 			// while there are open vertices, process them
-			for (size_t phase_i = 0; open_vertices.size() && (!enable_prio_fallback || phase_i < NeighborhoodQueueT::iteration_limit); phase_i++) {
+			for (size_t phase_i = 0; open_vertices.size() && (IterLimit == size_t(-1) || phase_i < IterLimit); phase_i++) {
 				if constexpr (Phase == 0) {
 					// phase 0 does a minimal search to try and establish connectivity between root vertices
 					// ideally, the root vertices are closely connected (i.e. a surface patch)
@@ -424,10 +443,11 @@ namespace green {
 				const unsigned cvdi = open_vertices.pop();
 
 				if (open_vertices.size()) {
-					// TODO (re)test if this is actually worth it
 					const unsigned xvdi = open_vertices.top();
-					_mm_prefetch((const char *)(mesh.data.data() + xvdi), _mm_hint(1));
-					_mm_prefetch(64 + (const char *)(mesh.data.data() + xvdi), _mm_hint(1));
+					// prefetching mesh data seems slightly worth it
+					_mm_prefetch((const char *)(mesh.data.data() + xvdi), _mm_hint(_MM_HINT_T1));
+					_mm_prefetch(64 + (const char *)(mesh.data.data() + xvdi), _mm_hint(_MM_HINT_T1));
+					// prefetching per-vertex state seems not worth it
 				}
 
 				auto &cData = vertexData[mesh.vdi_uid(cvdi)];
@@ -493,25 +513,6 @@ namespace green {
 						}
 					}
 				}
-			}
-
-			if constexpr (enable_prio_fallback) {
-				if (open_vertices.size()) {
-					// transfer to prio queue
-					priority_neighborhood_queue open_vertices2;
-					open_vertices2.push_all(open_vertices.begin(), open_vertices.end(), [&](unsigned vdi) {
-						auto &cData = vertexData[mesh.vdi_uid(vdi)];
-						return cData.dist;
-					});
-					// continue search
-					stats.nh_record_big_search<Phase>();
-					run_loop<Phase>(mesh, stats, open_vertices2, radius, visitor);
-				}
-			} else if constexpr (Phase == 0) {
-				// still open vertices left, ok
-			} else {
-				// should be no open vertices left
-				if (open_vertices.size()) std::abort();
 			}
 		}
 
