@@ -840,10 +840,10 @@ namespace {
 	void dump_curvature(const filesystem::path &outpath, Model &m, float contrast) {
 		std::cout << "dumping per-vertex area,meancurv,doncurv to " << outpath.u8string() << std::endl;
 		std::ofstream out(outpath);
-		lce::Histogram curvhist, donhist;
+		lce::Histogram curvhist;
 		OpenMesh::VPropHandleT<float> curvprop, donprop;
 		computeMeanCurvature(m.trimesh(), curvprop, curvhist, 1);
-		computeDoNMaxDiffs(m.trimesh(), donprop, donhist, m.prop_vertex_area(), contrast);
+		computeDoNMaxDiffs(m.trimesh(), donprop, m.prop_vertex_area(), contrast);
 		for (auto &v : m.trimesh().vertices()) {
 			const float area = m.trimesh().property(m.prop_vertex_area(), v);
 			const float curv = m.trimesh().property(curvprop, v);

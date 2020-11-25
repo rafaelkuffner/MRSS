@@ -164,8 +164,6 @@ namespace green {
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 		float m_auto_contrast = 1;
-		float m_don_raw_min = 0;
-		float m_don_raw_max = 0;
 
 		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
 		cgu::gl_object m_vao;

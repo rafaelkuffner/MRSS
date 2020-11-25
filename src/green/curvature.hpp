@@ -49,7 +49,6 @@ namespace green {
 	bool computeDoNMaxDiffs(
 		TriMesh &mesh,
 		OpenMesh::VPropHandleT<float> &DoN,
-		lce::Histogram &hDoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower
 	);
@@ -57,7 +56,6 @@ namespace green {
 	bool computeDoN(
 		TriMesh &mesh,
 		OpenMesh::VPropHandleT<float> &DoN,
-		lce::Histogram &hDoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower
 	);

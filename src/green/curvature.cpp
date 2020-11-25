@@ -17,6 +17,9 @@
 #include <float.h>
 #include <map>
 #include <array>
+#include <algorithm>
+
+#include <omp.h>
 
 #include <OpenMesh/Tools/Smoother/JacobiLaplaceSmootherT.hh>
 
@@ -603,24 +606,26 @@ namespace green {
 	bool computeDoNMaxDiffs(
 		TriMesh& mesh,
 		OpenMesh::VPropHandleT<float>& DoN,
-		Histogram& hDoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower
 	) {
 		assert(mesh.has_vertex_normals());
 		mesh.add_property(DoN);
-		for (auto vIt = mesh.vertices_begin(); vIt != mesh.vertices_end(); ++vIt) {
-			float maxDiff = maxdon(mesh, *vIt, normalPower);
-			mesh.property(DoN, *vIt) = maxDiff;
-			hDoN.add(maxDiff);
+		const int prev_max_threads = omp_get_max_threads();
+		omp_set_num_threads(std::max(prev_max_threads - 1, 1));
+#pragma omp parallel for schedule(dynamic, 10000)
+		for (int i = 0; i < mesh.n_vertices(); i++) {
+			TriMesh::VertexHandle vh(i);
+			float maxDiff = maxdon(mesh, vh, normalPower);
+			mesh.property(DoN, vh) = maxDiff;
 		}
+		omp_set_num_threads(prev_max_threads);
 		return true;
 	}
 
 	bool computeDoN(
 		TriMesh & mesh,
 		OpenMesh::VPropHandleT<float> & DoN,
-		Histogram &hDoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower
 	) {
@@ -650,7 +655,6 @@ namespace green {
 			k = pow((1 - (k / w)),normalPower);
 			if (!isfinite(k)) k = 0;
 			mesh.property(DoN, *vIt) = k;
-			hDoN.add(k);
 		}
 
 		return true;

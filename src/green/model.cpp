@@ -252,13 +252,9 @@ namespace green {
 		std::cout << "Computing raw don curvature" << std::endl;
 		// TODO what if we didnt want this? (to run and time with a difference curv measure)
 		const auto time_curv_start = std::chrono::steady_clock::now();
-		// TODO do away with this histogram thing
-		lce::Histogram curvhist;
-		computeDoNMaxDiffs(m_trimesh, m_prop_doncurv_raw, curvhist, m_prop_vertex_area, 1);
+		computeDoNMaxDiffs(m_trimesh, m_prop_doncurv_raw, m_prop_vertex_area, 1);
 		const auto time_curv_finish = std::chrono::steady_clock::now();
 		std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
-		m_don_raw_min = curvhist.getMin();
-		m_don_raw_max = curvhist.getMax();
 
 		// TODO move autocontrast to a function
 		std::cout << "Computing auto contrast for saliency" << std::endl;
