@@ -396,13 +396,16 @@ namespace green {
 
 			// prio queue fallback:
 			// - currently need simd size 1 (ie no simd)
-			// - phase 1 because repeat searches can optimally use the fifo queue
-			constexpr size_t fifo_iter_limit = 200000;
+			// - only phase 1 because repeat searches can optimally use the fifo queue
 			constexpr bool enable_prio_fallback = SimdTraits::simd_size == 1 && Phase == 1;
+			// phase 0 has its own specific iter limit
+			constexpr size_t fifo_iter_limit = Phase ? (enable_prio_fallback ? 200000 : -1) : (SimdTraits::simd_size * 3);
 
 			// start the search with the fifo queue
+			// phase 0 does a minimal search to try and establish connectivity between root vertices
+			// ideally, the root vertices are closely connected (i.e. a surface patch)
 			stats.nh_record_search<Phase>();
-			run_loop<Phase, (enable_prio_fallback ? fifo_iter_limit : size_t(-1))>(mesh, stats, open_vertices, radius, visitor);
+			run_loop<Phase, fifo_iter_limit>(mesh, stats, open_vertices, radius, visitor);
 
 			if constexpr (enable_prio_fallback) {
 				if (open_vertices.size()) {
@@ -434,12 +437,7 @@ namespace green {
 
 			// while there are open vertices, process them
 			for (size_t phase_i = 0; open_vertices.size() && (IterLimit == size_t(-1) || phase_i < IterLimit); phase_i++) {
-				if constexpr (Phase == 0) {
-					// phase 0 does a minimal search to try and establish connectivity between root vertices
-					// ideally, the root vertices are closely connected (i.e. a surface patch)
-					if (phase_i >= SimdTraits::simd_size * 3) break;
-				}
-
+				
 				const unsigned cvdi = open_vertices.pop();
 
 				if (open_vertices.size()) {
