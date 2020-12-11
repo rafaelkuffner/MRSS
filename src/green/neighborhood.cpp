@@ -8,11 +8,214 @@
 
 #include "neighborhood.hpp"
 
+#include <utility>
+#include <array>
 #include <deque>
 #include <vector>
 #include <limits>
+#include <algorithm>
+#include <functional>
 
 namespace green {
+
+	// d-ary max heap (for std compat)
+	// note: std::greater uses operator>, so doesnt work if only operator< is defined
+	// note: careful with comparisons - equality needs to be handled correctly
+	template <size_t Arity = 2, typename Compare = std::less<>>
+	class dary_heap {
+	private:
+		template <typename RanIt>
+		using iter_diff_t = typename std::iterator_traits<RanIt>::difference_type;
+
+		template <typename DiffT>
+		static DiffT parent(DiffT i) noexcept {
+			// this needs to work safely (ie return 0) when i=0, even though there is no parent
+			assert(i >= DiffT(0));
+			return (i - DiffT(1)) / DiffT(Arity);
+		}
+
+		template <typename DiffT>
+		static DiffT first_child(DiffT i) noexcept {
+			assert(i >= DiffT(0));
+			return DiffT(Arity) * i + DiffT(1);
+		}
+
+		// hole must be valid (< last)
+		// returns new hole location
+		template <typename RanIt, typename ValueT>
+		static RanIt sift_up(RanIt first, RanIt last, RanIt hole, const ValueT &val) {
+			assert(hole < last);
+			using diff_t = iter_diff_t<RanIt>;
+			const Compare cmp{};
+			diff_t i = hole - first;
+			// calls to parent() may attempt to eval parent(0)
+			// bitand to reduce branching
+			for (diff_t pi = parent(i); (i > 0) & cmp(*(first + pi), val); ) {
+				// loop while parent 'less' than child => invariant broken
+				*(first + i) = std::move(*(first + pi));
+				i = pi;
+				pi = parent(i);
+			}
+			return first + i;
+		}
+
+		template <size_t D, typename RanIt, typename DiffT>
+		static DiffT max_d_child(RanIt first, DiffT i) {
+			const Compare cmp{};
+			if constexpr (D == 1) {
+				return i;
+			} else if constexpr (D == 2) {
+				return i + DiffT(cmp(*(first + i), *(first + i + DiffT(1))));
+			} else if constexpr (D > 2) {
+				constexpr auto d1 = D / DiffT(2);
+				constexpr auto d2 = D - d1;
+				const auto i1 = max_d_child<d1>(first, i);
+				const auto i2 = max_d_child<d2>(first, i + d1);
+				return cmp(*(first + i1), *(first + i2)) ? i2 : i1;
+			} else {
+				std::abort();
+			}
+		}
+
+		template <typename RanIt>
+		using max_k_child_t = decltype(&max_d_child<Arity, RanIt, iter_diff_t<RanIt>>);
+
+		template <typename RanIt, size_t ...Ks>
+		static constexpr std::array<max_k_child_t<RanIt>, Arity> max_k_child_lut_impl(std::integer_sequence<size_t, Ks...>) {
+			return std::array<max_k_child_t<RanIt>, Arity>{max_d_child<((Ks - 1 + Arity) % Arity)>...};
+		}
+
+		template <typename RanIt>
+		static constexpr std::array<max_k_child_t<RanIt>, Arity> max_k_child_lut() {
+			return max_k_child_lut_impl<RanIt>(std::make_index_sequence<Arity>());
+		}
+
+		template <typename RanIt, typename DiffT>
+		static DiffT max_k_child(RanIt first, DiffT i, DiffT k) {
+			// k = (#children + 1) % Arity
+			// k == 1 => 0 children (not valid)
+			assert(0 <= k && k < Arity && k != 1);
+			if constexpr (Arity == 2) {
+				// can only be one child
+				return i;
+			} else {
+				static constexpr auto lut = max_k_child_lut<RanIt>();
+				return lut[k](first, i);
+			}
+		}
+
+		// hole must be valid (< last)
+		// returns new hole location
+		template <typename RanIt, typename ValueT>
+		static RanIt sift_down(RanIt first, RanIt last, RanIt hole, const ValueT &val) {
+			assert(hole < last);
+			using diff_t = iter_diff_t<RanIt>;
+			const diff_t z = last - first;
+			const diff_t first_non_full = parent(z);
+			const Compare cmp{};
+			diff_t i = hole - first;
+			while (i < first_non_full) {
+				const diff_t ci = max_d_child<Arity>(first, first_child(i));
+				// if parent not 'less' than child => invariant ok
+				if (!cmp(val, *(first + ci))) return first + i;
+				*(first + i) = std::move(*(first + ci));
+				i = ci;
+			}
+			if (const diff_t k = z % diff_t(Arity); i == first_non_full && k != 1) {
+				// last parent has [1,Arity) children
+				const diff_t ci = max_k_child(first, first_child(i), k);
+				if (cmp(val, *(first + ci))) {
+					// parent 'less' than child => invariant broken
+					*(first + i) = std::move(*(first + ci));
+					i = ci;
+				}
+			}
+			return first + i;
+		}
+
+	public:
+		// *(last-1) is new element to be pushed
+		template <typename RanIt>
+		static void push_heap(RanIt first, RanIt last) {
+			using diff_t = iter_diff_t<RanIt>;
+			assert(first <= last);
+			assert(is_heap(first, last - diff_t(1)));
+			if (last - first <= diff_t(1)) return;
+			auto val = std::move(*(last - 1));
+			auto hole = sift_up(first, last, last - 1, val);
+			*hole = std::move(val);
+			assert(is_heap(first, last));
+		}
+
+		// *first is element to be popped, stored in *(last-1)
+		template <typename RanIt>
+		static void pop_heap(RanIt first, RanIt last) {
+			using diff_t = iter_diff_t<RanIt>;
+			assert(first <= last);
+			assert(is_heap(first, last));
+			if (last - first <= diff_t(1)) return;
+			auto val = std::move(*--last);
+			*last = std::move(*first);
+			auto hole = sift_down(first, last, first, val);
+			*hole = std::move(val);
+			assert(is_heap(first, last));
+			// check that the element we popped is >= all remaining
+			assert(!Compare{}(*last, *std::max_element(first, last)));
+		}
+
+		template <typename RanIt>
+		static void make_heap(RanIt first, RanIt last) {
+			assert(first <= last);
+			if (first == last) return;
+			for (auto it = first + parent((last - 1) - first); it >= first; --it) {
+				auto val = std::move(*it);
+				auto hole = sift_down(first, last, it, val);
+				*hole = std::move(val);
+			}
+			assert(is_heap(first, last));
+		}
+
+		template <typename RanIt>
+		static bool is_heap(RanIt first, RanIt last) {
+			assert(first <= last);
+			if (first == last) return true;
+			const Compare cmp{};
+			for (auto it = first + 1; it < last; ++it) {
+				const auto pit = first + parent(it - first);
+				if (cmp(*pit, *it)) {
+					// parent 'less' than child => invariant broken
+					return false;
+				}
+			}
+			return true;
+		}
+	};
+
+	template <typename Compare = std::less<>>
+	class std_heap {
+	public:
+		// *(last-1) is new element to be pushed
+		template <typename RanIt>
+		static void push_heap(RanIt first, RanIt last) {
+			std::push_heap(first, last, Compare{});
+		}
+
+		// *first is element to be popped, stored in *(last-1)
+		template <typename RanIt>
+		static void pop_heap(RanIt first, RanIt last) {
+			std::pop_heap(first, last, Compare{});
+		}
+
+		template <typename RanIt>
+		static void make_heap(RanIt first, RanIt last) {
+			std::make_heap(first, last, Compare{});
+		}
+
+		template <typename RanIt>
+		static bool is_heap(RanIt first, RanIt last) {
+			return std::is_heap(first, last, Compare{});
+		}
+	};
 
 	// assumes T is trivially relocatable and nothrow-movable
 	template <typename T>
@@ -245,17 +448,18 @@ namespace green {
 	};
 
 	struct priority_neighborhood_queue {
-		// TODO binary heap is not really that great; should try quaternary or something else
-		
 		static constexpr bool unique_entries = true;
-		static constexpr size_t iteration_limit = size_t(-1);
+		
+		// TODO dary_heap<4> is currently beaten by std_heap (and even by dary_heap<2>)
+		//using heap_t = dary_heap<4>;
+		using heap_t = std_heap<>;
 
 		struct elem {
 			unsigned vdi;
 			float cost;
 
 			bool operator<(const elem &other) const noexcept {
-				// std uses max-heap
+				// for max-heap
 				return cost > other.cost;
 			}
 		};
@@ -271,7 +475,7 @@ namespace green {
 		}
 
 		unsigned pop() {
-			std::pop_heap(data.begin(), data.end());
+			heap_t::pop_heap(data.begin(), data.end());
 			auto e = data.back();
 			data.pop_back();
 			return e.vdi;
@@ -287,14 +491,14 @@ namespace green {
 
 		bool push(unsigned x, float cost) {
 			data.push_back({x, cost});
-			std::push_heap(data.begin(), data.end());
+			heap_t::push_heap(data.begin(), data.end());
 			return true;
 		}
 
 		bool push_neighbor(unsigned x, float cost, int statediff) {
 			(void) statediff;
 			data.push_back({x, cost});
-			std::push_heap(data.begin(), data.end());
+			heap_t::push_heap(data.begin(), data.end());
 			return true;
 		}
 
@@ -308,7 +512,7 @@ namespace green {
 			for (; it0 != it1; ++it0) {
 				data.push_back({*it0, costfunc(*it0)});
 			}
-			std::make_heap(data.begin(), data.end());
+			heap_t::make_heap(data.begin(), data.end());
 		}
 	};
 

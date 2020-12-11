@@ -479,9 +479,9 @@ namespace green {
 			};
 
 			auto cand_inc_loop_area = [&](next_candidate &nc, float a) {
-				const candidate_iter_t none{};
+				const candidate_iter_t none = candidates.end();
 				const auto it0 = nc.it;
-				candidate_iter_t itb{};
+				candidate_iter_t itb = none;
 				float a1 = nc.summedarea + a;
 				while (nc.it->summedarea < a1 || nc.it->deleted2.load(std::memory_order_relaxed)) {
 					if (cand_inc_loop(nc.it)) a1 = std::max(0.f, a1 - 1.f);
@@ -514,9 +514,10 @@ namespace green {
 			// note: the randomness depends on shuffling the candidates beforehand
 			// currently on lucy (default params) about 3.5% execution time goes here, and about 6% at -a 0.01 -s 50
 			auto random_vdi = [&](int threadindex) {
+				const candidate_iter_t none = candidates.end();
 				if (candidates.empty()) return unsigned(-1);
 				auto &nc = thread_next_cand[threadindex];
-				if (nc.it == candidate_iter_t()) {
+				if (nc.it == none) {
 					// candidates already exhausted
 					return unsigned(-1);
 				}
@@ -527,7 +528,7 @@ namespace green {
 				if (cand_inc_loop_area(nc, float(subsampling) / m_mparams.mesh->n_vertices())) {
 					// search for next candidate exhausted (actually now)
 					// note: the 'probably' used to prevent us from sentinel-izing the iterator
-					nc.it = {};
+					nc.it = none;
 					return unsigned(-1);
 				}
 				// note: should not use the deleted flag as a reason to return -1
@@ -594,16 +595,12 @@ namespace green {
 						atomic_float_accum(tempSaliencyProperty[v.idx()].w, w);
 						if (r < exclusion_radius) {
 							// exclude from future sampling
-							const auto none = candidate_iter_t();
+							// note: cannot actually erase anything
 							auto it = candidateProperty[v.idx()];
-							if (it != none) {
-								// note: cannot actually erase anything
-								candidateProperty[v.idx()] = none;
-								bool deleted0 = it->deleted2.load(std::memory_order_relaxed);
-								if (!deleted0 && it->deleted2.compare_exchange_strong(deleted0, true, std::memory_order_relaxed)) {
-									remaining_candidates.fetch_sub(1, std::memory_order_relaxed);
-									atomic_float_accum(remaining_area, -it->area);
-								}
+							bool deleted0 = it->deleted2.load(std::memory_order_relaxed);
+							if (!deleted0 && it->deleted2.compare_exchange_strong(deleted0, true, std::memory_order_relaxed)) {
+								remaining_candidates.fetch_sub(1, std::memory_order_relaxed);
+								atomic_float_accum(remaining_area, -it->area);
 							}
 						}
 					};
