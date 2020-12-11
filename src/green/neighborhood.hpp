@@ -82,10 +82,11 @@ namespace green {
 #pragma pack(pop)
 
 		struct vertex {
-			// FIXME 255 edge limit (could be reachable)
-			uint8_t nedges;
+			// 65535 edge limit
+			uint16_t nedges;
 			// binned curvature
-			uint8_t curvbin;
+			// currently only using 1 byte, but more could be useful in future
+			uint16_t curvbin;
 			// fixed-point sqrt area in [0,1] (* area_scale)
 			uint16_t areax;
 			// actual size == nedges (extends past struct end)

@@ -1036,9 +1036,12 @@ namespace green {
 						nedges++;
 						total_edges++;
 					}
-					// FIXME what do about this?
+					// TODO what do if we reach edge limit?
 					// possibly just drop the excess edges and emit a warning
-					if (nedges > 255) std::abort();
+					if (nedges > std::numeric_limits<decltype(MeshCache::vertex::nedges)>::max()) {
+						std::cerr << "too many edges: " << nedges << std::endl;
+						std::abort();
+					}
 					get_vertex(di).nedges = nedges;
 					// loop until we have a simd-aligned set of near neighbors
 				} while (open_vertices_inner.size() && (vertices_added % simd_traits::simd_size != 0));
