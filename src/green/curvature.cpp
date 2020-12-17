@@ -39,7 +39,7 @@ namespace green {
 		mesh.request_vertex_normals();
 		mesh.update_face_normals();
 		mesh.update_vertex_normals();
-
+		mesh.request_face_status();
 
 		mesh.add_property(gaussianCurvatureProperty);
 		mesh.add_property(meanCurvatureProperty);
@@ -213,6 +213,8 @@ namespace green {
 
 			}
 		}
+
+		mesh.release_face_status();
 
 		return true;
 	}
