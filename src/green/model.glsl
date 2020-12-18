@@ -70,10 +70,55 @@ void main() {
 	vec4 pos_v = u_modelview * vec4(a_pos_m + u_pos_bias, 1);
 	gl_Position = u_projection * pos_v;
 	v_out.pos_v = pos_v.xyz;
+#ifdef SHADE_SMOOTH
 	v_out.norm_v = normalize(vec3(u_modelview * vec4(a_norm_m + vec3(0,0.0001,0), 0)));
+#endif
 	v_out.color = map_color(a_color);
 	v_out.id = gl_VertexID;
 	//v_out.should_discard = u_show_samples && a_color.a < 0.5;
+}
+
+#endif
+
+#ifdef _GEOMETRY_
+
+layout(triangles) in;
+layout(triangle_strip, max_vertices=3) out;
+
+in VertexData {
+	vec3 pos_v;
+	vec3 norm_v;
+	vec4 color;
+	flat int id;
+	//flat bool should_discard;
+} v_in[];
+
+out VertexData {
+	vec3 pos_v;
+	vec3 norm_v;
+	vec4 color;
+	flat int id;
+	//flat bool should_discard;
+} v_out;
+
+void main() {
+#ifdef SHADE_FLAT
+	// calc triangle face normal
+	vec3 fnorm_v = normalize(cross(v_in[1].pos_v - v_in[0].pos_v, v_in[2].pos_v - v_in[1].pos_v));
+#endif
+	for (int i = 0; i < 3; i++) {
+		gl_Position = gl_in[i].gl_Position;
+		v_out.pos_v = v_in[i].pos_v;
+#ifdef SHADE_FLAT
+		v_out.norm_v = fnorm_v;
+#else
+		v_out.norm_v = v_in[i].norm_v;
+#endif
+		v_out.color = v_in[i].color;
+		v_out.id = v_in[i].id;
+		EmitVertex();
+	}
+	EndPrimitive();
 }
 
 #endif

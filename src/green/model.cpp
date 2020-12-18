@@ -548,17 +548,28 @@ namespace green {
 
 	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode) const {
 
-		static GLuint prog = 0;
-		if (!prog) {
+		static GLuint prog_smooth = 0;
+		static GLuint prog_flat = 0;
+		if (!params.shade_flat && !prog_smooth) {
 			// note: needs custom depth env
-			prog = cgu::make_shader_program(
-				"green::model",
+			prog_smooth = cgu::make_shader_program(
+				"green::model.smooth",
 				"330 core",
 				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
-				{cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
+				{"#define SHADE_SMOOTH\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
+			).release();
+		}
+		if (params.shade_flat && !prog_flat) {
+			// note: needs custom depth env
+			prog_flat = cgu::make_shader_program(
+				"green::model.flat",
+				"330 core",
+				{GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER},
+				{"#define SHADE_FLAT\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
 			).release();
 		}
 
+		GLuint prog = params.shade_flat ? prog_flat : prog_smooth;
 		glUseProgram(prog);
 		glUniform1f(glGetUniformLocation(prog, cgu::glsl_uniform_zfar_name), zfar);
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_modelview"), 1, false, value_ptr(modelview));
@@ -867,6 +878,15 @@ namespace green {
 
 			if (CollapsingHeader("Rendering")) {
 				bool r = false;
+				if (RadioButton("Smooth Shading", !m_shade_flat)) {
+					m_shade_flat = false;
+					r = true;
+				}
+				SameLine();
+				if (RadioButton("Flat Shading", m_shade_flat)) {
+					m_shade_flat = true;
+					r = true;
+				}
 				r |= Checkbox("Color Faces", &m_color_faces);
 				SetHoveredTooltip("Apply color mode to faces");
 				SameLine();
@@ -1294,12 +1314,14 @@ namespace green {
 					}
 				};
 				// faces
+				params.shade_flat = m_shade_flat;
 				params.color = {0.6f, 0.6f, 0.5f, 1};
 				params.vert_color_map = m_color_faces ? color_map : 0;
 				set_cull_faces(m_cull_faces);
 				glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 				if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
 				// edges
+				params.shade_flat = false;
 				params.shading = 0;
 				params.color = {0.03f, 0.03f, 0.03f, 1};
 				params.vert_color_map = 0;

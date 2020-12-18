@@ -35,6 +35,7 @@ namespace green {
 		int entity_id = -1;
 		int vert_color_map = 0;
 		bool show_samples = false;
+		bool shade_flat = false;
 	};
 
 	struct model_save_params {
@@ -314,6 +315,7 @@ namespace green {
 		bool m_show_verts = false;
 		bool m_cull_faces = true;
 		bool m_cull_edges = true;
+		bool m_shade_flat = false;
 		
 		bool m_try_export = false;
 		bool m_try_kill = false;
