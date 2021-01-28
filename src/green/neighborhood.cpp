@@ -244,7 +244,9 @@ namespace green {
 			//if ((s & (s - 1)) != 0) __debugbreak();
 			std::vector<elem> data2;
 			data2.resize(s);
-			if (m_begin < m_end) {
+			if (empty()) {
+				// note: begin/end are the same for a full buffer
+			} else if (m_begin < m_end) {
 				std::copy(m_data.begin() + m_begin, m_data.begin() + m_end, data2.begin());
 			} else {
 				std::copy(m_data.begin() + m_begin, m_data.end(), data2.begin());
@@ -289,30 +291,26 @@ namespace green {
 			if (m_size + s > capacity()) resize_impl(capacity() * 2);
 		}
 
-		template <typename U>
-		void push_back_unchecked(U &&u) noexcept {
-			::new(static_cast<void *>(&m_data[m_end].as_t())) T(std::forward<U>(u));
+		void push_back_unchecked(T t) noexcept {
+			::new(static_cast<void *>(&m_data[m_end].as_t())) T(std::move(t));
 			m_end = m_mask & (m_end + 1);
 			m_size++;
 		}
 
-		template <typename U>
-		void push_front_unchecked(U &&u) noexcept {
+		void push_front_unchecked(T t) noexcept {
 			m_begin = m_mask & (m_begin - 1);
-			::new(static_cast<void *>(&m_data[m_begin].as_t())) T(std::forward<U>(u));
+			::new(static_cast<void *>(&m_data[m_begin].as_t())) T(std::move(t));
 			m_size++;
 		}
 
-		template <typename U>
-		void push_back(U &&u) {
+		void push_back(T t) {
 			reserve_additional(1);
-			push_back_unchecked(std::forward<U>(u));
+			push_back_unchecked(std::move(t));
 		}
 
-		template <typename U>
-		void push_front(U &&u) {
+		void push_front(T t) {
 			reserve_additional(1);
-			push_front_unchecked(std::forward<U>(u));
+			push_front_unchecked(std::move(t));
 		}
 
 		T pop_front() {
@@ -346,8 +344,10 @@ namespace green {
 		class iterator {
 		private:
 			const elem *m_data = nullptr;
-			size_t m_it = 0;
 			size_t m_mask = 0;
+			// must not be wrapped to distinguish begin/end on a full buffer.
+			// wrap only happens on dereference.
+			size_t m_it = 0;
 
 		public:
 			using difference_type = intptr_t;
@@ -358,20 +358,25 @@ namespace green {
 
 			iterator() = default;
 
-			iterator(const simple_queue &q, size_t it_) : m_data(q.m_data.data()), m_it(it_), m_mask(q.m_mask) {}
+			iterator(const simple_queue &q, size_t it_) :
+				m_data(q.m_data.data()),
+				m_mask(q.m_mask),
+				m_it(it_)
+			{}
 
 			iterator & operator++() noexcept {
-				m_it = m_mask & (m_it + 1);
+				m_it++;
 				return *this;
 			}
 
 			iterator & operator--() noexcept {
-				m_it = m_mask & (m_it - 1);
+				m_it--;
 				return *this;
 			}
 
 			bool operator==(const iterator &other) const noexcept {
-				return m_data == other.m_data && m_it == other.m_it;
+				assert(m_data == other.m_data);
+				return m_it == other.m_it;
 			}
 
 			bool operator!=(const iterator &other) const noexcept {
@@ -379,7 +384,7 @@ namespace green {
 			}
 
 			reference operator*() const noexcept {
-				return m_data[m_it].as_t();
+				return m_data[(m_it & m_mask)].as_t();
 			}
 		};
 
@@ -388,7 +393,7 @@ namespace green {
 		}
 
 		iterator end() const {
-			return iterator(*this, m_end);
+			return iterator(*this, m_begin + m_size);
 		}
 	};
 
