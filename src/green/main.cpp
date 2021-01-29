@@ -1140,6 +1140,8 @@ namespace {
 				.doc(loc[help_dec_go].clone()),
 			(option("-t", "--targetverts") & integer("verts", dec_uparams.targetverts))
 				.doc(loc[help_dec_targetverts].clone()),
+			(option("--targettris") & integer("tris", dec_uparams.targettris).set(dec_uparams.use_tris))
+				.doc(loc[help_dec_targettris].clone()),
 			(option("-w", "--salweight") & number("weight", dec_uparams.weight))
 				.doc(loc[help_dec_weight].clone()),
 			(option("-p", "--binpower") & number("power", dec_uparams.power))
@@ -1591,8 +1593,15 @@ namespace ImGui {
 		TextDisabled("Ctrl-click sliders to enter values directly");
 		widgets.checkbox(param_dec_usesaliency, &decimate_user_params::use_saliency);
 		SetHoveredTooltip(loc, help_dec_usesaliency);
-		widgets.inputint(param_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
-		SetHoveredTooltip(loc, help_dec_targetverts);
+		widgets.checkbox(param_dec_usetris, &decimate_user_params::use_tris);
+		SetHoveredTooltip(loc, help_dec_usetris);
+		if (uparams.use_tris) {
+			widgets.inputint(param_dec_targettris, &decimate_user_params::targettris, 100, 1000);
+			SetHoveredTooltip(loc, help_dec_targettris);
+		} else {
+			widgets.inputint(param_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
+			SetHoveredTooltip(loc, help_dec_targetverts);
+		}
 		widgets.slider(param_dec_bins, &decimate_user_params::nbins, 1, 10);
 		SetHoveredTooltip(loc, help_dec_bins);
 		widgets.slider(param_dec_weight, &decimate_user_params::weight, 0.f, 1.f);

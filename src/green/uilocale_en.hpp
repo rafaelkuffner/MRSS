@@ -55,7 +55,9 @@ namespace green {
 		// decimation
 		loc[help_cli_opts_decimate] = "Decimation options (Work in Progress):";
 		loc[help_dec_go] = "Perform decimation";
-		loc[help_dec_targetverts] = "Target number of vertices";
+		loc[help_dec_usetris] = "Decimate by triangle count (not exact) instead of vertex count (exact)";
+		loc[help_dec_targetverts] = "Target number of vertices (exact)";
+		loc[help_dec_targettris] = "Target number of triangles (not exact)";
 		loc[help_dec_weight] = "Saliency weighting; 0 (even) .. 1 (most weight to highest saliency)";
 		loc[help_dec_power] = "Non-linearity of saliency weighting; 1 (linear) .. 2 (more extreme)";
 		loc[help_dec_bins] = "Number of saliency bins";
@@ -64,7 +66,9 @@ namespace green {
 		loc[help_dec_usesaliency] = "Use saliency for decimation";
 		loc[help_dec_nosaliency] = "Don't use saliency for decimation";
 		loc[param_dec_usesaliency] = "Use Saliency";
+		loc[param_dec_usetris] = "Use Triangles";
 		loc[param_dec_targetverts] = "Vertices";
+		loc[param_dec_targettris] = "Triangles";
 		loc[param_dec_weight] = "Weight";
 		loc[param_dec_power] = "Power";
 		loc[param_dec_bins] = "Bins";

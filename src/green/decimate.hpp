@@ -28,9 +28,11 @@ namespace green {
 
 	struct decimate_user_params {
 		int targetverts = 10000;
+		int targettris = 10000;
 		int nbins = 5;
 		float weight = 1.f;
 		float power = 1.f;
+		bool use_tris = false;
 		bool use_saliency = true;
 		bool show_progress = true;
 
@@ -38,7 +40,11 @@ namespace green {
 			char buf[128];
 			char *end = buf + sizeof(buf);
 			char *p = buf;
-			p += snprintf(p, end - p, "v=%d", targetverts);
+			if (use_tris) {
+				p += snprintf(p, end - p, "t=%d", targettris);
+			} else {
+				p += snprintf(p, end - p, "v=%d", targetverts);
+			}
 			if (use_saliency) p += snprintf(p, end - p, ",b=%d,w=%.2f,p=%.2f", nbins, weight, power);
 			return {buf};
 		}

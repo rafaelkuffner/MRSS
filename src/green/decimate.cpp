@@ -132,6 +132,7 @@ namespace green {
 	
 	void decimate_user_params::sanitize() {
 		targetverts = std::max(targetverts, 0);
+		targettris = std::max(targettris, 0);
 		nbins = std::max(nbins, 1);
 		weight = std::max(weight, 0.f);
 		power = std::clamp(power, 0.1f, 10.f);
@@ -140,9 +141,15 @@ namespace green {
 	bool decimate(const decimate_mesh_params &mparams, const decimate_user_params &uparams, decimate_progress &progress) {
 		progress.state = decimation_state::bins;
 		const auto time_start = std::chrono::steady_clock::now();
-		std::cout << "decimating to " << uparams.targetverts << " vertices" << std::endl;
 
-		if (uparams.targetverts >= mparams.mesh->n_vertices()) return true;
+		// NOTE needs triangulated mesh to work
+		const float verts_per_tri = float(mparams.mesh->n_vertices()) / float(mparams.mesh->n_faces());
+		const int targetverts = uparams.use_tris ? int(uparams.targettris * verts_per_tri) : uparams.targetverts;
+
+		if (uparams.use_tris) std::cout << "decimating to approximately " << uparams.targettris << " triangles" << std::endl;
+		std::cout << "decimating to " << targetverts << " vertices" << std::endl;
+
+		if (targetverts >= mparams.mesh->n_vertices()) return true;
 
 		// explicit bin tags to deal with cases where there are large numbers
 		// of vertices with the same saliency values preventing bin discrimination
@@ -152,12 +159,12 @@ namespace green {
 
 		const int nbins = uparams.nbins;
 
-		const int target_collapses = mparams.mesh->n_vertices() - uparams.targetverts;
+		const int target_collapses = mparams.mesh->n_vertices() - targetverts;
 		progress.target_collapses = target_collapses;
-		const float target_ratio = float(uparams.targetverts) / mparams.mesh->n_vertices();
+		const float target_ratio = float(targetverts) / mparams.mesh->n_vertices();
 		std::cout << "total vertices to remove: " << target_collapses << "; " << (1.f - target_ratio) << std::endl;
 
-		const int bin_min_keep = uparams.targetverts * 0.1f / float(nbins);
+		const int bin_min_keep = targetverts * 0.1f / float(nbins);
 
 		std::vector<float> bin_weights(nbins, 0);
 		std::vector<int> bin_keep(nbins, 0);
@@ -174,7 +181,7 @@ namespace green {
 		}
 		for (int i = 0; i < nbins; i++) {
 			float w = bin_weights[i] /= bin_weight_divisor;
-			bin_keep[i] = std::max<int>(uparams.targetverts * w, bin_min_keep);
+			bin_keep[i] = std::max<int>(targetverts * w, bin_min_keep);
 		}
 
 		const auto sal_bin_edges = saliency_bin_edges(*mparams.mesh, mparams.prop_saliency, prop_bin, nbins);
@@ -218,7 +225,7 @@ namespace green {
 			auto &mod = decimater.module(hModWeighting);
 			mod.current_bin = i;
 			int target = init_bin_counts[i] - bin_keep[i];
-			int collapses = decimater.decimate_to(std::max<size_t>(mparams.mesh->n_vertices() - target, uparams.targetverts));
+			int collapses = decimater.decimate_to(std::max<size_t>(mparams.mesh->n_vertices() - target, targetverts));
 			progress.completed_collapses = mod.collapses;
 			std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%\n", progress.elapsed_time / std::chrono::duration<double>(1.0), progress.completed_collapses, 100.f * progress.completed_collapses / progress.target_collapses);
 			std::cout << "vertices removed: " << collapses << std::endl;
@@ -236,6 +243,7 @@ namespace green {
 		}
 
 		std::cout << "final vertices: " << mparams.mesh->n_vertices() << std::endl;
+		std::cout << "final triangles: " << mparams.mesh->n_faces() << std::endl;
 		progress.completed_collapses = decimater.module(hModWeighting).collapses;
 		progress.elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
 		std::cout << "decimate time: " << (progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
