@@ -1116,7 +1116,7 @@ namespace green {
 			}
 			Separator();
 			Text("Saliency Properties");
-			if (BeginChild("saliency", {0, -80}, false, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+			if (BeginChild("saliency", {0, -100}, false, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 				for (int i = 0; i < saliency_outputs.size(); i++) {
 					PushID(i);
 					auto &sd = saliency_outputs[i];
@@ -1163,6 +1163,7 @@ namespace green {
 			SameLine();
 			Checkbox("Original Vertex IDs", &m_save_original_vids);
 			SetHoveredTooltip("Export extra property with original vertex ids from before decimation");
+			TextDisabled("Colorization and property export are only supported for PLY");
 			// validate path and maybe export
 			auto fpath = std::filesystem::u8path(pathbuf);
 			auto stat = std::filesystem::status(fpath);
