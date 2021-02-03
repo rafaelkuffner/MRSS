@@ -9,7 +9,7 @@
 #include <functional>
 
 #include "entity.hpp"
-#include "model.hpp"
+#include "model_entity.hpp"
 #include "saliency.hpp"
 #include "decimate.hpp"
 

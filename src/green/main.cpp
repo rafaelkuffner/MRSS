@@ -22,7 +22,7 @@
 #include "main.hpp"
 #include "imguiex.hpp"
 #include "dialog.hpp"
-#include "model.hpp"
+#include "model_entity.hpp"
 #include "curvature.hpp"
 #include "saliency.hpp"
 #include "clipp.h"

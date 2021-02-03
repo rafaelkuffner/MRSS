@@ -12,6 +12,8 @@ set(sources
 	main.cpp
 	model.hpp
 	model.cpp
+	model_entity.hpp
+	model_entity.cpp
 	assimp_openmesh.hpp
 	assimp_openmesh.cpp
 	entity.hpp
