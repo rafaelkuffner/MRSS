@@ -1116,7 +1116,7 @@ namespace green {
 			}
 			Separator();
 			Text("Saliency Properties");
-			if (BeginChild("saliency", {0, -100}, false, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+			if (BeginChild("saliency", {0, -115}, false, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 				for (int i = 0; i < saliency_outputs.size(); i++) {
 					PushID(i);
 					auto &sd = saliency_outputs[i];
