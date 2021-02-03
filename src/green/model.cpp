@@ -1163,7 +1163,7 @@ namespace green {
 			SameLine();
 			Checkbox("Original Vertex IDs", &m_save_original_vids);
 			SetHoveredTooltip("Export extra property with original vertex ids from before decimation");
-			TextDisabled("Colorization and property export are only supported for PLY");
+			TextDisabled("Supported formats are currently PLY and OBJ.\nColorization and property export are only supported for PLY.");
 			// validate path and maybe export
 			auto fpath = std::filesystem::u8path(pathbuf);
 			auto stat = std::filesystem::status(fpath);
