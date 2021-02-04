@@ -41,6 +41,10 @@ set_property(TARGET glm PROPERTY FOLDER "ext")
 add_subdirectory("ext/imgui-1.74")
 set_property(TARGET imgui PROPERTY FOLDER "ext")
 
+# fmtlib
+add_subdirectory("ext/fmt-7.1.3")
+set_property(TARGET fmt PROPERTY FOLDER "ext")
+
 #add_subdirectory("ext/stb")
 #set_property(TARGET stb PROPERTY FOLDER "ext")
 
