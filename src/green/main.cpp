@@ -1516,61 +1516,55 @@ namespace ImGui {
 		if (!uparams.thread_count) uparams.thread_count = defthreads;
 		param_widgets widgets{&loc, &defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		widgets.slider(param_sal_levels, &saliency_user_params::levels, 1, 6);
-		SetHoveredTooltip(loc, help_sal_levels);
-		widgets.slider(param_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
-		SetHoveredTooltip(loc, help_sal_area);
-		widgets.slider(param_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
-		SetHoveredTooltip(loc, help_sal_curvweight);
-		widgets.checkbox(param_sal_autocontrast, &saliency_user_params::auto_contrast);
+		widgets.slider(param_sal_levels, help_sal_levels, &saliency_user_params::levels, 1, 6);
+		widgets.slider(param_sal_area, help_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
+		widgets.slider(param_sal_curvweight, help_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
+		widgets.checkbox(param_sal_autocontrast, nullstr, &saliency_user_params::auto_contrast);
 		//SetHoveredTooltip(loc, "TODO");
 		if (uparams.auto_contrast) {
-			if (model) Text("Current automatic contrast: %.3f", model->auto_contrast());
+			if (model) {
+				SameLine();
+				Text("[current value: %.3f]", model->auto_contrast());
+			}
 		} else {
-			widgets.slider(param_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);
-			SetHoveredTooltip(loc, help_sal_normpower);
+			widgets.slider(param_sal_normpower, help_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);
 		}
-		widgets.checkbox(param_sal_noisefilter, &saliency_user_params::normalmap_filter);
-		SetHoveredTooltip(loc, help_sal_noisefilter);
+		widgets.checkbox(param_sal_noisefilter, help_sal_noisefilter, &saliency_user_params::normalmap_filter);
 		if (uparams.normalmap_filter) {
-			widgets.slider(param_sal_noiseheight, &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
-			SetHoveredTooltip(loc, help_sal_noiseheight);
+			widgets.slider(param_sal_noiseheight, help_sal_noiseheight, &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
 		}
 		if (uparams.preview) {
 			Text("Preview mode: subsampling at %.1f S/N", sal_preview_spn);
 		} else {
-			widgets.checkbox(param_sal_subsample, &saliency_user_params::subsample_auto);
-			SetHoveredTooltip(loc, help_sal_subsample);	
+			widgets.checkbox(param_sal_subsample, help_sal_subsample, &saliency_user_params::subsample_auto);
 			if (uparams.subsample_manual) {
 				// no longer exposing this mode of subsampling in the ui
 				//widgets.slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
 				//SetHoveredTooltip("Subsampling Rate\nMust be tuned for each model.\nHigher: fewer samples, less accurate results.");
 			} else if (uparams.subsample_auto) {
-				widgets.slider(param_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
-				SetHoveredTooltip(loc, help_sal_samplespern);
+				widgets.slider(param_sal_samplespern, help_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
 			}
 		}
-		widgets.slider(param_threads, &saliency_user_params::thread_count, 1, defthreads);
-		SetHoveredTooltip(loc, help_threads);
+		widgets.slider(param_threads, help_threads, &saliency_user_params::thread_count, 1, defthreads);
 		// ensure params are valid
 		uparams.sanitize();
 		return uparams != uparams0;
 	}
 
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
-		ImGui::Text("Levels: %d", uparams.levels);
-		ImGui::Text("Area: %.3f", uparams.area);
-		ImGui::Text("Contour: %.3f", uparams.curv_weight);
-		ImGui::Text("Contrast: %.3f", uparams.normal_power);
-		ImGui::Text("Noise Filter: %s", uparams.normalmap_filter ? "true" : "false");
+		Text("Levels: %d", uparams.levels);
+		Text("Area: %.3f", uparams.area);
+		Text("Contour: %.3f", uparams.curv_weight);
+		Text("Contrast: %.3f", uparams.normal_power);
+		Text("Noise Filter: %s", uparams.normalmap_filter ? "true" : "false");
 		if (uparams.normalmap_filter) {
-			ImGui::Text("Noise Height: %f", uparams.noise_height);
+			Text("Noise Height: %f", uparams.noise_height);
 		}
-		ImGui::Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
+		Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
 		if (uparams.subsample_manual) {
-			ImGui::Text("Subsampling Rate: %.1f", uparams.subsampling_rate);
+			Text("Subsampling Rate: %.1f", uparams.subsampling_rate);
 		} else if (uparams.subsample_auto) {
-			ImGui::Text("Samples per Neighbourhood: %.1f", uparams.samples_per_neighborhood);
+			Text("Samples per Neighbourhood: %.1f", uparams.samples_per_neighborhood);
 		}
 	}
 
@@ -1591,23 +1585,16 @@ namespace ImGui {
 		decimate_user_params defparams;
 		param_widgets widgets{&loc, &defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		widgets.checkbox(param_dec_usesaliency, &decimate_user_params::use_saliency);
-		SetHoveredTooltip(loc, help_dec_usesaliency);
-		widgets.checkbox(param_dec_usetris, &decimate_user_params::use_tris);
-		SetHoveredTooltip(loc, help_dec_usetris);
+		widgets.checkbox(param_dec_usesaliency, help_dec_usesaliency, &decimate_user_params::use_saliency);
+		widgets.checkbox(param_dec_usetris, help_dec_usetris, &decimate_user_params::use_tris);
 		if (uparams.use_tris) {
-			widgets.inputint(param_dec_targettris, &decimate_user_params::targettris, 100, 1000);
-			SetHoveredTooltip(loc, help_dec_targettris);
+			widgets.inputint(param_dec_targettris, help_dec_targettris, &decimate_user_params::targettris, 100, 1000);
 		} else {
-			widgets.inputint(param_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
-			SetHoveredTooltip(loc, help_dec_targetverts);
+			widgets.inputint(param_dec_targetverts, help_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
 		}
-		widgets.slider(param_dec_bins, &decimate_user_params::nbins, 1, 10);
-		SetHoveredTooltip(loc, help_dec_bins);
-		widgets.slider(param_dec_weight, &decimate_user_params::weight, 0.f, 1.f);
-		SetHoveredTooltip(loc, help_dec_weight);
-		widgets.slider(param_dec_power, &decimate_user_params::power, 0.f, 2.f);
-		SetHoveredTooltip(loc, help_dec_power);
+		widgets.slider(param_dec_bins, help_dec_bins, &decimate_user_params::nbins, 1, 10);
+		widgets.slider(param_dec_weight, help_dec_weight, &decimate_user_params::weight, 0.f, 1.f);
+		widgets.slider(param_dec_power, help_dec_power, &decimate_user_params::power, 0.f, 2.f);
 		// ensure params are valid
 		uparams.sanitize();
 		// TODO return true if modified?

@@ -4,6 +4,8 @@
 #ifndef GREEN_UILOCALE_HPP
 #define GREEN_UILOCALE_HPP
 
+#include <fmt/format.h>
+
 #include <string>
 #include <string_view>
 
@@ -11,6 +13,7 @@ namespace green {
 
 	namespace uistrings {
 		enum uistring {
+			nullstr,
 			// common
 			help_input,
 			help_output,
@@ -98,6 +101,16 @@ namespace green {
 			return data();
 		}
 
+		template <typename ...Ts>
+		std::string format(const Ts &...args) const {
+			return ::fmt::vformat(*this, ::fmt::make_format_args(args...));
+		}
+
+		template <typename Output, typename ...Ts>
+		auto format_to(Output &&out, const Ts &...args) const {
+			return ::fmt::vformat_to(std::forward<Output>(out), *this, ::fmt::make_format_args(args...));
+		}
+
 		std::string clone() const {
 			return std::string{*this};
 		}
@@ -119,8 +132,9 @@ namespace green {
 		}
 
 		constexpr bool any_empty() const noexcept {
-			for (auto &s : m_strings) {
-				if (s.empty()) return true;
+			// skip 'nullstr'
+			for (int i = 1; i < uistrings::_count; i++) {
+				if (m_strings[i].empty()) return true;
 			}
 			return false;
 		}
