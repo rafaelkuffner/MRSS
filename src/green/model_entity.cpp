@@ -93,8 +93,8 @@ namespace green {
 	void ModelEntity::load(const std::filesystem::path &fpath, Model m, const decimate_user_params &dec_uparams, const decimate_progress &dec_progress) {
 		load(fpath, std::move(m));
 		m_decimated = true;
-		m_dec_uparams = dec_uparams;
-		m_dec_progress = dec_progress;
+		m_src_dec_uparams = dec_uparams;
+		m_src_dec_progress = dec_progress;
 	}
 
 	void ModelEntity::move_by(const glm::vec3 &d) {
@@ -123,7 +123,7 @@ namespace green {
 		if (m_saliency_baseline_index < saliency_outputs.size()) cparams.prop_saliency_baseline = saliency_outputs[m_saliency_baseline_index].prop_saliency;;
 		cparams.color_mode = m_disp_color_mode;
 		cparams.error_scale = m_saliency_error_scale;
-		if (!m_model->update_color(cparams, &m_saliency_errors)) m_disp_color_mode = model_color_mode::none;
+		m_model->update_color(cparams, &m_saliency_errors);
 		m_saliency_vbo_dirty = false;
 		invalidate_scene();
 	}
@@ -195,9 +195,9 @@ namespace green {
 			Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
 			if (m_decimated) Text(
 				"Decimated %d vertices (%.1f%%) in %.3fs",
-				m_dec_progress.completed_collapses,
-				100.f * m_dec_progress.completed_collapses / float(m_dec_uparams.targetverts + m_dec_progress.completed_collapses),
-				m_dec_progress.elapsed_time / std::chrono::duration<double>(1.0)
+				m_src_dec_progress.completed_collapses,
+				100.f * m_src_dec_progress.completed_collapses / float(m_src_dec_uparams.targetverts + m_src_dec_progress.completed_collapses),
+				m_src_dec_progress.elapsed_time / std::chrono::duration<double>(1.0)
 			);
 
 			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
@@ -373,7 +373,7 @@ namespace green {
 				if (CollapsingHeader("Saliency Parameters")) {
 					if (salout.uparams_known) {
 						draw_saliency_params(salout.uparams);
-						if (Button("Reload")) ui_saliency_user_params() = salout.uparams;
+						if (Button("Reload")) m_sal_uparams = salout.uparams;
 					} else {
 						TextDisabled("Parameters unknown");
 					}
@@ -590,17 +590,118 @@ namespace green {
 		}
 	}
 
-	void ModelEntity::draw_window_decimation(bool selected) {
+	void ModelEntity::draw_window_saliency() {
 		using namespace ImGui;
-		if (m_decimated && ui_decimation_window_open() && (m_dec_progress.state < decimation_state::done)) {
-			if (Begin("Decimation")) {
+		if (ui_saliency_window_open()) {
+			if (Begin("Saliency")) {
+				PushID(this);
+				draw_select_header(true);
+				m_sal_need_preview |= Checkbox("Preview", &m_sal_uparams.preview);
+				SetHoveredTooltip("Enable interactive preview\nUse on small models only! (< ~500k vertices)\nCoarse subsampling will be activated.");
+				SameLine();
+				bool go = false;
+				if (m_sal_uparams.preview) {
+					ButtonDisabled("GO", {-1, 0});
+				} else {
+					if (Button("GO", {-1, 0})) go = true;
+				}
+				Separator();
+				// TODO easily obtain settings from other models
+				m_sal_need_preview |= edit_saliency_params(m_sal_uparams);
+				Separator();
+				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+				if (m_sal_need_preview && m_sal_uparams.preview) {
+					// user params edited and preview enabled, try launch preview
+					if (m_sal_future.valid()) {
+						m_sal_progress.should_cancel = true;
+					} else {
+						go = true;
+						m_sal_need_preview = false;
+					}
+				}
+				if (go) {
+					// launch calculation
+					auto real_uparams = m_sal_uparams;
+					if (real_uparams.preview) {
+						real_uparams.subsample_auto = true;
+						real_uparams.subsample_manual = false;
+						real_uparams.samples_per_neighborhood = 10;
+					}
+					m_sal_progress = {};
+					m_sal_progress.levels.resize(real_uparams.levels);
+					saliency_async(real_uparams);
+				}
+				PopID();
+			}
+			End();
+		}
+	}
+
+	void ModelEntity::draw_window_saliency_progress(bool selected) {
+		using namespace ImGui;
+		// check for saliency completion
+		if (m_sal_future.valid()) {
+			if (m_sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				// getting the result will trigger cleanup (from its dtor)
+				if (!m_sal_future.get()) {
+					// cancelled
+				}
+			}
+		}
+		if (ui_saliency_window_open() && (saliency_state::idle < m_sal_progress.state && (m_sal_progress.state < saliency_state::done || selected))) {
+			if (Begin("Saliency")) {
 				PushID(this);
 				draw_select_header(selected);
-				draw_decimate_progress(m_dec_progress);
+				draw_saliency_progress(m_sal_progress);
 				Separator();
 				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 				PopID();
 			}
+			End();
+		}
+	}
+
+	void ModelEntity::draw_window_decimation() {
+		using namespace ImGui;
+		if (ui_decimation_window_open()) {
+			if (Begin("Decimation")) {
+				FmtTextColored(extra_colors().bad, "-- Work in Progress --");
+				if (m_decimated) FmtTextColored(extra_colors().bad, "Warning: model has already been decimated");
+				auto *sd = selected_saliency();
+				if (sd) FmtText("Saliency: {}", sd->str());
+				bool go = false;
+				if (sd && m_dec_uparams.use_saliency) {
+					if (Button("GO with saliency", {-1, 0})) go = true;
+				} else if (!m_dec_uparams.use_saliency) {
+					if (Button("GO without saliency", {-1, 0})) go = true;
+				} else {
+					TextDisabled("Select a saliency result or uncheck 'use saliency'");
+				}
+				Separator();
+				edit_decimate_params(m_dec_uparams);
+				Separator();
+				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+				if (go) {
+					// launch
+					decimate_async(m_dec_uparams);
+				}
+			}
+			End();
+		}
+	}
+
+	void ModelEntity::draw_window_decimation_progress(bool selected) {
+		using namespace ImGui;
+		if (m_decimated && ui_decimation_window_open() && (selected || m_src_dec_progress.state < decimation_state::done)) {
+			if (Begin("Decimation")) {
+				PushID(this);
+				draw_select_header(selected);
+				draw_decimate_progress(m_src_dec_progress);
+				Separator();
+				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+				PopID();
+			}
+			End();
 		}
 	}
 
@@ -643,7 +744,7 @@ namespace green {
 		auto s = m_fpath_load.u8string();
 		if (m_decimated) {
 			s += "\n";
-			s += m_dec_uparams.str();
+			s += m_src_dec_uparams.str();
 		}
 		return s;
 	}
@@ -651,6 +752,16 @@ namespace green {
 	void ModelEntity::invalidate_saliency_vbo() {
 		m_saliency_vbo_dirty = true;
 		invalidate_scene();
+	}
+
+	void ModelEntity::pre_draw() {
+		auto &sel = ui_selection();
+		const bool selected = sel.select_entity == id();
+		if (!dead() && selected) ui_select_model(this);
+		if (!dead() && sel.hover_entity == id()) ui_hover_model(this);
+		if (!selected) return;
+		draw_window_saliency();
+		draw_window_decimation();
 	}
 
 	void ModelEntity::draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, bool draw_scene) {
@@ -672,10 +783,9 @@ namespace green {
 		}
 		auto &sel = ui_selection();
 		const bool selected = sel.select_entity == id();
-		if (!dead() && selected) ui_select_model(this);
-		if (!dead() && sel.hover_entity == id()) ui_hover_model(this);
 		draw_window_models(selected);
-		draw_window_decimation(selected);
+		draw_window_saliency_progress(selected);
+		draw_window_decimation_progress(selected);
 		if (m_model) {
 			if (selected) draw_window_selection();
 			if (selected) draw_window_export();
@@ -732,12 +842,13 @@ namespace green {
 		if (xform0 != xform1) invalidate_scene();
 	}
 
-	std::future<saliency_result> ModelEntity::compute_saliency_async(const saliency_user_params &uparams0, saliency_progress &progress) {
-		if (!m_model) return {};
+	void ModelEntity::saliency_async(const saliency_user_params &uparams0) {
+		// TODO synchronization (somewhere) because only one saliency computation can run at once
+		if (!m_model) return;
 		std::unique_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) {
 			spawn_locked_notification();
-			return {};
+			return;
 		}
 		saliency_user_params uparams = uparams0;
 		if (uparams.auto_contrast) uparams.normal_power = m_model->auto_contrast();
@@ -758,7 +869,7 @@ namespace green {
 		// can use shared lock for actual computation because only property contents are being used
 		// HACK make_shared is an ugly workaround for std::function needing to be copyable
 		lock.unlock();
-		mparams.cleanup = [=, pprogress=&progress, slock=std::make_shared<std::shared_lock<std::shared_mutex>>(m_modelmtx)](bool r) mutable noexcept {
+		mparams.cleanup = [=, pprogress=&m_sal_progress, slock=std::make_shared<std::shared_lock<std::shared_mutex>>(m_modelmtx)](bool r) mutable noexcept {
 			// now need to upgrade to unique lock
 			slock->unlock();
 			std::unique_lock lock(m_modelmtx);
@@ -789,21 +900,21 @@ namespace green {
 				mparams.mesh->remove_property(mparams.prop_sampled);
 			}
 		};
-		return green::compute_saliency_async(mparams, uparams, progress);
+		m_sal_future = green::compute_saliency_async(mparams, uparams, m_sal_progress);
 	}
 
-	std::unique_ptr<ModelEntity> ModelEntity::decimate_async(const decimate_user_params &uparams) {
+	void ModelEntity::decimate_async(const decimate_user_params &uparams) {
 		// this function isn't const because it needs to lock the mutex - mutable?
 		std::shared_lock lock1(m_modelmtx, std::defer_lock);
 		if (!lock1.try_lock()) {
 			spawn_locked_notification();
-			return {};
+			return;
 		}
 		auto e = std::make_unique<ModelEntity>();
 		std::unique_lock lock2(e->m_modelmtx);
 		e->m_fpath_load = m_fpath_load;
 		e->m_decimated = true;
-		e->m_dec_uparams = uparams;
+		e->m_src_dec_uparams = uparams;
 		e->m_basis_right = m_basis_right;
 		e->m_basis_up = m_basis_up;
 		e->m_basis_back = m_basis_back;
@@ -829,14 +940,15 @@ namespace green {
 			// unlock source model
 			lock1.unlock();
 			// now decimate
-			if (!m.decimate(uparams, e->m_dec_progress)) throw std::runtime_error("decimation was cancelled");
+			if (!m.decimate(e->m_src_dec_uparams, e->m_src_dec_progress)) throw std::runtime_error("decimation was cancelled");
 			return std::make_unique<Model>(std::move(m));
 		});
-		return e;
+		spawn_entity(std::move(e));
 	}
 
 	ModelEntity::~ModelEntity() {
-
+		m_sal_progress.should_cancel = true;
+		if (m_sal_future.valid()) m_sal_future.wait();
 	}
 
 }

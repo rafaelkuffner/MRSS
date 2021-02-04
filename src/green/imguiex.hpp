@@ -95,7 +95,7 @@ namespace ImGui {
 		const uilocale *loc = nullptr;
 		T *defparams = nullptr;
 		T *realparams = nullptr;
-		float label_width = 80;
+		float label_width = 100;
 
 		void draw_label(const char *label) {
 			const auto p0 = GetCursorPos();
@@ -157,7 +157,9 @@ namespace ImGui {
 			PushID(label);
 			if (Button("Reset")) realparams->*param = defparams->*param;
 			SameLine();
-			bool r = InputInt((*loc)[label].c_str(), &(realparams->*param), step, step_fast);
+			draw_label((*loc)[label].c_str());
+			SetNextItemWidth(GetContentRegionAvail().x);
+			bool r = InputInt("", &(realparams->*param), step, step_fast);
 			hovered_tooltip(tooltip);
 			PopID();
 			return r;

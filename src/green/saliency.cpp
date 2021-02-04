@@ -174,7 +174,7 @@ namespace green {
 
 			// TODO curv selection param
 			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
-			m_progress.state = saliency_computation_state::curv;
+			m_progress.state = saliency_state::curv;
 			std::cout << "Computing curvature" << std::endl;
 			float curvmax = -9001e19;
 			float curvmin = 9001e19;
@@ -198,7 +198,7 @@ namespace green {
 			std::cout << "Curv min: " << curvmin << std::endl;
 			std::cout << "Curv max: " << curvmax << std::endl;
 
-			m_progress.state = saliency_computation_state::area;
+			m_progress.state = saliency_state::area;
 			std::cout << "Computing surface area" << std::endl;
 			m_surfaceArea = surfaceArea(*m_mparams.mesh);
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(std::chrono::steady_clock::now() - m_time_start);
@@ -207,7 +207,7 @@ namespace green {
 			m_real_noise_height = m_uparams.noise_height * sqrt(m_surfaceArea);
 			std::cout << "Real noise height: " << m_real_noise_height << std::endl;
 
-			m_progress.state = saliency_computation_state::nhprep;
+			m_progress.state = saliency_state::nhprep;
 			const auto time_nhprep_start = std::chrono::steady_clock::now();
 			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
 			const auto time_nhprep_finish = std::chrono::steady_clock::now();
@@ -215,7 +215,7 @@ namespace green {
 			std::cout << "Neighborhood search prep took " << ((time_nhprep_finish - time_nhprep_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 			//m_meshcache.dump_to_file();
 
-			m_progress.state = saliency_computation_state::cand;
+			m_progress.state = saliency_state::cand;
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());
 			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return initial_sample_candidate{vdi}; });
@@ -285,11 +285,11 @@ namespace green {
 
 				if (subsampling >= 5 && samples_per_neighbourhood > 0) {
 					m_progress.levels[currentLevel].subsampled = true;
-					m_progress.state = saliency_computation_state::run_sub;
+					m_progress.state = saliency_state::run_sub;
 					run_level_subsampled(currentLevel, currentRadius, subsampling, normalmap_filter);
 				} else {
 					m_progress.levels[currentLevel].subsampled = false;
-					m_progress.state = saliency_computation_state::run_full;
+					m_progress.state = saliency_state::run_full;
 					run_level_full(currentLevel, currentRadius, normalmap_filter);
 				}
 
@@ -311,7 +311,7 @@ namespace green {
 			overall_stats.dump_stats(omp_get_max_threads());
 
 			// merge saliency values to a single score / property
-			m_progress.state = saliency_computation_state::merge;
+			m_progress.state = saliency_state::merge;
 			std::cout << "Merging saliency values" << std::endl;
 			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
@@ -328,7 +328,7 @@ namespace green {
 			}
 
 			// normalize saliency and add curvature
-			m_progress.state = saliency_computation_state::norm;
+			m_progress.state = saliency_state::norm;
 			std::cout << "Normalizing saliency values" << std::endl;
 			float sMin =  FLT_MAX;
 			float sMax = -FLT_MAX;
@@ -353,7 +353,7 @@ namespace green {
 			std::cout << "Saliency computation finished" << std::endl;
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(now - m_time_start);
 			std::cout << "Saliency time: " << (m_progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
-			m_progress.state = saliency_computation_state::done;
+			m_progress.state = saliency_state::done;
 
 			return true;
 		}
@@ -666,7 +666,7 @@ namespace green {
 		if (uparams.thread_count) omp_set_num_threads(uparams.thread_count);
 		SaliencyComputation s(mparams, uparams, progress);
 		bool r = s.run() && !progress.should_cancel;
-		if (!r) progress.state = saliency_computation_state::cancelled;
+		if (!r) progress.state = saliency_state::cancelled;
 		omp_set_num_threads(prev_max_threads);
 		return saliency_result(mparams.cleanup, r);
 	}

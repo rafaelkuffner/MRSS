@@ -145,23 +145,13 @@ namespace {
 	bool show_grid = true;
 	bool show_axes = true;
 	bool show_focus = false;
+	int fps = 0;
+
 	bool about_window_open = false;
 	bool about_licences_window_open = false;
 	bool controlhelp_window_open = true;
-	int fps = 0;
-
 	bool saliency_window_open = false;
-	int sal_entity_id = -1;
-	saliency_user_params sal_uparams;
-	// TODO saliency progress object could (should?) be moved into the model entity
-	// TODO and then progress reporting should be done as with decimation
-	saliency_progress sal_progress;
-	std::future<saliency_result> sal_future;
-	bool sal_need_preview = false;
-	float sal_preview_spn = 10;
-
 	bool decimation_window_open = false;
-	decimate_user_params dec_uparams;
 
 	float decode_depth(float depth_p) {
 		const float c = 0.01;
@@ -330,69 +320,10 @@ namespace {
 		if (!saliency_window_open) return;
 		const auto winsize = GetIO().DisplaySize;
 		SetNextWindowBgAlpha(0.5f);
-		SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
+		SetNextWindowSize({400, 600}, ImGuiCond_Appearing);
 		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
 		if (Begin("Saliency", &saliency_window_open)) {
-			int eid = sal_entity_id >= 0 ? sal_entity_id : cur_sel.select_entity;
-			Entity *ep = nullptr;
-			for (auto &e : entities) {
-				if (e->id() == eid) ep = e.get();
-			}
-			if (!ep) sal_entity_id = -1;
-			if (ep) {
-				if (Button("Reselect")) {
-					cur_sel.select_entity = eid;
-					cur_sel.select_vertex = -1;
-				}
-				SameLine();
-				Text("%s", ep->name().c_str());
-			}
-			sal_need_preview |= Checkbox("Preview", &sal_uparams.preview);
-			SetHoveredTooltip("Enable interactive preview\nUse on small models only! (< ~500k vertices)\nCoarse subsampling will be activated.");
-			SameLine();
-			bool go = false;
-			if (sal_future.valid()) {
-				if (Button("Cancel", {-1, 0})) sal_progress.should_cancel = true;
-			} else {
-				if (ep) {
-					if (sal_uparams.preview) {
-						ButtonDisabled("GO", {-1, 0});
-					} else {
-						if (Button("GO", {-1, 0})) go = true;
-					}
-				} else {
-					TextDisabled("Select a model");
-				}
-			}
-			Separator();
-			sal_need_preview |= edit_saliency_params(sal_uparams);
-			Separator();
-			draw_saliency_progress(sal_progress);
-			if (!sal_future.valid()) {
-				if (Button("Clear", {-1, 0})) sal_progress = {};
-			}
-			if (sal_need_preview && sal_uparams.preview) {
-				// user params edited and preview enabled, try launch preview
-				if (sal_future.valid()) {
-					sal_progress.should_cancel = true;
-				} else {
-					go = true;
-					sal_need_preview = false;
-				}
-			}
-			if (go && ep) {
-				// launc calculation
-				auto real_uparams = sal_uparams;
-				if (real_uparams.preview) {
-					real_uparams.subsample_auto = true;
-					real_uparams.subsample_manual = false;
-					real_uparams.samples_per_neighborhood = sal_preview_spn;
-				}
-				sal_entity_id = eid;
-				sal_progress = {};
-				sal_progress.levels.resize(real_uparams.levels);
-				sal_future = ep->compute_saliency_async(real_uparams, sal_progress);
-			}
+			// contents drawn by model entities
 		}
 		End();
 	}
@@ -402,40 +333,10 @@ namespace {
 		if (!decimation_window_open) return;
 		const auto winsize = GetIO().DisplaySize;
 		SetNextWindowBgAlpha(0.5f);
-		SetNextWindowSize({500, 500}, ImGuiCond_Appearing);
+		SetNextWindowSize({400, 500}, ImGuiCond_Appearing);
 		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
 		if (Begin("Decimation", &decimation_window_open)) {
-			PushStyleColor(ImGuiCol_Text, {0.9f, 0.4f, 0.4f, 1});
-			Text("-- Work in Progress --");
-			PopStyleColor();
-			if (select_model) {
-				Text("%s", select_model->name().c_str());
-				if (select_model->decimated()) {
-					PushStyleColor(ImGuiCol_Text, {0.9f, 0.4f, 0.4f, 1});
-					Text("Warning: model has already been decimated");
-					PopStyleColor();
-				}
-				auto *sd = select_model->selected_saliency();
-				if (sd) Text("Saliency: %s", sd->str().c_str());
-				bool go = false;
-				if (sd && dec_uparams.use_saliency) {
-					if (Button("GO with saliency", {-1, 0})) go = true;
-				} else if (!dec_uparams.use_saliency) {
-					if (Button("GO without saliency", {-1, 0})) go = true;
-				} else {
-					TextDisabled("Select a saliency result or uncheck 'use saliency'");
-				}
-				if (go) {
-					auto e = select_model->decimate_async(dec_uparams);
-					if (e) entities.push_back(std::move(e));
-				}
-			} else {
-				TextDisabled("Select a model");
-			}
-			Separator();
-			edit_decimate_params(dec_uparams);
-			Separator();
-			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+			// contents drawn by model entities
 		}
 	}
 
@@ -455,7 +356,8 @@ namespace {
 		}
 		End();
 
-		// draw main decimation window before models add progress to it
+		// setup windows before model entities add contents
+		draw_window_saliency();
 		draw_window_decimation();
 	}
 
@@ -463,17 +365,6 @@ namespace {
 
 		using namespace ImGui;
 		const auto winsize = GetIO().DisplaySize;
-
-		// check for saliency completion
-		if (sal_future.valid()) {
-			if (sal_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-				sal_entity_id = -1;
-				// getting the result will trigger cleanup (from its dtor)
-				if (!sal_future.get()) {
-					// cancelled
-				}
-			}
-		}
 
 		// check for files to open
 		if (open_paths_future.valid()) {
@@ -581,8 +472,6 @@ namespace {
 		// NOTE BeginMenu respects constraints but doesnt consume them (bug?)
 		SetNextWindowSizeConstraints({0, 0}, {9001, 9001});
 
-		draw_window_saliency();
-
 		if (about_window_open) {
 			SetNextWindowPos({winsize.x / 2, winsize.y / 2}, ImGuiCond_Appearing, {0.5f, 0.5f});
 			if (Begin("About", &about_window_open, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -625,6 +514,7 @@ namespace {
 		}
 
 		if (Begin("Models")) {
+			// appended to window after open models
 			TextDisabled("Open with [File > Open] or drag-and-drop");
 		}
 		End();
@@ -765,6 +655,9 @@ namespace {
 		select_model = nullptr;
 		hover_model = nullptr;
 		bool can_hover = false;
+		for (auto &e : entities) {
+			e->pre_draw();
+		}
 		for (auto it = entities.begin(); it != entities.end(); ) {
 			can_hover = true;
 			auto &e = *it;
@@ -1056,8 +949,6 @@ namespace {
 		}
 
 		glfwTerminate();
-		sal_progress.should_cancel = true;
-		if (sal_future.valid()) sal_future.wait();
 
 	}
 
@@ -1073,6 +964,11 @@ namespace {
 		string salprop;
 		string colorprop;
 		string colormode;
+		saliency_user_params sal_uparams;
+		decimate_user_params dec_uparams;
+		saliency_progress sal_progress;
+		decimate_progress dec_progress;
+
 		bool show_gui = false;
 		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
 		bool save_ascii = false;
@@ -1099,7 +995,7 @@ namespace {
 				.doc(loc[help_cli_original_vids].clone()),
 			option("--gui").set(show_gui)
 				.doc(loc[help_cli_gui].clone()),
-			option("--noprogress").call([]{
+			option("--noprogress").call([&]{
 					sal_uparams.show_progress = false;
 					dec_uparams.show_progress = false;
 				})
@@ -1127,7 +1023,7 @@ namespace {
 				.doc(loc[help_sal_noiseheight].clone()),
 			(option("-s", "--subsampling") & number("samples-per-neighborhood", sal_uparams.samples_per_neighborhood))
 				.doc(loc[help_sal_samplespern].clone()),
-			option("--fullsampling").call([]{ sal_uparams.subsample_auto = false; })
+			option("--fullsampling").call([&]{ sal_uparams.subsample_auto = false; })
 				.doc(loc[help_sal_full].clone()),
 			(option("--salprop") & value("propname", salprop))
 				.doc(loc[help_sal_salprop].clone()),
@@ -1150,7 +1046,7 @@ namespace {
 				.doc(loc[help_dec_bins].clone()),
 			(option("--decprop") & value("propname", decprop))
 				.doc(loc[help_dec_decprop].clone()),
-			option("--decimate-nosaliency").call([]{ dec_uparams.use_saliency = false; })
+			option("--decimate-nosaliency").call([&]{ dec_uparams.use_saliency = false; })
 				.doc(loc[help_dec_nosaliency].clone())
 		}.doc(loc[help_cli_opts_decimate].clone());
 
@@ -1236,7 +1132,6 @@ namespace {
 
 		if (!dumpcurvfile.empty()) dump_curvature(dumpcurvfile, m, sal_uparams.normal_power);
 
-		decimate_progress dec_progress;
 		model_saliency_data sd;
 
 		if (!do_sal && do_dec) {
@@ -1373,20 +1268,12 @@ namespace {
 
 namespace green {
 
+	void spawn_entity(std::unique_ptr<Entity> e) {
+		entities.push_back(std::move(e));
+	}
+
 	entity_selection & ui_selection() {
 		return cur_sel;
-	}
-
-	saliency_user_params & ui_saliency_user_params() {
-		return sal_uparams;
-	}
-
-	const saliency_progress & ui_saliency_progress() {
-		return sal_progress;
-	}
-
-	decimate_user_params & ui_decimate_user_params() {
-		return dec_uparams;
 	}
 
 	void ui_select_model(ModelEntity *e) {
@@ -1434,29 +1321,29 @@ namespace green {
 		scene_dirty = true;
 	}
 
-	const char * saliency_state_str(saliency_computation_state s) {
+	const char * saliency_state_str(saliency_state s) {
 		switch (s) {
-		case saliency_computation_state::idle:
+		case saliency_state::idle:
 			return "Idle";
-		case saliency_computation_state::curv:
+		case saliency_state::curv:
 			return "Computing curvature";
-		case saliency_computation_state::area:
+		case saliency_state::area:
 			return "Computing surface area";
-		case saliency_computation_state::nhprep:
+		case saliency_state::nhprep:
 			return "Preparing mesh data for neighborhood search";
-		case saliency_computation_state::cand:
+		case saliency_state::cand:
 			return "Preparing subsampling candidates";
-		case saliency_computation_state::run_full:
+		case saliency_state::run_full:
 			return "Running (full)";
-		case saliency_computation_state::run_sub:
+		case saliency_state::run_sub:
 			return "Running (subsampled)";
-		case saliency_computation_state::merge:
+		case saliency_state::merge:
 			return "Merging saliency levels";
-		case saliency_computation_state::norm:
+		case saliency_state::norm:
 			return "Normalizing saliency";
-		case saliency_computation_state::done:
+		case saliency_state::done:
 			return "Done";
-		case saliency_computation_state::cancelled:
+		case saliency_state::cancelled:
 			return "Cancelled";
 		default:
 			return "???";
@@ -1483,7 +1370,7 @@ namespace green {
 
 namespace ImGui {
 
-	void draw_saliency_progress(const green::saliency_progress &progress) {
+	void draw_saliency_progress(green::saliency_progress &progress) {
 		for (int i = 0; i < std::min<int>(progress.completed_levels + 1, progress.levels.size()); i++) {
 			const auto &level = progress.levels[i];
 			Text("%2d/%zu", i + 1, progress.levels.size());
@@ -1499,11 +1386,16 @@ namespace ImGui {
 			ProgressBar(level.completion, {-1, 0}, buf);
 			if (IsItemHovered()) SetTooltip("%d samples / %d vertices%s", level.completed_samples, progress.total_vertices, normalmap_filter_str);
 		}
-		// TODO cancel button here
-		Text("%s [%.3fs]", saliency_state_str(progress.state), progress.elapsed_time / std::chrono::duration<double>(1.0));
+		if (progress.state < saliency_state::done) {
+			if (Button("Cancel")) progress.should_cancel = true;
+			SameLine();
+		}
+		FmtText("{:.3f}s", progress.elapsed_time / std::chrono::duration<double>(1.0));
+		TextUnformatted(saliency_state_str(progress.state));
 	}
 
 	bool edit_saliency_params(green::saliency_user_params &uparams) {
+		// TODO model param?
 		const Model *model = select_model ? select_model->model() : nullptr;
 		using green::saliency_user_params;
 		using namespace green::uistrings;
@@ -1520,11 +1412,11 @@ namespace ImGui {
 		widgets.slider(param_sal_area, help_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
 		widgets.slider(param_sal_curvweight, help_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
 		widgets.checkbox(param_sal_autocontrast, nullstr, &saliency_user_params::auto_contrast);
-		//SetHoveredTooltip(loc, "TODO");
+		// TODO autocontrast tooltip
 		if (uparams.auto_contrast) {
 			if (model) {
 				SameLine();
-				Text("[current value: %.3f]", model->auto_contrast());
+				FmtText("[current: {:.3f}]", model->auto_contrast());
 			}
 		} else {
 			widgets.slider(param_sal_normpower, help_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);
@@ -1534,7 +1426,8 @@ namespace ImGui {
 			widgets.slider(param_sal_noiseheight, help_sal_noiseheight, &saliency_user_params::noise_height, 0.f, 0.01f, "%.4f", 2.f);
 		}
 		if (uparams.preview) {
-			Text("Preview mode: subsampling at %.1f S/N", sal_preview_spn);
+			// TODO configure this somewhere (and use it in model entity)
+			Text("Preview mode: subsampling at 10 S/N");
 		} else {
 			widgets.checkbox(param_sal_subsample, help_sal_subsample, &saliency_user_params::subsample_auto);
 			if (uparams.subsample_manual) {
@@ -1545,6 +1438,7 @@ namespace ImGui {
 				widgets.slider(param_sal_samplespern, help_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
 			}
 		}
+		// TODO global-ish thread control
 		widgets.slider(param_threads, help_threads, &saliency_user_params::thread_count, 1, defthreads);
 		// ensure params are valid
 		uparams.sanitize();
@@ -1575,7 +1469,8 @@ namespace ImGui {
 			if (Button("Cancel")) progress.should_cancel = true;
 			SameLine();
 		}
-		Text("%s [%.3fs]", decimation_state_str(progress.state), progress.elapsed_time / std::chrono::duration<double>(1.0));
+		FmtText("", progress.elapsed_time / std::chrono::duration<double>(1.0));
+		TextUnformatted(decimation_state_str(progress.state));
 	}
 
 	bool edit_decimate_params(green::decimate_user_params &uparams) {

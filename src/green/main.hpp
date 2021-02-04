@@ -15,13 +15,9 @@
 
 namespace green {
 
+	void spawn_entity(std::unique_ptr<Entity>);
+
 	entity_selection & ui_selection();
-
-	saliency_user_params & ui_saliency_user_params();
-
-	const saliency_progress & ui_saliency_progress();
-
-	decimate_user_params & ui_decimate_user_params();
 
 	void ui_select_model(ModelEntity *);
 
@@ -46,7 +42,7 @@ namespace green {
 
 namespace ImGui {
 
-	void draw_saliency_progress(const green::saliency_progress &progress);
+	void draw_saliency_progress(green::saliency_progress &progress);
 
 	bool edit_saliency_params(green::saliency_user_params &uparams);
 

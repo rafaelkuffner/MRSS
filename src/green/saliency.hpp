@@ -147,7 +147,7 @@ namespace green {
 		std::function<void(bool)> cleanup;
 	};
 
-	enum class saliency_computation_state {
+	enum class saliency_state {
 		idle, curv, area, nhprep, cand, run_full, run_sub, merge, norm, done, cancelled
 	};
 
@@ -169,7 +169,7 @@ namespace green {
 		int completed_levels = 0;		
 		int total_vertices = 0;
 		bool should_cancel = false;
-		saliency_computation_state state = saliency_computation_state::idle;
+		saliency_state state = saliency_state::idle;
 	};
 
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);

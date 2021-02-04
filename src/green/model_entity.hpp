@@ -14,47 +14,42 @@ namespace green {
 		std::shared_mutex m_modelmtx;
 		std::unique_ptr<Model> m_model;
 
+		// loading
 		std::filesystem::path m_fpath_load;
 		std::future<std::unique_ptr<Model>> m_pending_load;
-		decimate_user_params m_dec_uparams;
-		decimate_progress m_dec_progress;
+		decimate_user_params m_src_dec_uparams;
+		decimate_progress m_src_dec_progress;
 		bool m_decimated = false;
 
+		// computation
+		saliency_user_params m_sal_uparams;
+		saliency_progress m_sal_progress;
+		std::future<saliency_result> m_sal_future;
+		decimate_user_params m_dec_uparams;
+		bool m_sal_need_preview = false;
+
+		// saving
 		std::filesystem::path m_fpath_save;
 		bool m_save_binary = true;
 		bool m_save_original_vids = false;
 		bool m_save_ok = false;
 		std::future<bool> m_pending_save;
 
+		// selected saliency results
 		int m_saliency_index = 0;
 		int m_saliency_export_index = 0;
 		int m_saliency_baseline_index = 0;
-		bool m_saliency_vbo_dirty = false;
-
 		model_saliency_errors m_saliency_errors;
-		float m_saliency_error_scale = 1;
 
+		// transform
+		int m_basis_right = 0, m_basis_up = 2, m_basis_back = 4;
 		float m_scale = 1;
 		glm::vec3 m_translation{0};
 		// TODO store as quat, only use euler for editing?
 		glm::vec3 m_rotation_euler_yxz{0};
 
-		struct basis_vector {
-			glm::vec3 v;
-			const char *name;
-		};
-
-		basis_vector m_basis_vectors[6]{
-			{{+1, 0, 0}, "+X"},
-			{{-1, 0, 0}, "-X"},
-			{{0, +1, 0}, "+Y"},
-			{{0, -1, 0}, "-Y"},
-			{{0, 0, +1}, "+Z"},
-			{{0, 0, -1}, "-Z"}
-		};
-
-		int m_basis_right = 0, m_basis_up = 2, m_basis_back = 4;
-
+		// rendering options
+		float m_saliency_error_scale = 1;
 		int m_vert_point_size = 3;
 		model_color_mode m_disp_color_mode = model_color_mode::saliency;
 		model_color_mode m_exp_color_mode = model_color_mode::saliency;
@@ -67,19 +62,41 @@ namespace green {
 		bool m_cull_edges = true;
 		bool m_shade_flat = false;
 
+		// action/status
 		bool m_try_export = false;
 		bool m_try_kill = false;
+		bool m_saliency_vbo_dirty = false;
 		bool m_dead = false;
+
+		struct basis_vector {
+			glm::vec3 v;
+			const char *name;
+		};
+
+		// TODO make this static
+		basis_vector m_basis_vectors[6]{
+			{{+1, 0, 0}, "+X"},
+			{{-1, 0, 0}, "-X"},
+			{{0, +1, 0}, "+Y"},
+			{{0, -1, 0}, "-Y"},
+			{{0, 0, +1}, "+Z"},
+			{{0, 0, -1}, "-Z"}
+		};
 
 		void update_vbo();
 		void draw_window_models(bool selected);
 		void draw_window_selection();
 		void draw_window_export();
-		void draw_window_decimation(bool selected);
+		void draw_window_saliency();
+		void draw_window_saliency_progress(bool selected);
+		void draw_window_decimation();
+		void draw_window_decimation_progress(bool selected);
 		bool draw_select_header(bool selected);
 		void spawn_locked_notification() const;
 		std::string make_name_tooltip() const;
 		void invalidate_saliency_vbo();
+		void saliency_async(const saliency_user_params &uparams);
+		void decimate_async(const decimate_user_params &uparams);
 
 	public:
 		ModelEntity();
@@ -122,7 +139,7 @@ namespace green {
 			std::string s = m_fpath_load.filename().u8string();
 			if (m_decimated) {
 				s += " [dec ";
-				s += m_dec_uparams.str();
+				s += m_src_dec_uparams.str();
 				s += "]";
 			}
 			return s;
@@ -140,11 +157,9 @@ namespace green {
 
 		virtual glm::mat4 transform() const override;
 
+		virtual void pre_draw() override;
+
 		virtual void draw(const glm::mat4 &view, const glm::mat4 &proj, float zfar, bool draw_scene) override;
-
-		virtual std::future<saliency_result> compute_saliency_async(const saliency_user_params &uparams, saliency_progress &progress) override;
-
-		std::unique_ptr<ModelEntity> decimate_async(const decimate_user_params &uparams);
 
 		virtual ~ModelEntity();
 	};
