@@ -8,6 +8,7 @@ namespace {
 	ImGui::extra_colors_t init_extra_colors() {
 		using namespace ImGui;
 		extra_colors_t c;
+		c.sel = {0.7f, 0.4f, 0.1f, 1};
 		c.bad = {0.9f, 0.4f, 0.4f, 1};
 		c.bad_hov = {c.bad.x, c.bad.y, c.bad.z, GetStyle().Colors[ImGuiCol_FrameBg].w};
 		c.bad_bg = {c.bad.x * 0.7f, c.bad.y * 0.7f, c.bad.z * 0.7f, c.bad_hov.w};

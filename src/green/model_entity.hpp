@@ -30,9 +30,9 @@ namespace green {
 
 		// saving
 		std::filesystem::path m_fpath_save;
+		model_color_mode m_exp_color_mode = model_color_mode::saliency;
 		bool m_save_binary = true;
 		bool m_save_original_vids = false;
-		bool m_save_ok = false;
 		std::future<bool> m_pending_save;
 
 		// selected saliency results
@@ -49,10 +49,9 @@ namespace green {
 		glm::vec3 m_rotation_euler_yxz{0};
 
 		// rendering options
+		model_color_mode m_disp_color_mode = model_color_mode::saliency;
 		float m_saliency_error_scale = 1;
 		int m_vert_point_size = 3;
-		model_color_mode m_disp_color_mode = model_color_mode::saliency;
-		model_color_mode m_exp_color_mode = model_color_mode::saliency;
 		bool m_color_faces = true;
 		bool m_color_verts = false;
 		bool m_show_faces = true;

@@ -16,6 +16,7 @@ namespace ImGui {
 	using green::uistring;
 
 	struct extra_colors_t {
+		ImVec4 sel;
 		ImVec4 bad;
 		ImVec4 bad_hov;
 		ImVec4 bad_bg;
@@ -24,6 +25,10 @@ namespace ImGui {
 	extra_colors_t & extra_colors();
 
 	bool ButtonDisabled(const char* label, const ImVec2& size_arg = ImVec2{0, 0});
+
+	inline void TextUnformatted(std::string_view s) {
+		TextUnformatted(&*s.begin(), &*s.end());
+	}
 
 	template <typename S, typename ...Ts>
 	inline void FmtText(const S &s, const Ts &...args) {
@@ -88,6 +93,21 @@ namespace ImGui {
 	template <typename ...Ts>
 	inline void SetHoveredTooltip(const uilocale &loc, uistring fmt, const Ts &...args) {
 		if (IsItemHovered()) SetTooltip(loc[fmt].c_str(), args...);
+	}
+
+	inline bool SelectHeader(bool selected, const char *text, const char *tooltip) {
+		bool r = false;
+		PushStyleColor(ImGuiCol_Header, selected ? extra_colors().sel : GetStyle().Colors[ImGuiCol_Button]);
+		// hack - selectable is always 'selected' in order to show highlight, it just changes colour
+		r = Selectable(text, true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
+		PopStyleColor();
+		if (IsItemHovered()) {
+			BeginTooltip();
+			TextUnformatted(tooltip);
+			EndTooltip();
+		}
+		SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
+		return r;
 	}
 
 	template <typename T>

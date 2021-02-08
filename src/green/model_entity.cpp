@@ -186,9 +186,7 @@ namespace green {
 		using namespace ImGui;
 		if (Begin("Selection")) {
 			PushID(this);
-			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-			Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()});
-			PopStyleColor();
+			draw_select_header(true);
 			SetHoveredTooltip("%s", make_name_tooltip().c_str());
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 
@@ -203,26 +201,37 @@ namespace green {
 			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
 			if (m_pending_save.valid()) {
 				if (m_pending_save.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+					bool save_ok = false;
+					std::string msg;
 					try {
-						m_save_ok = m_pending_save.get();
+						save_ok = m_pending_save.get();
+						msg = fmt::format("Export \"{}\" succeeded", m_fpath_save.u8string());
 					} catch (std::exception &e) {
 						std::cerr << "failed to save model: " << e.what() << std::endl;
-						m_save_ok = false;
+						save_ok = false;
+						msg = fmt::format("Export \"{}\" failed : {}", m_fpath_save.u8string(), e.what());
 					} catch (...) {
 						std::cerr << "failed to save model" << std::endl;
-						m_save_ok = false;
+						save_ok = false;
+						msg = fmt::format("Export \"{}\" failed", m_fpath_save.u8string());
 					}
+					ui_spawn([=, name=name(), nametooltip=make_name_tooltip(), msg=std::move(msg)](bool *p_open) {
+						const char *title = save_ok ? "Export succeeded" : "Export failed";
+						if (*p_open) OpenPopup(title);
+						if (BeginPopupModal(title, p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+							SelectHeader(true, name.c_str(), nametooltip.c_str());
+							TextUnformatted(msg);
+							if (Button("  OK  ")) {
+								*p_open = false;
+								CloseCurrentPopup();
+							}
+							EndPopup();
+						}
+					});
 				} else {
 					TextDisabled("Exporting %s...", m_fpath_save.filename().u8string().c_str());
 				}
-			} else if (m_save_ok) {
-				TextDisabled("Export %s succeeded", m_fpath_save.filename().u8string().c_str());
-			} else if (!m_fpath_save.empty()) {
-				TextColored(badcol, "Export %s failed", m_fpath_save.filename().u8string().c_str());
-			} else {
-				TextDisabled("Not exported");
 			}
-			if (IsItemHovered() && !m_fpath_save.empty()) SetTooltip("%s", m_fpath_save.u8string().c_str());
 
 			if (CollapsingHeader("Transform")) {
 				auto pick_basis = [&](const char *label, int *basis) {
@@ -472,11 +481,7 @@ namespace green {
 		if (BeginPopupModal("Export##export", &export_window_open)) {
 			PushID(this);
 			const ImVec4 badcol{0.9f, 0.4f, 0.4f, 1};
-			PushStyleColor(ImGuiCol_Header, {0.7f, 0.4f, 0.1f, 1});
-			Selectable(m_fpath_load.filename().u8string().c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
-			PopStyleColor();
-			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
-			SetHoveredTooltip("%s", make_name_tooltip().c_str());
+			draw_select_header(true);
 			// export path
 			const auto &pathhint = m_fpath_save.empty() ? m_fpath_load : m_fpath_save;
 			// TODO better?
@@ -708,17 +713,12 @@ namespace green {
 	bool ModelEntity::draw_select_header(bool selected) {
 		using namespace ImGui;
 		bool r = false;
-		PushStyleColor(ImGuiCol_Header, selected ? ImVec4{0.7f, 0.4f, 0.1f, 1} : GetStyle().Colors[ImGuiCol_Button]);
-		// hack - selectable is always 'selected' in order to show highlight, it just changes colour
-		if (Selectable(name().c_str(), true, 0, {0, GetTextLineHeightWithSpacing()})) {
+		if (SelectHeader(selected, name().c_str(), make_name_tooltip().c_str())) {
 			auto &sel = ui_selection();
 			sel.select_entity = id();
 			sel.select_vertex = -1;
 			r = true;
 		}
-		PopStyleColor();
-		SetHoveredTooltip("%s", make_name_tooltip().c_str());
-		SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 		return r;
 	}
 
@@ -727,9 +727,7 @@ namespace green {
 		ui_spawn([nametooltip=make_name_tooltip(), name=name()](bool *p_open) {
 			if (*p_open) OpenPopup("Model in use");
 			if (BeginPopupModal("Model in use", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
-				Selectable(name.c_str(), true, ImGuiSelectableFlags_DontClosePopups, {0, GetTextLineHeightWithSpacing()});
-				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
-				SetHoveredTooltip("%s", nametooltip.c_str());
+				SelectHeader(true, name.c_str(), nametooltip.c_str());
 				Text("The operation cannot be performed because\nthe model is currently in use.");
 				if (Button("  OK  ")) {
 					*p_open = false;
