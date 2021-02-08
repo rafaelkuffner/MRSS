@@ -600,7 +600,7 @@ namespace green {
 				SetHoveredTooltip("Enable interactive preview\nUse on small models only! (< ~500k vertices)\nCoarse subsampling will be activated.");
 				SameLine();
 				bool go = false;
-				if (m_sal_uparams.preview) {
+				if (m_sal_uparams.preview || m_sal_future.valid()) {
 					ButtonDisabled("GO", {-1, 0});
 				} else {
 					if (Button("GO", {-1, 0})) go = true;
@@ -843,8 +843,10 @@ namespace green {
 	}
 
 	void ModelEntity::saliency_async(const saliency_user_params &uparams0) {
-		// TODO synchronization (somewhere) because only one saliency computation can run at once
 		if (!m_model) return;
+		// can't run multiple saliency calculations for one model at once (because we only track one future).
+		// otherwise, multiple saliency calculations can run simultaneously (although suboptimally).
+		if (m_sal_future.valid()) return;
 		std::unique_lock lock(m_modelmtx, std::defer_lock);
 		if (!lock.try_lock()) {
 			spawn_locked_notification();
