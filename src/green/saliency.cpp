@@ -124,7 +124,6 @@ namespace green {
 		subsampling_rate = max(subsampling_rate, 1.f);
 		samples_per_neighborhood = max(samples_per_neighborhood, 1.f);
 		noise_height = clamp(noise_height, 0.f, 1.f);
-		thread_count = max(thread_count, 0);
 	}
 	
 	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
@@ -662,12 +661,9 @@ namespace green {
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
 		// note: saliency computation should not create/destroy properties,
 		// only use them, to minimize problems (potential corruption) from concurrent access
-		const int prev_max_threads = omp_get_max_threads();
-		if (uparams.thread_count) omp_set_num_threads(uparams.thread_count);
 		SaliencyComputation s(mparams, uparams, progress);
 		bool r = s.run() && !progress.should_cancel;
 		if (!r) progress.state = saliency_state::cancelled;
-		omp_set_num_threads(prev_max_threads);
 		return saliency_result(mparams.cleanup, r);
 	}
 

@@ -113,7 +113,7 @@ namespace ImGui {
 	template <typename T>
 	struct param_widgets {
 		const uilocale *loc = nullptr;
-		T *defparams = nullptr;
+		const T *defparams = nullptr;
 		T *realparams = nullptr;
 		float label_width = 100;
 
@@ -187,7 +187,7 @@ namespace ImGui {
 	};
 
 	template <typename T>
-	param_widgets(const uilocale *, T *, T *) -> param_widgets<T>;
+	param_widgets(const uilocale *, const T *, T *) -> param_widgets<T>;
 
 }
 

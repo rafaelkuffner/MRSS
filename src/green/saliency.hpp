@@ -89,8 +89,6 @@ namespace green {
 		float samples_per_neighborhood = 100;
 		// used with normalmap filter; relative to sqrt(real_surface_area)
 		float noise_height = 0.002f;
-		// parallelization (0 -> all)
-		int thread_count = 0;
 		// filter out normalmappable detail
 		bool normalmap_filter = false;
 		// enable manual subsampling (takes precedence)

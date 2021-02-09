@@ -134,6 +134,8 @@ namespace {
 	chrono::steady_clock::time_point time_drag_start = chrono::steady_clock::now();
 	drag_mode cur_drag_mode = drag_mode::plane;
 
+	user_options cur_options;
+
 	bool scene_dirty = true;
 	bool need_select = false;
 	bool need_focus_here = false;
@@ -150,6 +152,7 @@ namespace {
 	bool about_window_open = false;
 	bool about_licences_window_open = false;
 	bool controlhelp_window_open = true;
+	bool options_window_open = false;
 	bool saliency_window_open = false;
 	bool decimation_window_open = false;
 
@@ -315,6 +318,39 @@ namespace {
 		}
 	}
 
+	int max_threads(int ui) {
+		return std::max(1, int(std::thread::hardware_concurrency()) - ui);
+	}
+
+	int effective_threads(int ui) {
+		const int maxthreads = max_threads(ui);
+		return !cur_options.threads ? maxthreads : std::clamp(cur_options.threads, 1, maxthreads);
+	}
+
+	void apply_threads(int ui) {
+		omp_set_num_threads(effective_threads(ui));
+	}
+
+	void draw_window_options() {
+		using namespace ImGui;
+		using namespace green::uistrings;
+		if (!options_window_open) return;
+		static const user_options defopts;
+		const uilocale &loc = uilocale_en();
+		const auto winsize = GetIO().DisplaySize;
+		SetNextWindowSize({400, 400}, ImGuiCond_Appearing);
+		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
+		if (Begin("Options", &options_window_open)) {
+			TextColored(extra_colors().bad, "-- Note: not yet persistent --");
+			param_widgets widgets{&loc, &defopts, &cur_options};
+			if (widgets.slider(param_threads, help_threads, &user_options::threads, 0, max_threads(0))) {
+				apply_threads(1);
+			}
+			FmtText("Effective threads: {}", effective_threads(1));
+		}
+		End();
+	}
+
 	void draw_window_saliency() {
 		using namespace ImGui;
 		if (!saliency_window_open) return;
@@ -437,6 +473,7 @@ namespace {
 				PushStyleVar(ImGuiStyleVar_FramePadding, normal_frame_padding);
 				Checkbox("Saliency", &saliency_window_open);
 				Checkbox("Decimation", &decimation_window_open);
+				Checkbox("Options", &options_window_open);
 				Checkbox("Control Help", &controlhelp_window_open);
 				Separator();
 				PopStyleVar();
@@ -512,6 +549,8 @@ namespace {
 			}
 			End();
 		}
+
+		draw_window_options();
 
 		if (Begin("Models")) {
 			// appended to window after open models
@@ -757,6 +796,7 @@ namespace {
 		}
 
 		set_ui_thread_priority();
+		apply_threads(1);
 
 		// GL 3.3 core context
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -973,7 +1013,6 @@ namespace {
 		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
 		bool save_ascii = false;
 		bool save_original_vids = false;
-		int threads = 0;
 
 		auto alt_opts = group{
 			option("--version").set(do_version)
@@ -987,7 +1026,7 @@ namespace {
 				.doc(loc[help_input].clone()),
 			(option("-o", "--output") & value("outfile", outfile))
 				.doc(loc[help_output].clone()),
-			(option("-j", "--threads") & integer("threads", threads))
+			(option("-j", "--threads") & integer("threads", cur_options.threads))
 				.doc(loc[help_threads].clone()),
 			option("--ascii").set(save_ascii)
 				.doc(loc[help_cli_ascii].clone()),
@@ -1106,7 +1145,8 @@ namespace {
 			exit(0);
 		}
 
-		sal_uparams.thread_count = threads;
+		apply_threads(0);
+
 		sal_uparams.sanitize();
 		dec_uparams.sanitize();
 		sal_progress.levels.resize(sal_uparams.levels);
@@ -1401,11 +1441,7 @@ namespace ImGui {
 		using namespace green::uistrings;
 		const uilocale &loc = uilocale_en();
 		const auto uparams0 = uparams;
-		// max hardware threads leaving 1 for UI
-		static const int defthreads = std::max(1, int(std::thread::hardware_concurrency()) - 1);
 		saliency_user_params defparams;
-		defparams.thread_count = defthreads;
-		if (!uparams.thread_count) uparams.thread_count = defthreads;
 		param_widgets widgets{&loc, &defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
 		widgets.slider(param_sal_levels, help_sal_levels, &saliency_user_params::levels, 1, 6);
@@ -1438,8 +1474,6 @@ namespace ImGui {
 				widgets.slider(param_sal_samplespern, help_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
 			}
 		}
-		// TODO global-ish thread control
-		widgets.slider(param_threads, help_threads, &saliency_user_params::thread_count, 1, defthreads);
 		// ensure params are valid
 		uparams.sanitize();
 		return uparams != uparams0;

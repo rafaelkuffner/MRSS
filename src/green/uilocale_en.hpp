@@ -11,7 +11,7 @@ namespace green {
 		// common
 		loc[help_input] = "Input file";
 		loc[help_output] = "Output file";
-		loc[help_threads] = "Number of threads to use for parallel sections.\nDefault is all available processors.";
+		loc[help_threads] = "Number of threads to use for parallel sections.\nDefault (0) is all available processors.";
 		loc[help_cli_opts_common] = "Common options:";
 		loc[help_cli_version] = "Show version";
 		loc[help_cli_help] = "Show help";

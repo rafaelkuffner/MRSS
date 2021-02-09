@@ -15,6 +15,11 @@
 
 namespace green {
 
+	struct user_options {
+		// 0: all available
+		int threads = 0;
+	};
+
 	void spawn_entity(std::unique_ptr<Entity>);
 
 	entity_selection & ui_selection();
