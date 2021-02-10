@@ -57,7 +57,7 @@ namespace green {
 	};
 
 	struct decimate_mesh_params {
-		TriMesh *mesh = nullptr;
+		PolyMesh *mesh = nullptr;
 		OpenMesh::VPropHandleT<float> prop_saliency;
 	};
 

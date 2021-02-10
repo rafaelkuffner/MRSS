@@ -190,7 +190,7 @@ namespace green {
 			SetHoveredTooltip("%s", make_name_tooltip().c_str());
 			SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
 
-			Text("%zd vertices, %zd triangles", m_model->trimesh().n_vertices(), m_model->trimesh().n_faces());
+			Text("%zd vertices, %zd triangles", m_model->mesh().n_vertices(), m_model->mesh().n_faces());
 			if (m_decimated) Text(
 				"Decimated %d vertices (%.1f%%) in %.3fs",
 				m_src_dec_progress.completed_collapses,
@@ -342,10 +342,10 @@ namespace green {
 				std::unique_lock lock(m_modelmtx, std::defer_lock);
 				if (!lock.try_lock()) {
 					spawn_locked_notification();
-				} else if (clip.data.size() == m_model->trimesh().n_vertices()) {
+				} else if (clip.data.size() == m_model->mesh().n_vertices()) {
 					model_saliency_data sd = std::move(clip.sd);
-					m_model->trimesh().add_property(sd.prop_saliency);
-					m_model->trimesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
+					m_model->mesh().add_property(sd.prop_saliency);
+					m_model->mesh().property(sd.prop_saliency).data_vector() = std::move(clip.data);
 					clip.sd = {};
 					clip.data.clear();
 					saliency_outputs.push_back(std::move(sd));
@@ -367,7 +367,7 @@ namespace green {
 						auto &clip = saliency_clipboard();
 						clip.sd = salout;
 						clip.sd.prop_saliency.reset();
-						clip.data = m_model->trimesh().property(salout.prop_saliency).data_vector();
+						clip.data = m_model->mesh().property(salout.prop_saliency).data_vector();
 					}
 				}
 				SameLine();
@@ -394,10 +394,10 @@ namespace green {
 				}
 				if (BeginPopupModal("Paste Error##pasteerror")) {
 					auto &clip = saliency_clipboard();
-					if (clip.data.size() == m_model->trimesh().n_vertices()) {
+					if (clip.data.size() == m_model->mesh().n_vertices()) {
 						CloseCurrentPopup();
 					} else {
-						Text("Can't paste saliency for %d vertices into model with %d vertices", clip.data.size(), m_model->trimesh().n_vertices());
+						Text("Can't paste saliency for %d vertices into model with %d vertices", clip.data.size(), m_model->mesh().n_vertices());
 						if (Button("OK")) CloseCurrentPopup();
 					}
 				}
@@ -432,7 +432,7 @@ namespace green {
 							spawn_locked_notification();
 						} else {
 							auto it = saliency_outputs.begin() + m_saliency_index;
-							m_model->trimesh().remove_property(it->prop_saliency);
+							m_model->mesh().remove_property(it->prop_saliency);
 							saliency_outputs.erase(it);
 							// references/iterators into saliency outputs are invalidated
 							// (so this section should come last)
@@ -853,7 +853,7 @@ namespace green {
 		saliency_user_params uparams = uparams0;
 		if (uparams.auto_contrast) uparams.normal_power = m_model->auto_contrast();
 		saliency_mesh_params mparams;
-		mparams.mesh = &m_model->trimesh();
+		mparams.mesh = &m_model->mesh();
 		mparams.prop_vertex_area = m_model->prop_vertex_area();
 		mparams.prop_doncurv_raw = m_model->prop_doncurv_raw();
 		mparams.prop_edge_length = m_model->prop_edge_length();

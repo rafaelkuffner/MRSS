@@ -34,7 +34,7 @@ namespace green {
 		return OpenMesh::cross(e0, -e2).norm();
 	}
 
-	bool computeCurvature(TriMesh & mesh,
+	bool computeCurvature(PolyMesh & mesh,
 		OpenMesh::VPropHandleT<float> & gaussianCurvatureProperty,
 		OpenMesh::VPropHandleT<float> & meanCurvatureProperty )
 	{
@@ -48,7 +48,7 @@ namespace green {
 		mesh.add_property(meanCurvatureProperty);
 
 
-		TriMesh::VertexIter vIt, vEnd;
+		PolyMesh::VertexIter vIt, vEnd;
 
 
 		//initialize properties and helpers
@@ -70,13 +70,13 @@ namespace green {
 
 		//compute vertex weights via face areas
 
-		TriMesh::FaceIter fIt, fEnd;
-		TriMesh::FaceVertexIter vfIt;
+		PolyMesh::FaceIter fIt, fEnd;
+		PolyMesh::FaceVertexIter vfIt;
 
 		OpenMesh::Vec3f p0, p1, p2,
 			e0, e1, e2;
 
-		TriMesh::VertexHandle v0, v1, v2;
+		PolyMesh::VertexHandle v0, v1, v2;
 
 		float l0, l1, l2;             //squared edge lengths
 		float alpha0, alpha1, alpha2; //angles
@@ -223,7 +223,7 @@ namespace green {
 	}
 
 
-	bool computeCurvatureSimilarity(TriMesh & mesh,
+	bool computeCurvatureSimilarity(PolyMesh & mesh,
 		OpenMesh::VPropHandleT<float> & gaussianCurvatureProperty,
 		OpenMesh::VPropHandleT<float> & meanCurvatureProperty, 
 		OpenMesh::VPropHandleT<float> & similarityCurvatureProperty, Histogram &hCurvature)
@@ -238,7 +238,7 @@ namespace green {
 		mesh.add_property(meanCurvatureProperty);
 		mesh.add_property(similarityCurvatureProperty);
 
-		TriMesh::VertexIter vIt, vEnd;
+		PolyMesh::VertexIter vIt, vEnd;
 
 
 		//initialize properties and helpers
@@ -260,13 +260,13 @@ namespace green {
 
 		//compute vertex weights via face areas
 
-		TriMesh::FaceIter fIt, fEnd;
-		TriMesh::FaceVertexIter vfIt;
+		PolyMesh::FaceIter fIt, fEnd;
+		PolyMesh::FaceVertexIter vfIt;
 
 		OpenMesh::Vec3f p0, p1, p2,
 			e0, e1, e2;
 
-		TriMesh::VertexHandle v0, v1, v2;
+		PolyMesh::VertexHandle v0, v1, v2;
 
 		float l0, l1, l2;             //squared edge lengths
 		float alpha0, alpha1, alpha2; //angles
@@ -414,7 +414,7 @@ namespace green {
 		return true;
 	}
 
-	bool computeMeanCurvature(TriMesh & mesh,
+	bool computeMeanCurvature(PolyMesh & mesh,
 		OpenMesh::VPropHandleT<float> & meanCurvatureProperty, Histogram &hCurvature,float scale)
 	{
 		//mesh.request_face_normals();
@@ -426,7 +426,7 @@ namespace green {
 		mesh.add_property(meanCurvatureProperty);
 
 
-		TriMesh::VertexIter vIt, vEnd;
+		PolyMesh::VertexIter vIt, vEnd;
 
 
 		//initialize properties and helpers
@@ -447,13 +447,13 @@ namespace green {
 
 		//compute vertex weights via face areas
 
-		TriMesh::FaceIter fIt, fEnd;
-		TriMesh::FaceVertexIter vfIt;
+		PolyMesh::FaceIter fIt, fEnd;
+		PolyMesh::FaceVertexIter vfIt;
 
 		OpenMesh::Vec3f p0, p1, p2,
 			e0, e1, e2;
 
-		TriMesh::VertexHandle v0, v1, v2;
+		PolyMesh::VertexHandle v0, v1, v2;
 
 		float l0, l1, l2;             //squared edge lengths
 		float alpha0, alpha1, alpha2; //angles
@@ -586,12 +586,12 @@ namespace green {
 		return true;
 	}
 
-	float maxdon(const TriMesh& mesh, TriMesh::VertexHandle v, float normalPower) {
+	float maxdon(const PolyMesh& mesh, PolyMesh::VertexHandle v, float normalPower) {
 		float maxDiff = 1.0f;
-		for (TriMesh::ConstVertexOHalfedgeIter vohIt = mesh.cvoh_iter(v); vohIt.is_valid(); ++vohIt) {
+		for (PolyMesh::ConstVertexOHalfedgeIter vohIt = mesh.cvoh_iter(v); vohIt.is_valid(); ++vohIt) {
 			auto nv = mesh.to_vertex_handle(*vohIt);
 			auto norm1 = mesh.normal(nv);
-			for (TriMesh::ConstVertexOHalfedgeIter vohIt2 = mesh.cvoh_iter(v); vohIt2.is_valid(); ++vohIt2) {
+			for (PolyMesh::ConstVertexOHalfedgeIter vohIt2 = mesh.cvoh_iter(v); vohIt2.is_valid(); ++vohIt2) {
 				auto nv2 = mesh.to_vertex_handle(*vohIt2);
 				auto norm2 = mesh.normal(nv2);
 				maxDiff = std::min(OpenMesh::dot(norm1, norm2), maxDiff);
@@ -604,7 +604,7 @@ namespace green {
 	}
 
 	bool computeDoNMaxDiffs(
-		TriMesh& mesh,
+		PolyMesh& mesh,
 		OpenMesh::VPropHandleT<float>& DoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower
@@ -615,7 +615,7 @@ namespace green {
 		omp_set_num_threads(std::max(prev_max_threads - 1, 1));
 #pragma omp parallel for schedule(dynamic, 10000)
 		for (int i = 0; i < mesh.n_vertices(); i++) {
-			TriMesh::VertexHandle vh(i);
+			PolyMesh::VertexHandle vh(i);
 			float maxDiff = maxdon(mesh, vh, normalPower);
 			mesh.property(DoN, vh) = maxDiff;
 		}
@@ -624,7 +624,7 @@ namespace green {
 	}
 
 	bool computeDoN(
-		TriMesh & mesh,
+		PolyMesh & mesh,
 		OpenMesh::VPropHandleT<float> & DoN,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower
@@ -632,7 +632,7 @@ namespace green {
 		assert(mesh.has_vertex_normals());
 		mesh.add_property(DoN);
 
-		TriMesh::VertexIter vIt, vEnd;
+		PolyMesh::VertexIter vIt, vEnd;
 
 		//finally, compute final curvature values for vertices
 
@@ -642,7 +642,7 @@ namespace green {
 			float k = 0.0f;
 			float w = 0;
 			auto norm0 = mesh.normal(*vIt);
-			for (TriMesh::ConstVertexOHalfedgeIter vohIt = mesh.cvoh_iter(TriMesh::VertexHandle(vIt)); vohIt.is_valid(); ++vohIt) {
+			for (PolyMesh::ConstVertexOHalfedgeIter vohIt = mesh.cvoh_iter(PolyMesh::VertexHandle(vIt)); vohIt.is_valid(); ++vohIt) {
 
 				auto nv = mesh.to_vertex_handle(*vohIt);
 				float area = mesh.property(vertexAreasProperty, nv);

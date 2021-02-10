@@ -126,7 +126,7 @@ namespace green {
 
 	struct saliency_mesh_params {
 		// TODO const
-		TriMesh *mesh = nullptr;
+		PolyMesh *mesh = nullptr;
 		// input
 		OpenMesh::VPropHandleT<float> prop_vertex_area;
 		// input

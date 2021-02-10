@@ -121,12 +121,12 @@ namespace green {
 	}
 
 
-	OpenMesh::EPropHandleT<float> computeEdgeLengths(TriMesh & mesh)
+	OpenMesh::EPropHandleT<float> computeEdgeLengths(PolyMesh & mesh)
 	{
 		OpenMesh::EPropHandleT<float> edgeLengthProperty;
 		mesh.add_property(edgeLengthProperty);
 
-		TriMesh::ConstEdgeIter eIt = mesh.edges_begin(), eEnd = mesh.edges_end();
+		PolyMesh::ConstEdgeIter eIt = mesh.edges_begin(), eEnd = mesh.edges_end();
 		for (; eIt != eEnd; ++eIt)
 		{
 			mesh.property(edgeLengthProperty, *eIt) = mesh.calc_edge_length(*eIt);
@@ -135,16 +135,16 @@ namespace green {
 		return edgeLengthProperty;
 	}
 
-	OpenMesh::HPropHandleT<float> computeWedgeVoronoiAreas(TriMesh & mesh)
+	OpenMesh::HPropHandleT<float> computeWedgeVoronoiAreas(PolyMesh & mesh)
 	{
 		OpenMesh::HPropHandleT<float> wedgeVoronoiAreaProperty;
 
 		mesh.add_property(wedgeVoronoiAreaProperty);
 
-		TriMesh::ConstFaceIter fIt = mesh.faces_begin(),
+		PolyMesh::ConstFaceIter fIt = mesh.faces_begin(),
 			fEnd = mesh.faces_end();
 
-		TriMesh::HalfedgeHandle halfedge;
+		PolyMesh::HalfedgeHandle halfedge;
 
 		OpenMesh::Vec3f p0, p1, p2,
 			e0, e1, e2,
@@ -273,7 +273,7 @@ namespace green {
 		return wedgeVoronoiAreaProperty;
 	}
 
-	OpenMesh::VPropHandleT<float> computeVertexAreas(TriMesh & mesh)
+	OpenMesh::VPropHandleT<float> computeVertexAreas(PolyMesh & mesh)
 	{
 		OpenMesh::VPropHandleT<float> vertexAreaProperty;
 		mesh.add_property(vertexAreaProperty);
@@ -281,10 +281,10 @@ namespace green {
 		//we'll compute vertex areas by summing up the voronoi areas of the wedges of each vertex
 		OpenMesh::HPropHandleT<float> wedgeVoronoiAreaProperty = computeWedgeVoronoiAreas(mesh);
 
-		TriMesh::ConstVertexIter vIt = mesh.vertices_begin(),
+		PolyMesh::ConstVertexIter vIt = mesh.vertices_begin(),
 			vEnd = mesh.vertices_end();
 
-		TriMesh::ConstVertexIHalfedgeIter vihIt;
+		PolyMesh::ConstVertexIHalfedgeIter vihIt;
 
 		float vArea;
 
@@ -372,27 +372,27 @@ namespace green {
 		lineParam1 = det * (d0[0]*b[1] - d0[1]*b[0]);
 	}
 
-	float surfaceArea(TriMesh & mesh)
+	float surfaceArea(PolyMesh & mesh)
 	{
 		float area = 0.0f;
 
-		TriMesh::FaceIter fIt, fEnd;
+		PolyMesh::FaceIter fIt, fEnd;
 
 		for (fIt = mesh.faces_begin(), fEnd = mesh.faces_end(); fIt != fEnd; ++fIt)
 		{
 			//TODO: check why we can't provide *fIt directly as FaceHandle param to faceArea
-			TriMesh::FaceHandle face = *fIt;
+			PolyMesh::FaceHandle face = *fIt;
 			area += faceArea(mesh, face);
 		}
 
 		return area;
 	}
 
-	float faceArea(TriMesh & mesh, TriMesh::FaceHandle & face)
+	float faceArea(PolyMesh & mesh, PolyMesh::FaceHandle & face)
 	{
-		TriMesh::HalfedgeHandle he0 = mesh.halfedge_handle(face);
-		TriMesh::HalfedgeHandle he1 = mesh.next_halfedge_handle(he0);
-		TriMesh::HalfedgeHandle he2 = mesh.next_halfedge_handle(he1);
+		PolyMesh::HalfedgeHandle he0 = mesh.halfedge_handle(face);
+		PolyMesh::HalfedgeHandle he1 = mesh.next_halfedge_handle(he0);
+		PolyMesh::HalfedgeHandle he2 = mesh.next_halfedge_handle(he1);
 
 		OpenMesh::Vec3f p0 = mesh.point(mesh.to_vertex_handle(he0));
 		OpenMesh::Vec3f p1 = mesh.point(mesh.to_vertex_handle(he1));

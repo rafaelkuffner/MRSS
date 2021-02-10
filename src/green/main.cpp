@@ -774,12 +774,12 @@ namespace {
 		std::ofstream out(outpath);
 		lce::Histogram curvhist;
 		OpenMesh::VPropHandleT<float> curvprop, donprop;
-		computeMeanCurvature(m.trimesh(), curvprop, curvhist, 1);
-		computeDoNMaxDiffs(m.trimesh(), donprop, m.prop_vertex_area(), contrast);
-		for (auto &v : m.trimesh().vertices()) {
-			const float area = m.trimesh().property(m.prop_vertex_area(), v);
-			const float curv = m.trimesh().property(curvprop, v);
-			const float don = m.trimesh().property(donprop, v);
+		computeMeanCurvature(m.mesh(), curvprop, curvhist, 1);
+		computeDoNMaxDiffs(m.mesh(), donprop, m.prop_vertex_area(), contrast);
+		for (auto &v : m.mesh().vertices()) {
+			const float area = m.mesh().property(m.prop_vertex_area(), v);
+			const float curv = m.mesh().property(curvprop, v);
+			const float don = m.mesh().property(donprop, v);
 			out << area << "," << curv << "," << don << "\n";
 		}
 	}
@@ -1198,7 +1198,7 @@ namespace {
 			}
 
 			saliency_mesh_params mparams;
-			mparams.mesh = &m.trimesh();
+			mparams.mesh = &m.mesh();
 			mparams.prop_vertex_area = m.prop_vertex_area();
 			mparams.prop_doncurv_raw = m.prop_doncurv_raw();
 			mparams.prop_edge_length = m.prop_edge_length();

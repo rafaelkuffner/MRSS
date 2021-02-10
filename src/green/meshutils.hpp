@@ -38,45 +38,11 @@ namespace green {
 		return vv;
 	}
 
-	struct DefaultMeshTraitsLCE
-	{
-		// OpenMesh default
-		typedef OpenMesh::Vec3f  Point;
-
-		// OpenMesh default
-		typedef OpenMesh::Vec3f  Normal;
-
-		// OpenMesh default
-		typedef float  TexCoord1D;
-
-		// use higher precision for texture coordinates
-		typedef OpenMesh::Vec2d  TexCoord2D;
-
-		// OpenMesh default
-		typedef OpenMesh::Vec3f  TexCoord3D;
-
-		// OpenMesh default
-		typedef int TextureIndex;
-
-		// OpenMesh default
-		typedef OpenMesh::Vec3uc Color;
-
-#ifndef DOXY_IGNORE_THIS
-		VertexTraits    {};
-		HalfedgeTraits  {};
-		EdgeTraits      {};
-		FaceTraits      {};
-#endif
-
-		VertexAttributes(0);
-		HalfedgeAttributes(OpenMesh::Attributes::PrevHalfedge);
-		EdgeAttributes(0);
-		FaceAttributes(0);
+	struct GreenMeshTraits : OpenMesh::DefaultTraits {
+		// TODO specify our default attribs here
 	};
 
-	struct TriMesh : public OpenMesh::PolyMesh_ArrayKernelT<DefaultMeshTraitsLCE>
-	{
-	};
+	struct PolyMesh : public OpenMesh::PolyMesh_ArrayKernelT<GreenMeshTraits> {};
 
 	enum TransferFunction
 	{
@@ -101,9 +67,9 @@ namespace green {
 		const OpenMesh::Vec2f & p1, const OpenMesh::Vec2f & d1,
 		OpenMesh::Vec2f & intersection);
 
-	float surfaceArea(TriMesh & mesh);
+	float surfaceArea(PolyMesh & mesh);
 
-	float faceArea(TriMesh & mesh, TriMesh::FaceHandle & face);
+	float faceArea(PolyMesh & mesh, PolyMesh::FaceHandle & face);
 
 	template<typename T>
 	inline T angle(const OpenMesh::VectorT<T, 3> & v, const OpenMesh::VectorT<T, 3> & w)
@@ -128,11 +94,11 @@ namespace green {
 
 	}
 
-	OpenMesh::EPropHandleT<float> computeEdgeLengths(TriMesh & mesh);
+	OpenMesh::EPropHandleT<float> computeEdgeLengths(PolyMesh & mesh);
 
-	OpenMesh::HPropHandleT<float> computeWedgeVoronoiAreas(TriMesh & mesh);
+	OpenMesh::HPropHandleT<float> computeWedgeVoronoiAreas(PolyMesh & mesh);
 
-	OpenMesh::VPropHandleT<float> computeVertexAreas(TriMesh & mesh);
+	OpenMesh::VPropHandleT<float> computeVertexAreas(PolyMesh & mesh);
 
 }
 

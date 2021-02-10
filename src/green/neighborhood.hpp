@@ -113,7 +113,7 @@ namespace green {
 		MeshCache() = default;
 
 		MeshCache(
-			const TriMesh &mesh,
+			const PolyMesh &mesh,
 			OpenMesh::EPropHandleT<float> edgeLengthProperty,
 			OpenMesh::VPropHandleT<float> vertexAreasProperty,
 			OpenMesh::VPropHandleT<float> curvatureMeasure

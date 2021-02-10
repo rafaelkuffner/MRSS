@@ -61,7 +61,7 @@ namespace {
 	// by area, normalized
 	template <size_t NBins = 256, typename URNG>
 	inline std::array<float, NBins> maxdon_histogram(
-		const green::TriMesh &mesh,
+		const green::PolyMesh &mesh,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		float normalPower,
 		float maxval,
@@ -78,7 +78,7 @@ namespace {
 		float atot = 0;
 		// note: this sampling is not area-uniform
 		for (size_t i = start; i < std::min(start + maxsamples, mesh.n_vertices()); i++) {
-			TriMesh::VertexHandle v(shuffled_samples[i]);
+			PolyMesh::VertexHandle v(shuffled_samples[i]);
 			const float area = mesh.property(vertexAreasProperty, v);
 			const float don = std::min(maxdon(mesh, v, normalPower), maxval);
 			const auto bin = intptr_t(hist_irange * don);
@@ -97,9 +97,9 @@ namespace {
 namespace green {
 
 	ModelBase::ModelBase(const std::filesystem::path &fpath) {
-		m_trimesh.request_face_normals();
-		m_trimesh.request_vertex_normals();
-		m_trimesh.request_vertex_colors();
+		m_mesh.request_face_normals();
+		m_mesh.request_vertex_normals();
+		m_mesh.request_vertex_colors();
 		// face status not really required here
 		// NOTE face status currently breaks decimation
 		//m_trimesh.request_face_status();
@@ -112,7 +112,7 @@ namespace green {
 			throw std::runtime_error("file does not exist");
 		}
 
-		if (OpenMesh::IO::read_mesh(m_trimesh, fpath, readOptions)) {
+		if (OpenMesh::IO::read_mesh(m_mesh, fpath, readOptions)) {
 			std::cerr << "Loaded" << std::endl;
 		} else {
 			std::cerr << "Failed" << std::endl;
@@ -121,28 +121,28 @@ namespace green {
 
 		// TODO necessary? optional?
 		// NOTE currently done by assimp too
-		m_trimesh.triangulate();
+		m_mesh.triangulate();
 		
 		// copy original vertex colors
 		// (because we need to be able to overwrite the actual vertex colors during export)
 		if (readOptions.check(OpenMesh::IO::Options::VertexColor)) {
 			std::cout << "Found vertex colors" << std::endl;
-			m_trimesh.add_property(m_prop_vcolor_original);
-			for (auto vIt = m_trimesh.vertices_begin(); vIt != m_trimesh.vertices_end(); ++vIt) {
-				m_trimesh.property(m_prop_vcolor_original, *vIt) = m_trimesh.color(*vIt);
+			m_mesh.add_property(m_prop_vcolor_original);
+			for (auto vIt = m_mesh.vertices_begin(); vIt != m_mesh.vertices_end(); ++vIt) {
+				m_mesh.property(m_prop_vcolor_original, *vIt) = m_mesh.color(*vIt);
 			}
 		}
 
 		// check for 'raw' saliency properties
 		std::vector<std::pair<saliency_prop_t, model_saliency_data>> sprops;
-		for (auto it = m_trimesh.vprops_begin(); it != m_trimesh.vprops_end(); ++it) {
+		for (auto it = m_mesh.vprops_begin(); it != m_mesh.vprops_end(); ++it) {
 			// TODO any way to do this other than dynamic cast?
 			auto prop = dynamic_cast<OpenMesh::PropertyT<float> *>(*it);
 			if (!prop) continue;
 			if (prop->name().substr(0, 7) == "quality") {
 				std::cout << "Found saliency property with internal name " << prop->name() << std::endl;
-				auto ph0 = saliency_prop_t{int(it - m_trimesh.vprops_begin())};
-				if (&m_trimesh.property(ph0) != prop) abort();
+				auto ph0 = saliency_prop_t{int(it - m_mesh.vprops_begin())};
+				if (&m_mesh.property(ph0) != prop) abort();
 				model_saliency_data sd;
 				sd.filename = fpath.filename().u8string();
 				auto &pname = prop->name();
@@ -178,20 +178,20 @@ namespace green {
 		// need 2 passes because we cant modify the properties while iterating them
 		for (auto &p : sprops) {
 			saliency_prop_t ph;
-			m_trimesh.add_property(ph);
-			m_trimesh.property(ph).data_vector() = std::move(m_trimesh.property(p.first).data_vector());
-			m_trimesh.remove_property(p.first);
+			m_mesh.add_property(ph);
+			m_mesh.property(ph).data_vector() = std::move(m_mesh.property(p.first).data_vector());
+			m_mesh.remove_property(p.first);
 			auto sd = std::move(p.second);
 			sd.prop_saliency = ph;
 			m_saliency.push_back(std::move(sd));
 		}
 
 		// move original vids to unnamed property
-		if (OpenMesh::VPropHandleT<int> pvid; m_trimesh.get_property_handle(pvid, "original_vid")) {
+		if (OpenMesh::VPropHandleT<int> pvid; m_mesh.get_property_handle(pvid, "original_vid")) {
 			std::cout << "Found original vertex ids property" << std::endl;
-			m_trimesh.add_property(m_prop_vid_original);
-			m_trimesh.property(m_prop_vid_original).data_vector() = std::move(m_trimesh.property(pvid).data_vector());
-			m_trimesh.remove_property(pvid);
+			m_mesh.add_property(m_prop_vid_original);
+			m_mesh.property(m_prop_vid_original).data_vector() = std::move(m_mesh.property(pvid).data_vector());
+			m_mesh.remove_property(pvid);
 		}
 
 	}
@@ -219,25 +219,25 @@ namespace green {
 		
 		// calculate normals always
 		std::cout << "Computing vertex normals" << std::endl;
-		m_trimesh.update_face_normals();
-		m_trimesh.update_vertex_normals();
+		m_mesh.update_face_normals();
+		m_mesh.update_vertex_normals();
 
 		std::cout << "Computing bounding box" << std::endl;
-		for (auto vit = m_trimesh.vertices_begin(); vit != m_trimesh.vertices_end(); ++vit) {
-			m_bound_min = min(m_bound_min, om2glm(m_trimesh.point(*vit)));
-			m_bound_max = max(m_bound_max, om2glm(m_trimesh.point(*vit)));
+		for (auto vit = m_mesh.vertices_begin(); vit != m_mesh.vertices_end(); ++vit) {
+			m_bound_min = min(m_bound_min, om2glm(m_mesh.point(*vit)));
+			m_bound_max = max(m_bound_max, om2glm(m_mesh.point(*vit)));
 		}
 
 		std::cout << "Computing vertex areas" << std::endl;
-		m_prop_vertex_area = computeVertexAreas(m_trimesh);
+		m_prop_vertex_area = computeVertexAreas(m_mesh);
 
 		std::cout << "Computing edge lengths" << std::endl;
-		m_prop_edge_length = computeEdgeLengths(m_trimesh);
+		m_prop_edge_length = computeEdgeLengths(m_mesh);
 
 		std::cout << "Computing raw don curvature" << std::endl;
 		// TODO what if we didnt want this? (to run and time with a difference curv measure)
 		const auto time_curv_start = std::chrono::steady_clock::now();
-		computeDoNMaxDiffs(m_trimesh, m_prop_doncurv_raw, m_prop_vertex_area, 1);
+		computeDoNMaxDiffs(m_mesh, m_prop_doncurv_raw, m_prop_vertex_area, 1);
 		const auto time_curv_finish = std::chrono::steady_clock::now();
 		std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 
@@ -248,14 +248,14 @@ namespace green {
 			// TODO run this after decimation too
 			static constexpr int hist_bits = 8;
 			std::minstd_rand rand{std::random_device{}()};
-			std::vector<int> samples(m_trimesh.n_vertices());
+			std::vector<int> samples(m_mesh.n_vertices());
 			std::iota(samples.begin(), samples.end(), 0);
 			std::shuffle(samples.begin(), samples.end(), rand);
 			auto eval_entropy = [&](float contrast) {
 				//std::cout << "computing entropy for contrast=" << contrast << std::endl;
 				// use upper bound of 1 (and saliency now always uses 0-1 binning too)
 				// (determining the upper bound exactly would need a prepass to calculate the range before binning)
-				auto hist = maxdon_histogram<(1 << hist_bits)>(m_trimesh, m_prop_vertex_area, contrast, 1.f, rand, samples);
+				auto hist = maxdon_histogram<(1 << hist_bits)>(m_mesh, m_prop_vertex_area, contrast, 1.f, rand, samples);
 				float s = histogram_entropy(hist);
 				//std::cout << "entropy=" << s << std::endl;
 				return s;
@@ -309,35 +309,35 @@ namespace green {
 		}
 		// assign vertex colors
 		if (sparams.color_mode != model_color_mode::none) {
-			m_trimesh.request_vertex_colors();
-			for (auto vIt = m_trimesh.vertices_begin(); vIt != m_trimesh.vertices_end(); ++vIt) {
-				TriMesh::Color col;
+			m_mesh.request_vertex_colors();
+			for (auto vIt = m_mesh.vertices_begin(); vIt != m_mesh.vertices_end(); ++vIt) {
+				PolyMesh::Color col;
 				OpenMesh::Vec3f v;
 				bool usev = true;
 				switch (sparams.color_mode) {
 				case model_color_mode::saliency:
 				{
-					const float s = m_trimesh.property(sparams.prop_saliency, *vIt);
+					const float s = m_mesh.property(sparams.prop_saliency, *vIt);
 					mapScalarToColor(v, s, TransferFunction::ZBRUSH);
 					break;
 				}
 				case model_color_mode::saliency_comparison:
 				{
-					const float s = m_trimesh.property(sparams.prop_saliency, *vIt);
-					const float b = m_trimesh.property(sparams.prop_saliency_baseline, *vIt);
+					const float s = m_mesh.property(sparams.prop_saliency, *vIt);
+					const float b = m_mesh.property(sparams.prop_saliency_baseline, *vIt);
 					mapScalarToColor(v, std::clamp((s - b) * sparams.error_scale * 0.5f + 0.5f, 0.f, 1.f), TransferFunction::ZBRUSH);
 					break;
 				}
 				case model_color_mode::vcolor:
 				{
-					col = m_trimesh.property(m_prop_vcolor_original, *vIt);
+					col = m_mesh.property(m_prop_vcolor_original, *vIt);
 					usev = false;
 					break;
 				}
 				case model_color_mode::doncurv:
 				{
 					// note: need much lower contrast for display than for saliency
-					const float c = std::pow(m_trimesh.property(m_prop_doncurv_raw, *vIt), m_auto_contrast * 0.2f);
+					const float c = std::pow(m_mesh.property(m_prop_doncurv_raw, *vIt), m_auto_contrast * 0.2f);
 					mapScalarToColor(v, c, TransferFunction::ZBRUSH);
 					break;
 				}
@@ -350,7 +350,7 @@ namespace green {
 					col[1] = v[1];
 					col[2] = v[2];
 				}
-				m_trimesh.set_color(*vIt, col);
+				m_mesh.set_color(*vIt, col);
 			}
 		}
 		// copy export saliency to named properties
@@ -360,20 +360,20 @@ namespace green {
 			saliency_prop_t p;
 			const auto name = sd.export_propname(exprops.size());
 			std::cout << "Export saliency property with internal name " << name << std::endl;
-			m_trimesh.add_property(p, name);
+			m_mesh.add_property(p, name);
 			exprops.push_back(p);
 			// persistent => openmesh will export with Options::Custom
-			m_trimesh.property(p).set_persistent(true);
+			m_mesh.property(p).set_persistent(true);
 			// note - copying saliency data, not exactly efficient
-			m_trimesh.property(p).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
+			m_mesh.property(p).data_vector() = m_mesh.property(sd.prop_saliency).data_vector();
 		}
 		// copy original vids to named property
 		OpenMesh::VPropHandleT<int> exprop_vid;
 		if (sparams.original_vids && m_prop_vid_original.is_valid()) {
 			std::cout << "Export property for original vertex ids" << std::endl;
-			m_trimesh.add_property(exprop_vid, "original_vid");
-			m_trimesh.property(exprop_vid).set_persistent(true);
-			m_trimesh.property(exprop_vid).data_vector() = m_trimesh.property(m_prop_vid_original).data_vector();
+			m_mesh.add_property(exprop_vid, "original_vid");
+			m_mesh.property(exprop_vid).set_persistent(true);
+			m_mesh.property(exprop_vid).data_vector() = m_mesh.property(m_prop_vid_original).data_vector();
 		}
 		// export!
 		OpenMesh::IO::Options opts{};
@@ -381,11 +381,11 @@ namespace green {
 		if (sparams.color_mode != model_color_mode::none) opts = opts | OpenMesh::IO::Options::VertexColor;
 		if (sparams.binary) opts = opts | OpenMesh::IO::Options::Binary;
 		std::cerr << "Saving model " << fpath.u8string() << std::endl;
-		auto res = OpenMesh::IO::write_mesh(m_trimesh, fpath, opts);
+		auto res = OpenMesh::IO::write_mesh(m_mesh, fpath, opts);
 		// remove temp named properties
-		m_trimesh.remove_property(exprop_vid);
+		m_mesh.remove_property(exprop_vid);
 		for (auto &p : exprops) {
-			m_trimesh.remove_property(p);
+			m_mesh.remove_property(p);
 		}
 		// done
 		if (res) {
@@ -402,12 +402,12 @@ namespace green {
 		m.m_bound_max = m_bound_max;
 		// copy vertex positions and connectivity
 		// FIXME if source has face status etc, those props are broken in the copy! (openmesh bug)
-		if (m_trimesh.has_face_status()) std::abort();
-		m.m_trimesh.assign(m_trimesh);
+		if (m_mesh.has_face_status()) std::abort();
+		m.m_mesh.assign(m_mesh);
 		// copy original vertex colors if present
 		if (m_prop_vcolor_original.is_valid()) {
-			m.m_trimesh.add_property(m.m_prop_vcolor_original);
-			m.m_trimesh.property(m.m_prop_vcolor_original).data_vector() = m_trimesh.property(m_prop_vcolor_original).data_vector();
+			m.m_mesh.add_property(m.m_prop_vcolor_original);
+			m.m_mesh.property(m.m_prop_vcolor_original).data_vector() = m_mesh.property(m_prop_vcolor_original).data_vector();
 		}
 		// TODO not currently copying existing original vids
 		// (would need a nice way of choosing when to keep or regen)
@@ -418,9 +418,9 @@ namespace green {
 			sd2.prop_sampled.invalidate();
 			sd2.decimated = true;
 			if (sd.prop_saliency.is_valid()) {
-				m.m_trimesh.add_property(sd2.prop_saliency);
+				m.m_mesh.add_property(sd2.prop_saliency);
 				if (sd.prop_saliency == prop_saliency) m.m_prop_sal_dec = sd2.prop_saliency;
-				m.m_trimesh.property(sd2.prop_saliency).data_vector() = m_trimesh.property(sd.prop_saliency).data_vector();
+				m.m_mesh.property(sd2.prop_saliency).data_vector() = m_mesh.property(sd.prop_saliency).data_vector();
 				m.m_saliency.push_back(std::move(sd2));
 			}
 		}
@@ -431,28 +431,28 @@ namespace green {
 		// generate original vertex ids if not present
 		// never present atm
 		if (!m_prop_vid_original.is_valid()) {
-			m_trimesh.add_property(m_prop_vid_original);
-			for (auto v : m_trimesh.vertices()) {
-				m_trimesh.property(m_prop_vid_original, v) = v.idx();
+			m_mesh.add_property(m_prop_vid_original);
+			for (auto v : m_mesh.vertices()) {
+				m_mesh.property(m_prop_vid_original, v) = v.idx();
 			}
 		}
 		// decimate!
 		std::cout << "Decimating model" << std::endl;
 		decimate_mesh_params mparams;
-		mparams.mesh = &m_trimesh;
+		mparams.mesh = &m_mesh;
 		mparams.prop_saliency = m_prop_sal_dec;
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
-		m_trimesh.request_face_normals();
-		m_trimesh.request_vertex_normals();
-		m_trimesh.update_face_normals();
-		m_trimesh.update_vertex_normals();
+		m_mesh.request_face_normals();
+		m_mesh.request_vertex_normals();
+		m_mesh.update_face_normals();
+		m_mesh.update_vertex_normals();
 		// recompute vertex areas and edge length
 		std::cout << "Computing vertex areas" << std::endl;
-		m_prop_vertex_area = computeVertexAreas(m_trimesh);
+		m_prop_vertex_area = computeVertexAreas(m_mesh);
 		std::cout << "Computing edge lengths" << std::endl;
-		m_prop_edge_length = computeEdgeLengths(m_trimesh);
+		m_prop_edge_length = computeEdgeLengths(m_mesh);
 		return true;
 	}
 
@@ -463,8 +463,8 @@ namespace green {
 		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
 		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
 		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
-		const size_t ntris = m_trimesh.n_faces();
-		const size_t nverts = m_trimesh.n_vertices();
+		const size_t ntris = m_mesh.n_faces();
+		const size_t nverts = m_mesh.n_vertices();
 		assert(ntris <= size_t(INT_MAX));
 		assert(nverts <= size_t(INT_MAX));
 		m_vao_ntris = ntris;
@@ -478,8 +478,8 @@ namespace green {
 			auto pibo = reinterpret_cast<GLuint *>(
 				glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size_ibo, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 			);
-			for (auto fit = m_trimesh.faces_begin(); fit != m_trimesh.faces_end(); ++fit) {
-				auto hit = m_trimesh.cfv_iter(*fit);
+			for (auto fit = m_mesh.faces_begin(); fit != m_mesh.faces_end(); ++fit) {
+				auto hit = m_mesh.cfv_iter(*fit);
 				// assume triangles
 				*pibo++ = GLuint(hit++->idx());
 				*pibo++ = GLuint(hit++->idx());
@@ -507,11 +507,11 @@ namespace green {
 		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
 		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
-		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * sizeof(glm::vec3), m_trimesh.points(), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec3), m_mesh.points(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_norm);
-		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * sizeof(glm::vec3), m_trimesh.vertex_normals(), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec3), m_mesh.vertex_normals(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
-		glBufferData(GL_ARRAY_BUFFER, m_trimesh.n_vertices() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
@@ -524,7 +524,6 @@ namespace green {
 		if (cparams.color_mode == model_color_mode::saliency_comparison && !cparams.prop_saliency_baseline.is_valid()) return false;
 		if (cparams.color_mode == model_color_mode::doncurv && !m_prop_doncurv_raw.is_valid()) return false;
 		if (!m_vbo_col) return false;
-		const auto &mesh = trimesh();
 		const auto nverts = vao_nverts();
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
 		auto *data = reinterpret_cast<glm::vec4 *>(
@@ -533,7 +532,7 @@ namespace green {
 		if (cparams.color_mode == model_color_mode::saliency) {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
-				const float s = mesh.property(cparams.prop_saliency, v);
+				const float s = m_mesh.property(cparams.prop_saliency, v);
 				data[i] = glm::vec4(s, 0, 0, 0);
 			}
 		} else if (cparams.color_mode == model_color_mode::saliency_comparison) {
@@ -542,8 +541,8 @@ namespace green {
 			float sse = 0;
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
-				const float b = mesh.property(cparams.prop_saliency_baseline, v);
-				const float s = mesh.property(cparams.prop_saliency, v);
+				const float b = m_mesh.property(cparams.prop_saliency_baseline, v);
+				const float s = m_mesh.property(cparams.prop_saliency, v);
 				const float e = s - b;
 				err->min = std::min(err->min, e);
 				err->max = std::max(err->max, e);
@@ -555,7 +554,7 @@ namespace green {
 		} else if (cparams.color_mode == model_color_mode::vcolor) {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
-				const auto col = mesh.property(m_prop_vcolor_original, v);
+				const auto col = m_mesh.property(m_prop_vcolor_original, v);
 				// need to gamma decode the color because the shader expects linear
 				data[i] = glm::vec4(pow(glm::vec3(col[0], col[1], col[2]) / 255.f, glm::vec3(2.2f)), 1);
 			}
@@ -563,7 +562,7 @@ namespace green {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				// note: need much lower contrast for display than for saliency
-				const float c = std::pow(mesh.property(m_prop_doncurv_raw, v), auto_contrast() * 0.2f);
+				const float c = std::pow(m_mesh.property(m_prop_doncurv_raw, v), auto_contrast() * 0.2f);
 				data[i] = glm::vec4(c, 0, 0, 0);
 			}
 		}

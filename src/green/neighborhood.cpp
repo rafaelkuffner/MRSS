@@ -941,7 +941,7 @@ namespace green {
 
 
 	MeshCache::MeshCache(
-		const TriMesh & mesh,
+		const PolyMesh & mesh,
 		OpenMesh::EPropHandleT<float> edgeLengthProperty,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
 		OpenMesh::VPropHandleT<float> curvatureMeasure
@@ -973,7 +973,7 @@ namespace green {
 			}
 			datasize += vertex_size(nedges);
 			// get max vertex area for scaling
-			const float area = mesh.property(vertexAreasProperty, TriMesh::VertexHandle(vit));
+			const float area = mesh.property(vertexAreasProperty, PolyMesh::VertexHandle(vit));
 			area_scale = std::max(area_scale, area);
 		}
 		
@@ -1023,18 +1023,18 @@ namespace green {
 					{
 						vertex &vdata = get_vertex(di);
 						vertex_aux &vadata = get_vertex_aux(di);
-						const float area = std::max(mesh.property(vertexAreasProperty, TriMesh::VertexHandle(vi)), 0.f);
+						const float area = std::max(mesh.property(vertexAreasProperty, PolyMesh::VertexHandle(vi)), 0.f);
 						// encode area
 						vdata.areax = encode_area(area);
-						const float curv = std::clamp(mesh.property(curvatureMeasure, TriMesh::VertexHandle(vi)), 0.f, 1.f);
+						const float curv = std::clamp(mesh.property(curvatureMeasure, PolyMesh::VertexHandle(vi)), 0.f, 1.f);
 						// bin curvature based on 0-1 range
 						vdata.curvbin = unsigned(255.f * curv);
 						vadata.vi = vi;
-						vadata.pos = mesh.point(TriMesh::VertexHandle(vi));
-						vadata.norm = mesh.normal(TriMesh::VertexHandle(vi));
+						vadata.pos = mesh.point(PolyMesh::VertexHandle(vi));
+						vadata.norm = mesh.normal(PolyMesh::VertexHandle(vi));
 					}
 					unsigned nedges = 0;
-					for (auto vohIt = mesh.cvoh_iter(TriMesh::VertexHandle(vi)); vohIt.is_valid(); ++vohIt) {
+					for (auto vohIt = mesh.cvoh_iter(PolyMesh::VertexHandle(vi)); vohIt.is_valid(); ++vohIt) {
 						const int nvi = mesh.to_vertex_handle(*vohIt).idx();
 						if (!visited[nvi]) open_vertices_inner.push_back(nvi);
 						// can't resolve neighbour data index on first pass, so use a second pass
@@ -1066,7 +1066,7 @@ namespace green {
 			const unsigned vdi = vi2di[vi];
 			auto &v = get_vertex(vdi);
 			int i = 0;
-			for (auto vohIt = mesh.cvoh_iter(TriMesh::VertexHandle(vi)); vohIt.is_valid(); ++vohIt, ++i) {
+			for (auto vohIt = mesh.cvoh_iter(PolyMesh::VertexHandle(vi)); vohIt.is_valid(); ++vohIt, ++i) {
 				const int nV = mesh.to_vertex_handle(*vohIt).idx();
 				edge &e = v.edges[i];
 				e.ndi = vi2di[nV];

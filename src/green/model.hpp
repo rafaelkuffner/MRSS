@@ -113,28 +113,30 @@ namespace green {
 	// one good reason for this is to exclude only the initial load from timing.
 	class ModelBase {
 	protected:
-		ModelBase(const ModelBase &) = delete;
-		ModelBase & operator=(const ModelBase &) = delete;
-
-		TriMesh m_trimesh;
-		OpenMesh::VPropHandleT<TriMesh::Color> m_prop_vcolor_original;
+		// FIXME openmesh types are not movable
+		PolyMesh m_mesh;
+		OpenMesh::VPropHandleT<PolyMesh::Color> m_prop_vcolor_original;
 		OpenMesh::VPropHandleT<int> m_prop_vid_original;
 		std::vector<model_saliency_data> m_saliency;
 
 	public:
 		ModelBase() {}
 
+		ModelBase(const ModelBase &) = delete;
+		ModelBase & operator=(const ModelBase &) = delete;
+
+		// FIXME noexcept
 		ModelBase(ModelBase &&) = default;
 		ModelBase & operator=(ModelBase &&) = default;
 
 		ModelBase(const std::filesystem::path &fpath);
 
-		const TriMesh & trimesh() const {
-			return m_trimesh;
+		const PolyMesh & mesh() const {
+			return m_mesh;
 		}
 
-		TriMesh & trimesh() {
-			return m_trimesh;
+		PolyMesh & mesh() {
+			return m_mesh;
 		}
 
 		std::vector<model_saliency_data> & saliency() {
@@ -155,7 +157,7 @@ namespace green {
 			return m_saliency.begin() + (cit - m_saliency.cbegin());
 		}
 
-		OpenMesh::VPropHandleT<TriMesh::Color> prop_vcolor_original() const {
+		OpenMesh::VPropHandleT<PolyMesh::Color> prop_vcolor_original() const {
 			return m_prop_vcolor_original;
 		}
 
@@ -163,9 +165,6 @@ namespace green {
 
 	class Model : public ModelBase {
 	private:
-		Model(const Model &) = delete;
-		Model & operator=(const Model &) = delete;
-
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
 		OpenMesh::VPropHandleT<float> m_prop_doncurv_raw;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
@@ -182,6 +181,10 @@ namespace green {
 	public:
 		Model() {}
 
+		Model(const Model &) = delete;
+		Model & operator=(const Model &) = delete;
+
+		// FIXME noexcept
 		Model(Model &&) = default;
 		Model & operator=(Model &&) = default;
 

@@ -23,7 +23,7 @@ namespace {
 	using sal_prop_t = decltype(decimate_mesh_params::prop_saliency);
 
 	// left bin edges (with trailing upper edge)
-	std::vector<float> saliency_bin_edges(TriMesh &mesh, sal_prop_t prop, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
+	std::vector<float> saliency_bin_edges(PolyMesh &mesh, sal_prop_t prop, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
 		struct salvert {
 			OpenMesh::VertexHandle v;
 			float s = 0;
@@ -55,7 +55,7 @@ namespace {
 		return sal_bin_edges;
 	}
 
-	std::vector<int> saliency_bin_counts(const TriMesh &mesh, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
+	std::vector<int> saliency_bin_counts(const PolyMesh &mesh, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
 		std::vector<int> counts(nbins, 0);
 		for (auto &bin : mesh.property(prop_bin).data_vector()) {
 			counts[bin]++;
@@ -197,13 +197,13 @@ namespace green {
 		}
 
 		progress.state = decimation_state::run;
-		OpenMesh::Decimater::DecimaterT<TriMesh> decimater(*mparams.mesh);
+		OpenMesh::Decimater::DecimaterT<PolyMesh> decimater(*mparams.mesh);
 		
-		OpenMesh::Decimater::ModQuadricT<TriMesh>::Handle hModQuadrics;
+		OpenMesh::Decimater::ModQuadricT<PolyMesh>::Handle hModQuadrics;
 		decimater.add(hModQuadrics);
 		decimater.module(hModQuadrics).unset_max_err();
 
-		ModVertexWeightingT<TriMesh>::Handle hModWeighting;
+		ModVertexWeightingT<PolyMesh>::Handle hModWeighting;
 		decimater.add(hModWeighting);
 		decimater.module(hModWeighting).progress = &progress;
 		decimater.module(hModWeighting).time_start = time_start;
