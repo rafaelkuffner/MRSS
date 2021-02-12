@@ -25,7 +25,13 @@
 namespace green {
 
 	enum class model_color_mode : unsigned char {
-		none, vcolor, saliency, saliency_comparison, doncurv
+		none,
+		vcolor,
+		saliency,
+		saliency_comparison, 
+		doncurv,
+		uv,
+		checkerboard
 	};
 
 	struct model_draw_params {
@@ -139,6 +145,10 @@ namespace green {
 			return m_mesh;
 		}
 
+		bool has_texcoords2d() const {
+			return m_mesh.has_halfedge_texcoords2D();
+		}
+
 		std::vector<model_saliency_data> & saliency() {
 			return m_saliency;
 		}
@@ -173,10 +183,13 @@ namespace green {
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 		float m_auto_contrast = 1;
 
-		GLuint m_vao_ntris = 0, m_vao_nverts = 0;
-		cgu::gl_object m_vao;
-		cgu::gl_object m_ibo;
-		cgu::gl_object m_vbo_pos, m_vbo_norm, m_vbo_col;
+		// glsl texelFetch only takes int
+		GLint m_vao_nverts = 0, m_vao_nedges = 0, m_vao_ntris = 0;
+		cgu::gl_object m_vao_verts, m_vao_edges, m_vao_tris;
+		cgu::gl_object m_ibo_edges, m_ibo_tris;
+		cgu::gl_object m_vbo_pos, m_vbo_col, m_vbo_halfedges;
+		cgu::gl_object m_tex_pos, m_tex_col;
+		bool m_force_shade_flat = false;
 
 	public:
 		Model() {}
@@ -243,6 +256,7 @@ namespace green {
 			return m_auto_contrast;
 		}
 
+		// TODO does this still need exposing?
 		GLuint vbo_color() const {
 			return m_vbo_col;
 		}
@@ -251,7 +265,7 @@ namespace green {
 			return m_vao_nverts;
 		}
 
-		void update_vao();
+		void update_vaos();
 
 		void update_vbos();
 
@@ -261,6 +275,17 @@ namespace green {
 
 		void draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode = GL_FILL) const;
 
+	private:
+		void update_vao_verts();
+		void update_vao_edges();
+		void update_vao_tris();
+
+		struct halfedge_vbo_props {
+			// glsl texelFetch only takes int
+			GLint vid = 0;
+			glm::vec3 norm{};
+			glm::vec2 uv{};
+		};
 	};
 
 }

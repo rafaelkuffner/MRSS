@@ -8,21 +8,37 @@ uniform vec3 u_pos_bias = vec3(0);
 uniform float u_shading = 0;
 uniform float u_depth_bias = 0;
 uniform int u_entity_id;
-uniform int u_vert_color_map = 0;
+uniform int u_color_map = 0;
 uniform bool u_show_samples = false;
+uniform sampler2D u_sampler_col;
 
 #ifdef _VERTEX_
+// color: saliency in R or color in RGB (A unused atm)
 
+#if defined(MODEL_VERTS) || defined(MODEL_EDGES)
 layout(location=0) in vec3 a_pos_m;
+layout(location=1) in vec4 a_color;
+vec3 fetch_pos_m() { return a_pos_m; }
+vec4 fetch_color() { return a_color; }
+vec3 fetch_norm_m() { return vec3(0); }
+vec2 fetch_uv() { return vec2(0); }
+#elif defined(MODEL_TRIS)
+uniform samplerBuffer u_buf_pos;
+uniform samplerBuffer u_buf_col;
+layout(location=0) in int a_vid;
 layout(location=1) in vec3 a_norm_m;
-
-// saliency in R or color in RGB; sampled flag in A
-layout(location=2) in vec4 a_color;
+layout(location=2) in vec2 a_uv;
+vec3 fetch_pos_m() { return texelFetch(u_buf_pos, a_vid).xyz; }
+vec4 fetch_color() { return texelFetch(u_buf_col, a_vid); }
+vec3 fetch_norm_m() { return a_norm_m; }
+vec2 fetch_uv() { return a_uv; }
+#endif
 
 out VertexData {
 	vec3 pos_v;
 	vec3 norm_v;
 	vec4 color;
+	vec2 uv;
 	flat int id;
 	// this causes problems with intel igpus, and we're not using it atm anyway
 	//flat bool should_discard;
@@ -45,7 +61,7 @@ vec4 map_color_zbrush(float k) {
 }
 
 vec4 map_color(vec4 c) {
-	switch (u_vert_color_map) {
+	switch (u_color_map) {
 	case 0:
 		// uniform color
 		return u_color;
@@ -61,19 +77,27 @@ vec4 map_color(vec4 c) {
 	case 4:
 		// difference, zbrush style
 		return map_color_zbrush(c.r * 0.5 + 0.5);
+	case 5:
+		// UV coords
+		return vec4(fetch_uv(), 0, 0);
+	case 6:
+		// texture (implemented in frag shader)
+		return vec4(0);
 	default:
 		return c;
 	}
 }
 
 void main() {
-	vec4 pos_v = u_modelview * vec4(a_pos_m + u_pos_bias, 1);
+	vec4 pos_v = u_modelview * vec4(fetch_pos_m() + u_pos_bias, 1);
 	gl_Position = u_projection * pos_v;
 	v_out.pos_v = pos_v.xyz;
-#ifdef SHADE_SMOOTH
-	v_out.norm_v = normalize(vec3(u_modelview * vec4(a_norm_m + vec3(0,0.0001,0), 0)));
+#ifndef SHADE_FLAT
+	// note: could be used by non-triangle modes
+	v_out.norm_v = normalize(vec3(0,0,0.0001) + vec3(u_modelview * vec4(fetch_norm_m(), 0)));
 #endif
-	v_out.color = map_color(a_color);
+	v_out.color = map_color(fetch_color());
+	v_out.uv = fetch_uv();
 	v_out.id = gl_VertexID;
 	//v_out.should_discard = u_show_samples && a_color.a < 0.5;
 }
@@ -89,6 +113,7 @@ in VertexData {
 	vec3 pos_v;
 	vec3 norm_v;
 	vec4 color;
+	vec2 uv;
 	flat int id;
 	//flat bool should_discard;
 } v_in[];
@@ -97,6 +122,7 @@ out VertexData {
 	vec3 pos_v;
 	vec3 norm_v;
 	vec4 color;
+	vec2 uv;
 	flat int id;
 	//flat bool should_discard;
 } v_out;
@@ -115,6 +141,7 @@ void main() {
 		v_out.norm_v = v_in[i].norm_v;
 #endif
 		v_out.color = v_in[i].color;
+		v_out.uv = v_in[i].uv;
 		v_out.id = v_in[i].id;
 		EmitVertex();
 	}
@@ -129,6 +156,7 @@ in VertexData {
 	vec3 pos_v;
 	vec3 norm_v;
 	vec4 color;
+	vec2 uv;
 	flat int id;
 	//flat bool should_discard;
 } v_in;
@@ -139,7 +167,11 @@ layout(location=1) out ivec2 f_id;
 void main() {
 	//if (v_in.should_discard) discard;
 	vec3 norm_v = normalize(v_in.norm_v);
-	f_color = vec4(v_in.color.rgb * (abs(norm_v.z) * u_shading + 1.0 - u_shading), 1);
+	vec3 color = v_in.color.rgb;
+	// texture
+	if (u_color_map == 6) color = texture(u_sampler_col, v_in.uv).rgb;
+	// note: allowing -ve norm_v.z, such faces may still be visible
+	f_color = vec4(color * max(norm_v.z * u_shading + 1.0 - u_shading, 0.0), 1);
 	gl_FragDepth = frag_depth() + u_depth_bias;
 	f_id.x = u_entity_id;
 	f_id.y = v_in.id;

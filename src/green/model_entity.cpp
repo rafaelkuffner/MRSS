@@ -10,6 +10,7 @@
 #include "main.hpp"
 
 namespace {
+	using namespace green;
 
 	auto & mesh_io_mutex() {
 		static std::mutex m;
@@ -17,7 +18,7 @@ namespace {
 	}
 
 	struct saliency_clipboard_data {
-		green::model_saliency_data sd;
+		model_saliency_data sd;
 		std::vector<float> data;
 	};
 
@@ -26,6 +27,53 @@ namespace {
 		return d;
 	}
 
+	bool combo_color_mode(model_color_mode &mode) {
+		using namespace ImGui;
+		const char *optstr =
+			"None\0"
+			"Vertex Color\0"
+			"Saliency\0"
+			"Saliency Comparison\0"
+			"Curvature (DoN)\0"
+			"UVs\0"
+			"Checkerboard\0";
+		int x = int(mode);
+		if (Combo("Color Mode", &x, optstr)) {
+			mode = model_color_mode(x);
+			return true;
+		}
+		return false;
+	}
+
+	GLuint checkerboard_texture() {
+		static GLuint tex = 0;
+		if (!tex) {
+			glGenTextures(1, &tex);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
+			constexpr size_t shift = 6;
+			constexpr size_t sx = 1 << shift;
+			std::vector<GLubyte> data(sx * sx * 4);
+			for (size_t i = 0; i < sx * sx; i++) {
+				const auto a = GLubyte((i & 1u) - 1u);
+				const auto b = GLubyte(((i >> shift) & 1u) - 1u);
+				const auto k = (a ^ b) | GLubyte(15);
+				data[i * 4 + 0] = k;
+				data[i * 4 + 1] = k;
+				data[i * 4 + 2] = k;
+				data[i * 4 + 3] = 0xFF;
+			}
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sx, sx, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+		return tex;
+	}
 }
 
 namespace green {
@@ -289,8 +337,9 @@ namespace green {
 				r |= Checkbox("Color Verts", &m_color_verts);
 				SetHoveredTooltip("Apply color mode to vertices");
 				r |= Checkbox("Cull Faces", &m_cull_faces);
-				SameLine();
-				r |= Checkbox("Cull Edges", &m_cull_edges);
+				// TODO culling 'back' edges not supported atm
+				//SameLine();
+				//r |= Checkbox("Cull Edges", &m_cull_edges);
 				r |= SliderInt("Point Size", &m_vert_point_size, 1, 5);
 				m_vert_point_size = std::max(1, m_vert_point_size);
 				if (r) invalidate_scene();
@@ -298,12 +347,7 @@ namespace green {
 
 			Separator();
 
-			//SetNextItemWidth(GetContentRegionAvail().x);
-			int cur_color_mode = int(m_disp_color_mode);
-			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0Curvature (DoN)\0")) {
-				m_disp_color_mode = model_color_mode(cur_color_mode);
-				invalidate_saliency_vbo();
-			}
+			if (combo_color_mode(m_disp_color_mode)) invalidate_saliency_vbo();
 
 			Separator();
 
@@ -495,10 +539,7 @@ namespace green {
 			SameLine();
 			InputText("Path", pathbuf, sizeof(pathbuf));
 			// export color mode
-			int cur_color_mode = int(m_exp_color_mode);
-			if (Combo("Color Mode", &cur_color_mode, "None\0Vertex Color\0Saliency\0Saliency Comparison\0Curvature (DoN)\0")) {
-				m_exp_color_mode = model_color_mode(cur_color_mode);
-			}
+			combo_color_mode(m_exp_color_mode);
 			if (m_exp_color_mode == model_color_mode::saliency_comparison) {
 				if (m_saliency_baseline_index < m_model->saliency().size()) {
 					Text("Baseline: %s", m_model->saliency()[m_saliency_baseline_index].str().c_str());
@@ -768,16 +809,16 @@ namespace green {
 			try {
 				// is this the best place to do this?
 				m_model = m_pending_load.get();
-				// gl stuff has to happen on main thread
-				m_model->update_vao();
-				m_model->update_vbos();
-				m_scale = m_model->unit_bound_scale() * 4;
-				invalidate_saliency_vbo();
 			} catch (std::exception &e) {
 				std::cerr << "failed to load model: " << e.what() << std::endl;
 			} catch (...) {
 				std::cerr << "failed to load model" << std::endl;
 			}
+			// gl stuff has to happen on main thread (and dont catch exceptions from it)
+			m_model->update_vaos();
+			m_model->update_vbos();
+			m_scale = m_model->unit_bound_scale() * 4;
+			invalidate_saliency_vbo();
 		}
 		auto &sel = ui_selection();
 		const bool selected = sel.select_entity == id();
@@ -789,6 +830,7 @@ namespace green {
 			if (selected) draw_window_export();
 			if (draw_scene) {
 				update_vbo();
+				GLuint tex = 0;
 				// determine color map to apply in shader
 				auto &saliency_outputs = m_model->saliency();
 				int color_map = 0;
@@ -797,31 +839,35 @@ namespace green {
 				if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
 				if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
 				if (m_disp_color_mode == model_color_mode::doncurv) color_map = 3;
+				if (m_disp_color_mode == model_color_mode::uv && m_model->has_texcoords2d()) color_map = 5;
+				if (m_disp_color_mode == model_color_mode::checkerboard && m_model->has_texcoords2d()) {
+					color_map = 6;
+					tex = checkerboard_texture();
+				}
 				// prepare to draw
 				model_draw_params params;
 				params.sel = sel;
 				params.entity_id = id();
-				auto set_cull_faces = [](bool b) {
-					if (b) {
-						glEnable(GL_CULL_FACE);
-						glCullFace(GL_BACK);
-					} else {
-						glDisable(GL_CULL_FACE);
-					}
-				};
 				// faces
 				params.shade_flat = m_shade_flat;
 				params.color = {0.6f, 0.6f, 0.5f, 1};
 				params.vert_color_map = m_color_faces ? color_map : 0;
-				set_cull_faces(m_cull_faces);
+				glCullFace(GL_BACK);
+				if (m_cull_faces) glEnable(GL_CULL_FACE);
 				glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
-				if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+				if (m_show_faces) {
+					glActiveTexture(GL_TEXTURE0);
+					if (tex) glBindTexture(GL_TEXTURE_2D, tex);
+					m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+					glBindTexture(GL_TEXTURE_2D, 0);
+				}
 				// edges
 				params.shade_flat = false;
 				params.shading = 0;
 				params.color = {0.03f, 0.03f, 0.03f, 1};
 				params.vert_color_map = 0;
-				set_cull_faces(m_cull_edges);
+				// culling not supported atm
+				//set_cull_faces(m_cull_edges);
 				glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 				if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
 				// verts

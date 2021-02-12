@@ -11,6 +11,7 @@
 #include <memory>
 #include <charconv>
 #include <string_view>
+#include <limits>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -99,13 +100,19 @@ namespace green {
 	ModelBase::ModelBase(const std::filesystem::path &fpath) {
 		m_mesh.request_face_normals();
 		m_mesh.request_vertex_normals();
+		// need better loading for this
+		//m_mesh.request_halfedge_normals();
+		m_mesh.request_halfedge_texcoords2D();
 		m_mesh.request_vertex_colors();
 		// face status not really required here
 		// NOTE face status currently breaks decimation
 		//m_trimesh.request_face_status();
 		// load custom "quality" property and vertex colors if they exist
 		// FIXME what else do we need to ask for and preserve on export? texcoords?
-		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom | OpenMesh::IO::Options::VertexColor;
+		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom
+			| OpenMesh::IO::Options::VertexColor
+			| OpenMesh::IO::Options::FaceTexCoord;
+		// TODO FaceTexCoord is/controls halfedge texcoords, there is no halfedge normal option atm
 
 		std::cerr << "Loading model " << fpath.u8string() << std::endl;
 		if (!std::filesystem::is_regular_file(fpath)) {
@@ -121,7 +128,7 @@ namespace green {
 
 		// TODO necessary? optional?
 		// NOTE currently done by assimp too
-		m_mesh.triangulate();
+		//m_mesh.triangulate();
 		
 		// copy original vertex colors
 		// (because we need to be able to overwrite the actual vertex colors during export)
@@ -290,8 +297,7 @@ namespace green {
 			} else {
 				std::cout << "Colorizing saliency" << std::endl;
 			}
-		}
-		if (sparams.color_mode == model_color_mode::saliency_comparison) {
+		} else if (sparams.color_mode == model_color_mode::saliency_comparison) {
 			if (!sparams.prop_saliency.is_valid()) {
 				sparams.color_mode = model_color_mode::none;
 			} else if (!sparams.prop_saliency_baseline.is_valid()) {
@@ -299,13 +305,15 @@ namespace green {
 			} else {
 				std::cout << "Colorizing saliency comparison" << std::endl;
 			}
-		}
-		if (sparams.color_mode == model_color_mode::doncurv) {
+		} else if (sparams.color_mode == model_color_mode::doncurv) {
 			if (!m_prop_doncurv_raw.is_valid()) {
 				sparams.color_mode == model_color_mode::none;
 			} else {
 				std::cout << "Colorizing don curvature" << std::endl;
 			}
+		} else {
+			std::cout << "Unsupported color mode for model export" << std::endl;
+			sparams.color_mode == model_color_mode::none;
 		}
 		// assign vertex colors
 		if (sparams.color_mode != model_color_mode::none) {
@@ -403,7 +411,7 @@ namespace green {
 		// copy vertex positions and connectivity
 		// FIXME if source has face status etc, those props are broken in the copy! (openmesh bug)
 		if (m_mesh.has_face_status()) std::abort();
-		m.m_mesh.assign(m_mesh);
+		m.m_mesh.assign(m_mesh, true);
 		// copy original vertex colors if present
 		if (m_prop_vcolor_original.is_valid()) {
 			m.m_mesh.add_property(m.m_prop_vcolor_original);
@@ -456,34 +464,45 @@ namespace green {
 		return true;
 	}
 
-	void Model::update_vao() {
+	void Model::update_vao_verts() {
 		bool makevao = false;
-		if (!m_vao) makevao = true, m_vao = cgu::gl_object::gen_vertex_array();
-		if (!m_ibo) m_ibo = cgu::gl_object::gen_buffer();
-		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
-		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
-		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
-		const size_t ntris = m_mesh.n_faces();
-		const size_t nverts = m_mesh.n_vertices();
-		assert(ntris <= size_t(INT_MAX));
-		assert(nverts <= size_t(INT_MAX));
-		m_vao_ntris = ntris;
-		m_vao_nverts = nverts;
-		const size_t size_ibo = ntris * 3 * sizeof(GLuint);
-		glBindVertexArray(m_vao);
+		if (!m_vao_verts) makevao = true, m_vao_verts = cgu::gl_object::gen_vertex_array();
+		const auto nverts = m_mesh.n_vertices();
+		assert(nverts <= std::numeric_limits<decltype(m_vao_nverts)>::max());
+		m_vao_nverts = decltype(m_vao_nverts)(nverts);
+		glBindVertexArray(m_vao_verts);
+		// no index buffer
+		if (makevao) {
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 4, GL_FLOAT, false, sizeof(glm::vec4), 0);
+		}
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+	}
+
+	void Model::update_vao_edges() {
+		bool makevao = false;
+		if (!m_vao_edges) makevao = true, m_vao_edges = cgu::gl_object::gen_vertex_array();
+		const auto nedges = m_mesh.n_edges();
+		assert(nedges <= std::numeric_limits<decltype(m_vao_nverts)>::max());
+		m_vao_nedges = decltype(m_vao_nverts)(nedges);
+		const size_t size_ibo = nedges * 2 * sizeof(GLuint);
+		glBindVertexArray(m_vao_edges);
 		// the GL_ELEMENT_ARRAY_BUFFER binding sticks to the VAO so we shouldn't unbind it
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo_edges);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, size_ibo, nullptr, GL_STATIC_DRAW);
-		if (ntris) {
+		if (nedges) {
 			auto pibo = reinterpret_cast<GLuint *>(
 				glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size_ibo, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 			);
-			for (auto fit = m_mesh.faces_begin(); fit != m_mesh.faces_end(); ++fit) {
-				auto hit = m_mesh.cfv_iter(*fit);
-				// assume triangles
-				*pibo++ = GLuint(hit++->idx());
-				*pibo++ = GLuint(hit++->idx());
-				*pibo++ = GLuint(hit++->idx());
+			for (auto eit = m_mesh.edges_begin(); eit != m_mesh.edges_end(); ++eit) {
+				auto hh = m_mesh.s_halfedge_handle(*eit, 0);
+				*pibo++ = m_mesh.from_vertex_handle(hh).idx();
+				*pibo++ = m_mesh.to_vertex_handle(hh).idx();
 			}
 			glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 		}
@@ -491,27 +510,117 @@ namespace green {
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
 			glEnableVertexAttribArray(0);
 			glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
-			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_norm);
-			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
 			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
-			glEnableVertexAttribArray(2);
-			glVertexAttribPointer(2, 4, GL_FLOAT, false, sizeof(glm::vec4), 0);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 4, GL_FLOAT, false, sizeof(glm::vec4), 0);
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindVertexArray(0);
 	}
 
+	void Model::update_vao_tris() {
+		bool makevao = false;
+		if (!m_vao_tris) makevao = true, m_vao_tris = cgu::gl_object::gen_vertex_array();
+		// calculate triangle count (upper bound)
+		const double he_per_face = double(m_mesh.n_halfedges()) / m_mesh.n_faces();
+		const double fntris = std::ceil(std::max(1.0, std::ceil(he_per_face - 2)) * m_mesh.n_faces());
+		assert(fntris <= double(std::numeric_limits<decltype(m_vao_nverts)>::max()));
+		const auto max_ntris = decltype(m_vao_nverts)(fntris);
+		// tris counted during triangulation
+		m_vao_ntris = 0;
+		const size_t size_ibo = size_t(max_ntris) * 3 * sizeof(GLuint);
+		glBindVertexArray(m_vao_tris);
+		// the GL_ELEMENT_ARRAY_BUFFER binding sticks to the VAO so we shouldn't unbind it
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo_tris);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, size_ibo, nullptr, GL_STATIC_DRAW);
+		if (max_ntris) {
+			auto pibo = reinterpret_cast<GLuint *>(
+				glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size_ibo, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
+			);
+			for (auto fit = m_mesh.faces_begin(); fit != m_mesh.faces_end(); ++fit) {
+				auto hit = m_mesh.cfh_iter(*fit);
+				const auto hit0 = hit++;
+				auto hit1 = hit++;
+				// triangulate
+				for (; hit.is_valid(); ++hit1, ++hit) {
+					// record actual tri count
+					assert(m_vao_ntris < max_ntris);
+					m_vao_ntris++;
+					*pibo++ = GLuint(hit0->idx());
+					*pibo++ = GLuint(hit1->idx());
+					*pibo++ = GLuint(hit->idx());
+				}
+			}
+			glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+		}
+		if (makevao) {
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_halfedges);
+			glEnableVertexAttribArray(0);
+			glVertexAttribIPointer(0, 1, GL_INT, sizeof(halfedge_vbo_props), (void *) offsetof(halfedge_vbo_props, vid));
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(halfedge_vbo_props), (void *) offsetof(halfedge_vbo_props, norm));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 2, GL_FLOAT, false, sizeof(halfedge_vbo_props), (void *) offsetof(halfedge_vbo_props, uv));
+		}
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+	}
+
+	void Model::update_vaos() {
+		if (!m_ibo_edges) m_ibo_edges = cgu::gl_object::gen_buffer();
+		if (!m_ibo_tris) m_ibo_tris = cgu::gl_object::gen_buffer();
+		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
+		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
+		if (!m_vbo_halfedges) m_vbo_halfedges = cgu::gl_object::gen_buffer();
+		if (!m_tex_col) m_tex_col = cgu::gl_object::gen_texture();
+		if (!m_tex_pos) m_tex_pos = cgu::gl_object::gen_texture();
+		// actually create buffer objects for binding to textures
+		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
+		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		// setup buffer textures
+		glBindTexture(GL_TEXTURE_BUFFER, m_tex_col);
+		glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, m_vbo_col);
+		// TODO three-component formats can only be used in GL 4.0 or with ARB_texture_buffer_object_rgb32
+		glBindTexture(GL_TEXTURE_BUFFER, m_tex_pos);
+		glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, m_vbo_pos);
+		glBindTexture(GL_TEXTURE_BUFFER, 0);
+		update_vao_verts();
+		update_vao_edges();
+		update_vao_tris();
+	}
+
 	void Model::update_vbos() {
 		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
-		if (!m_vbo_norm) m_vbo_norm = cgu::gl_object::gen_buffer();
 		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
+		if (!m_vbo_halfedges) m_vbo_halfedges = cgu::gl_object::gen_buffer();
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
 		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec3), m_mesh.points(), GL_STATIC_DRAW);
-		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_norm);
-		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec3), m_mesh.vertex_normals(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
-		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_mesh.n_vertices() * sizeof(glm::vec4), nullptr, GL_STATIC_DRAW);
+		const size_t size_vbo_halfedges = m_mesh.n_halfedges() * sizeof(halfedge_vbo_props);
+		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_halfedges);
+		glBufferData(GL_ARRAY_BUFFER, size_vbo_halfedges, nullptr, GL_STATIC_DRAW);
+		m_force_shade_flat = !m_mesh.has_halfedge_normals() && !m_mesh.has_vertex_normals();
+		if (m_mesh.n_halfedges()) {
+			auto pvbo = reinterpret_cast<halfedge_vbo_props *>(
+				glMapBufferRange(GL_ARRAY_BUFFER, 0, size_vbo_halfedges, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
+			);
+			for (auto hit = m_mesh.halfedges_begin(); hit != m_mesh.halfedges_end(); ++hit) {
+				auto vh = m_mesh.to_vertex_handle(*hit);
+				pvbo->vid = vh.idx();
+				if (m_mesh.has_halfedge_normals()) {
+					pvbo->norm = om2glm(m_mesh.normal(*hit));
+				} else if (m_mesh.has_vertex_normals()) {
+					pvbo->norm = om2glm(m_mesh.normal(vh));
+				}
+				if (m_mesh.has_halfedge_texcoords2D()) {
+					pvbo->uv = om2glm(m_mesh.texcoord2D(*hit));
+				}
+				pvbo++;
+			}
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
@@ -565,6 +674,8 @@ namespace green {
 				const float c = std::pow(m_mesh.property(m_prop_doncurv_raw, v), auto_contrast() * 0.2f);
 				data[i] = glm::vec4(c, 0, 0, 0);
 			}
+		} else {
+			// uvs/texture are handled in the shader directly
 		}
 		glUnmapBuffer(GL_ARRAY_BUFFER);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -572,12 +683,20 @@ namespace green {
 	}
 
 	void Model::draw(GLenum polymode) const {
-		if (!m_vao) return;
-		glBindVertexArray(m_vao);
 		if (polymode == GL_POINT) {
+			if (!m_vao_verts) return;
+			glBindVertexArray(m_vao_verts);
 			glDrawArrays(GL_POINTS, 0, m_vao_nverts);
-		} else {
-			glPolygonMode(GL_FRONT_AND_BACK, polymode);
+		} else if (polymode == GL_LINE) {
+			if (!m_vao_edges) return;
+			glBindVertexArray(m_vao_edges);
+			// must be uint (not int)
+			glDrawElements(GL_LINES, m_vao_nedges * 2, GL_UNSIGNED_INT, 0);
+		} else if (polymode == GL_FILL) {
+			if (!m_vao_tris) return;
+			glBindVertexArray(m_vao_tris);
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			// must be uint (not int)
 			glDrawElements(GL_TRIANGLES, m_vao_ntris * 3, GL_UNSIGNED_INT, 0);
 		}
 		glBindVertexArray(0);
@@ -585,29 +704,65 @@ namespace green {
 
 	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode) const {
 
-		static GLuint prog_smooth = 0;
-		static GLuint prog_flat = 0;
-		if (!params.shade_flat && !prog_smooth) {
-			// note: needs custom depth env
-			prog_smooth = cgu::make_shader_program(
-				"green::model.smooth",
+		const bool shade_flat = m_force_shade_flat || params.shade_flat;
+
+		// note: need custom depth env
+		static GLuint prog_verts = 0;
+		static GLuint prog_edges = 0;
+		static GLuint prog_tris_smooth = 0;
+		static GLuint prog_tris_flat = 0;
+		if (polymode == GL_POINT && !prog_verts) {
+			prog_verts = cgu::make_shader_program(
+				"green::model.verts",
 				"330 core",
 				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
-				{"#define SHADE_SMOOTH\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
+				{"#define MODEL_VERTS\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
 			).release();
 		}
-		if (params.shade_flat && !prog_flat) {
-			// note: needs custom depth env
-			prog_flat = cgu::make_shader_program(
-				"green::model.flat",
+		if (polymode == GL_LINE && !prog_edges) {
+			prog_edges = cgu::make_shader_program(
+				"green::model.edges",
+				"330 core",
+				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
+				{"#define MODEL_EDGES\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
+			).release();
+		}
+		if (polymode == GL_FILL && !shade_flat && !prog_tris_smooth) {
+			prog_tris_smooth = cgu::make_shader_program(
+				"green::model.tris.smooth",
+				"330 core",
+				{GL_VERTEX_SHADER, GL_FRAGMENT_SHADER},
+				{"#define MODEL_TRIS\n#define SHADE_SMOOTH\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
+			).release();
+		}
+		if (polymode == GL_FILL && shade_flat && !prog_tris_flat) {
+			prog_tris_flat = cgu::make_shader_program(
+				"green::model.tris.flat",
 				"330 core",
 				{GL_VERTEX_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER},
-				{"#define SHADE_FLAT\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
+				{"#define MODEL_TRIS\n#define SHADE_FLAT\n", cgu::glsl_frag_depth_source, cgu::strings::glsl_green_model}
 			).release();
 		}
 
-		GLuint prog = params.shade_flat ? prog_flat : prog_smooth;
+		GLuint prog = 0;
+		if (polymode == GL_POINT) prog = prog_verts;
+		if (polymode == GL_LINE) prog = prog_edges;
+		if (polymode == GL_FILL) prog = shade_flat ? prog_tris_flat : prog_tris_smooth;
+		if (!prog) return;
+
 		glUseProgram(prog);
+		
+		if (polymode == GL_FILL) {
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_BUFFER, m_tex_pos);
+			glActiveTexture(GL_TEXTURE2);
+			glBindTexture(GL_TEXTURE_BUFFER, m_tex_col);
+			// texunit 0 is for user-supplied texture
+			glUniform1i(glGetUniformLocation(prog, "u_sampler_col"), 0);
+			glUniform1i(glGetUniformLocation(prog, "u_buf_pos"), 1);
+			glUniform1i(glGetUniformLocation(prog, "u_buf_col"), 2);
+		}
+
 		glUniform1f(glGetUniformLocation(prog, cgu::glsl_uniform_zfar_name), zfar);
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_modelview"), 1, false, value_ptr(modelview));
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_projection"), 1, false, value_ptr(projection));
@@ -621,10 +776,16 @@ namespace green {
 		if (polymode == GL_POINT) bias = -0.00002;
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
-		glUniform1i(glGetUniformLocation(prog, "u_vert_color_map"), params.vert_color_map);
+		glUniform1i(glGetUniformLocation(prog, "u_color_map"), params.vert_color_map);
 		glUniform1i(glGetUniformLocation(prog, "u_show_samples"), params.show_samples);
 
 		draw(polymode);
-	}
 
+		if (polymode == GL_FILL) {
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_BUFFER, 0);
+			glActiveTexture(GL_TEXTURE2);
+			glBindTexture(GL_TEXTURE_BUFFER, 0);
+		}
+	}
 }

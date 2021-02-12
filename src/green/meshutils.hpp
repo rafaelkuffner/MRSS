@@ -22,6 +22,20 @@
 
 namespace green {
 
+	inline OpenMesh::Vec2f glm2om(const glm::vec2 &v) {
+		OpenMesh::Vec2f vv;
+		vv[0] = v.x;
+		vv[1] = v.y;
+		return vv;
+	}
+
+	inline glm::vec2 om2glm(const OpenMesh::Vec2f &v) {
+		glm::vec2 vv;
+		vv.x = v[0];
+		vv.y = v[1];
+		return vv;
+	}
+
 	inline OpenMesh::Vec3f glm2om(const glm::vec3 &v) {
 		OpenMesh::Vec3f vv;
 		vv[0] = v.x;
@@ -37,7 +51,7 @@ namespace green {
 		vv.z = v[2];
 		return vv;
 	}
-
+	
 	struct GreenMeshTraits : OpenMesh::DefaultTraits {
 		// TODO specify our default attribs here
 	};
