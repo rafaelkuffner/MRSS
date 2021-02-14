@@ -464,7 +464,11 @@ namespace {
 				SliderAngle("Yaw", &cam.cam_yaw, -180, 180);
 				SliderAngle("Pitch", &cam.cam_pitch, -90, 90);
 				SliderFloat("Distance", &cam.cam_distance, 0, 10);
-				SliderAngle("Vertical FoV", &cam_fov, 0, 170);
+				if (SliderAngle("Vertical FoV", &cam_fov, 0, 170)) {
+					// TODO fov as option (persistent)
+					// doesnt change the camera transform (only projection)
+					invalidate_scene();
+				}
 				PopStyleVar(2);
 				Separator();
 				EndMenu();
