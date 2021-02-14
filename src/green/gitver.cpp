@@ -15,6 +15,10 @@ namespace green {
 		return GREEN_GIT_REV;
 	}
 
+	const char * git_branch() {
+		return GREEN_GIT_BRANCH;
+	}
+
 	const char * git_timestamp() {
 		return GREEN_GIT_TIMESTAMP;
 	}

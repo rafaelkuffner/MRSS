@@ -1,5 +1,6 @@
 #pragma once
 #define GREEN_GIT_REV "@git_rev@"
+#define GREEN_GIT_BRANCH "@git_branch@"
 #define GREEN_GIT_DESCRIBE "@git_describe@"
 #define GREEN_GIT_TIMESTAMP "@git_timestamp@"
 #define GREEN_GIT_HAS_CHANGES @git_has_changes@

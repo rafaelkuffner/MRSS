@@ -10,6 +10,8 @@ namespace green {
 
 	const char * git_describe();
 
+	const char * git_branch();
+
 	const char * git_revision();
 
 	const char * git_timestamp();

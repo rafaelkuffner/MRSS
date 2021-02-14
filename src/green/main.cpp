@@ -516,7 +516,13 @@ namespace {
 				Separator();
 				Text("Copyright 2020\nVictoria University of Wellington\nComputational Media Innovation Centre\nAll rights reserved.");
 				Separator();
-				Text("Version:\n%s (%s)\n%s", git_describe(), git_revision(), git_timestamp());
+				Text(
+					"Version:\n%s (%s%s%s)\n%s",
+					git_describe(), git_revision(),
+					git_is_release() ? "" : " @",
+					git_is_release() ? "" : git_branch(),
+					git_timestamp()
+				);
 				if (git_has_changes()) Text("+ UNCOMMITTED CHANGES");
 				Separator();
 				if (Button("Library Licenses")) about_licences_window_open = true;
@@ -814,7 +820,10 @@ namespace {
 		glfwWindowHint(GLFW_SRGB_CAPABLE, true);
 
 		auto window_title = std::string("Multi-Resolution Subsampled Saliency (")
-			+ git_describe() + ")"
+			+ git_describe()
+			+ (git_is_release() ? "" : " @")
+			+ (git_is_release() ? "" : git_branch())
+			+ ")"
 			+ (git_has_changes() ? " + UNCOMMITTED CHANGES" : "")
 			+ (git_is_release() ? "" : " [CMIC INTERNAL USE ONLY]");
 		window = glfwCreateWindow(1280, 800, window_title.c_str(), nullptr, nullptr);
