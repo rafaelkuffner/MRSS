@@ -59,14 +59,12 @@ set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ext")
 set_property(TARGET zlib PROPERTY FOLDER "ext")
 set_property(TARGET zlibstatic PROPERTY FOLDER "ext")
 
-# OpenMesh
-add_subdirectory("ext/OpenMesh-8.0")
-set_property(TARGET OpenMeshCore PROPERTY FOLDER "ext")
-set_property(TARGET OpenMeshTools PROPERTY FOLDER "ext")
-include_directories("ext/OpenMesh-8.0/src")
-
 # allow including headers from src tree with <>
 include_directories("src")
+
+# OpenMesh (modified)
+add_subdirectory("src/OpenMesh")
+include_directories("src/OpenMesh/src")
 
 # cgu lib
 add_subdirectory("src/cgu")
