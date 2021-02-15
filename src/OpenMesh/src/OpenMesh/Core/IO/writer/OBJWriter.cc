@@ -274,7 +274,7 @@ write(std::ostream& _out, BaseExporter& _be, Options _opt, std::streamsize _prec
 
   std::map<Vec2f,int> texMap;
   //collect Texturevertices from halfedges
-  if(_opt.check(Options::FaceTexCoord))
+  if(_opt.check(Options::HalfedgeTexCoord))
   {
     std::vector<Vec2f> texCoords;
     //add all texCoords to map
@@ -298,7 +298,7 @@ write(std::ostream& _out, BaseExporter& _be, Options _opt, std::streamsize _prec
 
   // assign each texcoord in the map its id
   // and write the vt entries
-  if(_opt.check(Options::VertexTexCoord) || _opt.check(Options::FaceTexCoord))
+  if(_opt.check(Options::VertexTexCoord) || _opt.check(Options::HalfedgeTexCoord))
   {
     int texCount = 0;
     for(std::map<Vec2f,int>::iterator it = texMap.begin(); it != texMap.end() ; ++it)
@@ -327,7 +327,8 @@ write(std::ostream& _out, BaseExporter& _be, Options _opt, std::streamsize _prec
   // we do not want to write seperators if we only write vertex indices
   bool onlyVertices =    !_opt.check(Options::VertexTexCoord)
                       && !_opt.check(Options::VertexNormal)
-                      && !_opt.check(Options::FaceTexCoord);
+                      && !_opt.check(Options::HalfedgeTexCoord)
+                      && !_opt.check(Options::HalfedgeNormal);
 
   // faces (indices starting at 1 not 0)
   for (i=0, nF=_be.n_faces(); i<nF; ++i)
@@ -369,7 +370,7 @@ write(std::ostream& _out, BaseExporter& _be, Options _opt, std::streamsize _prec
         _out << "/" ;
 
         //write texCoords index from halfedge
-        if(_opt.check(Options::FaceTexCoord))
+        if(_opt.check(Options::HalfedgeTexCoord))
         {
           _out << texMap[_be.texcoord(_be.getHeh(FaceHandle(int(i)),vhandles[j]))];
         }

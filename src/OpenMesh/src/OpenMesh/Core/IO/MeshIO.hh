@@ -145,7 +145,7 @@ read_mesh(Mesh&         _mesh,
 	  bool                _clear = true)
 {
   if (_clear) _mesh.clear();
-  ImporterT<Mesh> importer(_mesh);
+  ImporterT<Mesh> importer(_mesh, _opt);
   return IOManager().read(_filename, importer, _opt);
 }
 

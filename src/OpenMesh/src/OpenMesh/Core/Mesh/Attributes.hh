@@ -89,6 +89,27 @@ enum AttributeBits
   TextureIndex  = 128 ///< Add texture index (faces)
 };
 
+inline AttributeBits operator~(AttributeBits x) {
+    return AttributeBits(~int(x));
+}
+
+inline AttributeBits operator|(AttributeBits l, AttributeBits r) {
+    return AttributeBits(int(l) | int(r));
+}
+
+inline AttributeBits operator&(AttributeBits l, AttributeBits r) {
+    return AttributeBits(int(l) & int(r));
+}
+
+inline AttributeBits & operator|=(AttributeBits &l, AttributeBits r) {
+    l = l | r;
+    return l;
+}
+
+inline AttributeBits & operator&=(AttributeBits &l, AttributeBits r) {
+    l = l & r;
+    return l;
+}
 
 //=============================================================================
 } // namespace Attributes

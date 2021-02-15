@@ -98,22 +98,18 @@ namespace {
 namespace green {
 
 	ModelBase::ModelBase(const std::filesystem::path &fpath) {
-		m_mesh.request_face_normals();
-		m_mesh.request_vertex_normals();
-		// need better loading for this
-		//m_mesh.request_halfedge_normals();
-		m_mesh.request_halfedge_texcoords2D();
-		m_mesh.request_vertex_colors();
 		// face status not really required here
 		// NOTE face status currently breaks decimation
 		//m_trimesh.request_face_status();
-		// load custom "quality" property and vertex colors if they exist
-		// FIXME what else do we need to ask for and preserve on export? texcoords?
-		OpenMesh::IO::Options readOptions = OpenMesh::IO::Options::Custom
-			| OpenMesh::IO::Options::VertexColor
-			| OpenMesh::IO::Options::FaceTexCoord;
-		// TODO FaceTexCoord is/controls halfedge texcoords, there is no halfedge normal option atm
-
+		// TODO what else do we need to ask for and preserve on export?
+		using OMOptions = OpenMesh::IO::Options;
+		OMOptions readOptions =
+			OMOptions::VertexNormal
+			| OMOptions::VertexColor
+			| OMOptions::HalfedgeNormal
+			| OMOptions::HalfedgeTexCoord
+			| OMOptions::Custom;
+		
 		std::cerr << "Loading model " << fpath.u8string() << std::endl;
 		if (!std::filesystem::is_regular_file(fpath)) {
 			throw std::runtime_error("file does not exist");
@@ -127,6 +123,7 @@ namespace green {
 		}
 
 		// TODO necessary? optional?
+		// not triangulating breaks some stuff atm, probably in vertex area
 		// NOTE currently done by assimp too
 		//m_mesh.triangulate();
 		
