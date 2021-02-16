@@ -47,8 +47,11 @@ else ()
 
 endif ()
 
-# use c++17 for std::filesystem - ben
+# use c++17 (for std::filesystem etc) - ben
 target_compile_features(OpenMeshCore PUBLIC cxx_std_17)
+
+# source groups as dir tree - ben
+source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${headers} ${sources})
 
 # Add core as dependency before fixbundle 
 if ( (${PROJECT_NAME} MATCHES "OpenMesh") AND BUILD_APPS )

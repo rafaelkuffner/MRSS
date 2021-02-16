@@ -48,6 +48,12 @@ else ()
                                                 SOVERSION ${OPENMESH_VERSION_MAJOR}.${OPENMESH_VERSION_MINOR} )
 endif ()
 
+# use c++17 - ben
+target_compile_features(OpenMeshTools PUBLIC cxx_std_17)
+
+# source groups as dir tree - ben
+source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${headers} ${sources})
+
 target_link_libraries (OpenMeshTools OpenMeshCore)
 
 IF( NOT WIN32 )
