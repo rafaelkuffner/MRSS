@@ -215,37 +215,37 @@ namespace OpenMesh {
 
 			virtual void set_normal(VertexHandle _vh, const Vec3f &_normal) override
 			{
-				if (mesh_.has_vertex_normals())
+				if (fileopts_.vertex_has_normal())
 					mesh_.set_normal(_vh, vector_cast<Normal>(_normal));
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec4uc &_color) override
 			{
-				if (mesh_.has_vertex_colors())
+				if (fileopts_.vertex_has_color())
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec3uc &_color) override
 			{
-				if (mesh_.has_vertex_colors())
+				if (fileopts_.vertex_has_color())
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec4f &_color) override
 			{
-				if (mesh_.has_vertex_colors())
+				if (fileopts_.vertex_has_color())
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec3f &_color) override
 			{
-				if (mesh_.has_vertex_colors())
+				if (fileopts_.vertex_has_color())
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 			}
 
 			virtual void set_texcoord(VertexHandle _vh, const Vec2f &_texcoord) override
 			{
-				if (mesh_.has_vertex_texcoords2D())
+				if (fileopts_.vertex_has_texcoord2D())
 					mesh_.set_texcoord2D(_vh, vector_cast<TexCoord2D>(_texcoord));
 			}
 
@@ -269,24 +269,24 @@ namespace OpenMesh {
 
 			virtual void set_texcoord(HalfedgeHandle _heh, const Vec2f &_texcoord) override
 			{
-				if (mesh_.has_halfedge_texcoords2D())
+				if (fileopts_.halfedge_has_texcoord2D())
 					mesh_.set_texcoord2D(_heh, vector_cast<TexCoord2D>(_texcoord));
 			}
 
 			virtual void set_texcoord(VertexHandle _vh, const Vec3f &_texcoord) override
 			{
-				if (mesh_.has_vertex_texcoords3D())
+				if (fileopts_.vertex_has_texcoord3D())
 					mesh_.set_texcoord3D(_vh, vector_cast<TexCoord3D>(_texcoord));
 			}
 
 			virtual void set_texcoord(HalfedgeHandle _heh, const Vec3f &_texcoord) override
 			{
-				if (mesh_.has_halfedge_texcoords3D())
+				if (fileopts_.halfedge_has_texcoord3D())
 					mesh_.set_texcoord3D(_heh, vector_cast<TexCoord3D>(_texcoord));
 			}
 
 			virtual void set_normal(HalfedgeHandle _heh, const Vec3f &_normal) override {
-				if (mesh_.has_halfedge_normals())
+				if (fileopts_.halfedge_has_normal())
 					mesh_.set_normal(_heh, vector_cast<Normal>(_normal));
 			}
 
@@ -301,25 +301,25 @@ namespace OpenMesh {
 
 			virtual void set_color(EdgeHandle _eh, const Vec4uc &_color) override
 			{
-				if (mesh_.has_edge_colors())
+				if (fileopts_.edge_has_color())
 					mesh_.set_color(_eh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(EdgeHandle _eh, const Vec3uc &_color) override
 			{
-				if (mesh_.has_edge_colors())
+				if (fileopts_.edge_has_color())
 					mesh_.set_color(_eh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(EdgeHandle _eh, const Vec4f &_color) override
 			{
-				if (mesh_.has_edge_colors())
+				if (fileopts_.edge_has_color())
 					mesh_.set_color(_eh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(EdgeHandle _eh, const Vec3f &_color) override
 			{
-				if (mesh_.has_edge_colors())
+				if (fileopts_.edge_has_color())
 					mesh_.set_color(_eh, color_cast<Color>(_color));
 			}
 
@@ -334,31 +334,31 @@ namespace OpenMesh {
 
 			virtual void set_normal(FaceHandle _fh, const Vec3f &_normal) override
 			{
-				if (mesh_.has_face_normals())
+				if (fileopts_.face_has_normal())
 					mesh_.set_normal(_fh, vector_cast<Normal>(_normal));
 			}
 
 			virtual void set_color(FaceHandle _fh, const Vec3uc &_color) override
 			{
-				if (mesh_.has_face_colors())
+				if (fileopts_.face_has_color())
 					mesh_.set_color(_fh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(FaceHandle _fh, const Vec4uc &_color) override
 			{
-				if (mesh_.has_face_colors())
+				if (fileopts_.face_has_color())
 					mesh_.set_color(_fh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(FaceHandle _fh, const Vec3f &_color) override
 			{
-				if (mesh_.has_face_colors())
+				if (fileopts_.face_has_color())
 					mesh_.set_color(_fh, color_cast<Color>(_color));
 			}
 
 			virtual void set_color(FaceHandle _fh, const Vec4f &_color) override
 			{
-				if (mesh_.has_face_colors())
+				if (fileopts_.face_has_color())
 					mesh_.set_color(_fh, color_cast<Color>(_color));
 			}
 
@@ -371,6 +371,8 @@ namespace OpenMesh {
 
 			virtual void add_face_texcoords(FaceHandle _fh, VertexHandle _vh, const std::vector<Vec2f> &_face_texcoords) override
 			{
+				if (!fileopts_.halfedge_has_texcoord2D()) return;
+				
 				// get first halfedge handle
 				HalfedgeHandle cur_heh = mesh_.halfedge_handle(_fh);
 				HalfedgeHandle end_heh = mesh_.prev_halfedge_handle(cur_heh);
@@ -388,6 +390,8 @@ namespace OpenMesh {
 
 			virtual void add_face_texcoords(FaceHandle _fh, VertexHandle _vh, const std::vector<Vec3f> &_face_texcoords) override
 			{
+				if (!fileopts_.halfedge_has_texcoord3D()) return;
+				
 				// get first halfedge handle
 				HalfedgeHandle cur_heh = mesh_.halfedge_handle(_fh);
 				HalfedgeHandle end_heh = mesh_.prev_halfedge_handle(cur_heh);
@@ -405,6 +409,8 @@ namespace OpenMesh {
 
 			virtual void add_face_normals(FaceHandle _fh, VertexHandle _vh, const std::vector<Vec3f> &_face_normals) override
 			{
+				if (!fileopts_.halfedge_has_normal()) return;
+				
 				// get first halfedge handle
 				HalfedgeHandle cur_heh = mesh_.halfedge_handle(_fh);
 				HalfedgeHandle end_heh = mesh_.prev_halfedge_handle(cur_heh);
@@ -422,13 +428,15 @@ namespace OpenMesh {
 
 			virtual void set_face_texindex(FaceHandle _fh, int _texId) override
 			{
-				if (mesh_.has_face_texture_index()) {
+				if (fileopts_.face_has_texindex()) {
 					mesh_.set_texture_index(_fh, _texId);
 				}
 			}
 
 			virtual void add_texture_information(int _id, std::string _name) override
 			{
+				// note: dont check fileopts for texture index
+
 				OpenMesh::MPropHandleT< std::map< int, std::string > > property;
 
 				if (!mesh_.get_property_handle(property, "TextureMapping")) {
