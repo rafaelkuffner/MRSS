@@ -96,13 +96,9 @@ public:
   { return "Stereolithography Interface Format"; }
   std::string get_extensions() const { return "stl stla stlb"; }
 
-  bool read(const std::filesystem::path& _filename,
-	    BaseImporter& _bi,
-            Options& _opt);
+  bool read(const std::filesystem::path& _filename, BaseImporter& _bi);
 
-  bool read(std::istream& _in,
-		    BaseImporter& _bi,
-            Options& _opt);
+  bool read(std::istream& _in, BaseImporter& _bi);
 
   /** Set the threshold to be used for considering two point to be equal.
       Can be used to merge small gaps */
@@ -118,10 +114,10 @@ private:
   enum STL_Type { STLA, STLB, NONE };
   STL_Type check_stl_type(const std::filesystem::path& _filename) const;
 
-  bool read_stla(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const;
-  bool read_stla(std::istream& _in, BaseImporter& _bi, Options& _opt) const;
-  bool read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const;
-  bool read_stlb(std::istream& _in, BaseImporter& _bi, Options& _opt) const;
+  bool read_stla(const std::filesystem::path& _filename, BaseImporter& _bi) const;
+  bool read_stla(std::istream& _in, BaseImporter& _bi) const;
+  bool read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi) const;
+  bool read_stlb(std::istream& _in, BaseImporter& _bi) const;
 
 
 private:

@@ -102,9 +102,7 @@ _OFFReader_::_OFFReader_()
 //-----------------------------------------------------------------------------
 
 
-bool
-_OFFReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
-                  Options& _opt)
+bool _OFFReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi)
 {
   std::ifstream ifile(_filename, (options_.is_binary() ? std::ios::binary | std::ios::in
                                                            : std::ios::in) );
@@ -120,7 +118,7 @@ _OFFReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
 
   assert(ifile);
 
-  bool result = read(ifile, _bi, _opt);
+  bool result = read(ifile, _bi);
 
   ifile.close();
   return result;
@@ -129,8 +127,7 @@ _OFFReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
 //-----------------------------------------------------------------------------
 
 
-bool
-_OFFReader_::read(std::istream& _in, BaseImporter& _bi, Options& _opt )
+bool _OFFReader_::read(std::istream& _in, BaseImporter& _bi)
 {
    if (!_in.good())
    {
@@ -140,7 +137,7 @@ _OFFReader_::read(std::istream& _in, BaseImporter& _bi, Options& _opt )
    }
 
    // filter relevant options for reading
-   bool swap = _opt.check( OptionBits::Swap );
+   bool swap = _bi.user_options().check( OptionBits::Swap );
 
    //force user-choice for the alpha value when reading binary
    if (options_.is_binary() && _bi.user_options().color_has_alpha())
@@ -152,8 +149,8 @@ _OFFReader_::read(std::istream& _in, BaseImporter& _bi, Options& _opt )
 
    // note: options_ represents the file structure and is needed for parsing irrespective of user options
     return (options_.is_binary() ?
- 	   read_binary(_in, _bi, _opt, swap) :
-	   read_ascii(_in, _bi, _opt));
+ 	   read_binary(_in, _bi, swap) :
+	   read_ascii(_in, _bi));
 
 }
 
@@ -162,7 +159,7 @@ _OFFReader_::read(std::istream& _in, BaseImporter& _bi, Options& _opt )
 //-----------------------------------------------------------------------------
 
 bool
-_OFFReader_::read_ascii(std::istream& _in, BaseImporter& _bi, Options& _opt) const
+_OFFReader_::read_ascii(std::istream& _in, BaseImporter& _bi) const
 {
 
 
@@ -418,8 +415,7 @@ void _OFFReader_::readValue(std::istream& _in, unsigned int& _value) const{
   _value = tmp;
 }
 
-bool
-_OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bool /*_swap*/) const
+bool _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, bool /*_swap*/) const
 {
   unsigned int            i, j, k, l, idx;
   unsigned int            nV, nF, dummy;
@@ -544,7 +540,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
     FaceHandle fh = _bi.add_face(vhandles);
 
     //face color
-    if ( _opt.face_has_color() ) {
+    if (options_.face_has_color() ) {
       if (_bi.user_options().color_is_float()) {
         _bi.set_file_options(OptionBits::ColorFloat);
         //with alpha

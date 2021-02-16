@@ -122,20 +122,18 @@ public:
   std::string get_extensions()  const { return "off"; }
   std::string get_magic()       const { return "OFF"; }
 
-  bool read(const std::filesystem::path& _filename,
-	    BaseImporter& _bi,
-	    Options& _opt);
+  bool read(const std::filesystem::path& _filename, BaseImporter& _bi);
 
   bool can_u_read(const std::filesystem::path& _filename) const;
 
-  bool read(std::istream& _in, BaseImporter& _bi, Options& _opt );
+  bool read(std::istream& _in, BaseImporter& _bi);
 
 private:
 
   bool can_u_read(std::istream& _is) const;
 
-  bool read_ascii(std::istream& _in, BaseImporter& _bi, Options& _opt) const;
-  bool read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bool swap) const;
+  bool read_ascii(std::istream& _in, BaseImporter& _bi) const;
+  bool read_binary(std::istream& _in, BaseImporter& _bi, bool swap) const;
 
   void readValue(std::istream& _in, float& _value) const;
   void readValue(std::istream& _in, int& _value) const;

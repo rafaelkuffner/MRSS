@@ -45,7 +45,7 @@ namespace green {
 		OpenMesh::IO::IOManager().register_module(this);
 	}
 
-	bool AssimpReader::read(const std::filesystem::path &_filename, OpenMesh::IO::BaseImporter &_bi, OpenMesh::IO::Options &_opt) {
+	bool AssimpReader::read(const std::filesystem::path &_filename, OpenMesh::IO::BaseImporter &_bi) {
 		omerr() << "[Assimp] : loading " << _filename.u8string() << std::endl;
 		// NOTE assimp appears to support utf8 filenames; see assimp-5.0.1\code\Common\DefaultIOSystem.cpp
 		Assimp::Importer importer;
@@ -109,7 +109,7 @@ namespace green {
 		return true;
 	}
 
-	bool AssimpReader::read(std::istream &_is, OpenMesh::IO::BaseImporter &_bi, OpenMesh::IO::Options &_opt) {
+	bool AssimpReader::read(std::istream &_is, OpenMesh::IO::BaseImporter &_bi) {
 		// TODO assimp doesnt expose a good way to implement this
 		// reading entire file into buffer to use load from memory is undesirable
 		// best way might be via a named pipe / fifo

@@ -101,13 +101,9 @@ namespace OpenMesh {
 			std::string get_extensions()  const { return "ply"; }
 			std::string get_magic()       const { return "PLY"; }
 
-			bool read(const std::filesystem::path &_filename,
-				BaseImporter &_bi,
-				Options &_opt);
+			bool read(const std::filesystem::path &_filename, BaseImporter &_bi);
 
-			bool read(std::istream &_is,
-				BaseImporter &_bi,
-				Options &_opt);
+			bool read(std::istream &_is, BaseImporter &_bi);
 
 			bool can_u_read(const std::filesystem::path &_filename) const;
 
@@ -127,8 +123,8 @@ namespace OpenMesh {
 
 			bool can_u_read(std::istream &_is) const;
 
-			bool read_ascii(std::istream &_in, BaseImporter &_bi, const Options &_opt) const;
-			bool read_binary(std::istream &_in, BaseImporter &_bi, bool swap, const Options &_opt) const;
+			bool read_ascii(std::istream &_in, BaseImporter &_bi) const;
+			bool read_binary(std::istream &_in, BaseImporter &_bi, bool swap) const;
 
 			float readToFloatValue(ValueType _type, std::fstream &_in) const;
 

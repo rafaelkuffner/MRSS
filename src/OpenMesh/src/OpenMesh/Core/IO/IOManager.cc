@@ -100,7 +100,7 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
     if ((*it)->can_u_read(_filename))
     {
       _bi.prepare();
-      bool ok = (*it)->read(_filename, _bi, _opt);
+      bool ok = (*it)->read(_filename, _bi);
       _bi.finish();
       return ok;
     }
@@ -125,7 +125,7 @@ read(std::istream& _is, const std::filesystem::path& _ext, BaseImporter& _bi, Op
     if ((*it)->BaseReader::can_u_read(_ext))  //Use the extension check only (no file existence)
     {
       _bi.prepare();
-      bool ok = (*it)->read(_is, _bi, _opt);
+      bool ok = (*it)->read(_is, _bi);
       _bi.finish();
       return ok;
     }

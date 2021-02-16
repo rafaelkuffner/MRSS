@@ -119,9 +119,7 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool
-			_OBJReader_::
-			read(const std::filesystem::path &_filename, BaseImporter &_bi, Options &_opt)
+		bool _OBJReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi)
 		{
 			std::fstream in(_filename, std::ios_base::in);
 
@@ -145,7 +143,7 @@ namespace OpenMesh {
 				//  : std::string(_filename.substr(0,dot+1));
 			}
 
-			bool result = read(in, _bi, _opt);
+			bool result = read(in, _bi);
 
 			in.close();
 			return result;
@@ -396,9 +394,7 @@ namespace OpenMesh {
 
 		//-----------------------------------------------------------------------------
 
-		bool
-			_OBJReader_::
-			read(std::istream &_in, BaseImporter &_bi, Options &_opt)
+		bool _OBJReader_::read(std::istream &_in, BaseImporter &_bi)
 		{
 			std::string line;
 			std::string keyWrd;

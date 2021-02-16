@@ -87,14 +87,14 @@ _OMReader_::_OMReader_()
 //-----------------------------------------------------------------------------
 
 
-bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
+bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi)
 {
   // check whether importer can give us an OpenMesh BaseKernel
   if (!_bi.kernel())
     return false;
 
-  _opt += OptionBits::Binary; // only binary format supported!
-  fileOptions_.flags = OptionBits::Binary;
+  // only binary format supported!
+  _bi.set_file_options(OptionBits::Binary);
 
   // Open file
   std::ifstream ifs(_filename, std::ios::binary);
@@ -111,9 +111,7 @@ bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
   }
 
   // Pass stream to read method, remember result
-  bool result = read(ifs, _bi, _opt);
-
-  _opt = fileOptions_;
+  bool result = read(ifs, _bi);
 
   return result;
 }
@@ -121,14 +119,14 @@ bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
 //-----------------------------------------------------------------------------
 
 
-bool _OMReader_::read(std::istream& _is, BaseImporter& _bi, Options& _opt)
+bool _OMReader_::read(std::istream& _is, BaseImporter& _bi)
 {
   // check whether importer can give us an OpenMesh BaseKernel
   if (!_bi.kernel())
     return false;
 
-  _opt += OptionBits::Binary; // only binary format supported!
-  fileOptions_.flags = OptionBits::Binary;
+  // only binary format supported!
+  _bi.set_file_options(OptionBits::Binary);
 
   if (!_is.good()) {
     omerr() << "[OMReader] : cannot read from stream " << std::endl;
@@ -136,9 +134,7 @@ bool _OMReader_::read(std::istream& _is, BaseImporter& _bi, Options& _opt)
   }
 
   // Pass stream to read method, remember result
-  bool result = read_binary(_is, _bi, _opt);
-
-  _opt = fileOptions_;
+  bool result = read_binary(_is, _bi);
 
   return result;
 }
@@ -147,7 +143,7 @@ bool _OMReader_::read(std::istream& _is, BaseImporter& _bi, Options& _opt)
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_ascii(std::istream& /* _is */, BaseImporter& /* _bi */, Options& /* _opt */) const
+bool _OMReader_::read_ascii(std::istream& /* _is */, BaseImporter& /* _bi */) const
 {
   // not supported yet!
   return false;
@@ -156,9 +152,9 @@ bool _OMReader_::read_ascii(std::istream& /* _is */, BaseImporter& /* _bi */, Op
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary(std::istream& _is, BaseImporter& _bi, Options& _opt) const
+bool _OMReader_::read_binary(std::istream& _is, BaseImporter& _bi) const
 {
-  bool swap = _opt.check(OptionBits::Swap) || (Endian::local() == Endian::MSB);
+  bool swap = _bi.user_options().check(OptionBits::Swap) || (Endian::local() == Endian::MSB);
 
   // Initialize byte counter
   bytes_ = 0;
@@ -191,23 +187,23 @@ bool _OMReader_::read_binary(std::istream& _is, BaseImporter& _bi, Options& _opt
     // property, then skip data.
     switch (chunk_header_.entity_) {
       case OMFormat::Chunk::Entity_Vertex:
-        if (!read_binary_vertex_chunk(_is, _bi, _opt, swap))
+        if (!read_binary_vertex_chunk(_is, _bi, swap))
           return false;
         break;
       case OMFormat::Chunk::Entity_Face:
-        if (!read_binary_face_chunk(_is, _bi, _opt, swap))
+        if (!read_binary_face_chunk(_is, _bi, swap))
           return false;
         break;
       case OMFormat::Chunk::Entity_Edge:
-        if (!read_binary_edge_chunk(_is, _bi, _opt, swap))
+        if (!read_binary_edge_chunk(_is, _bi, swap))
           return false;
         break;
       case OMFormat::Chunk::Entity_Halfedge:
-        if (!read_binary_halfedge_chunk(_is, _bi, _opt, swap))
+        if (!read_binary_halfedge_chunk(_is, _bi, swap))
           return false;
         break;
       case OMFormat::Chunk::Entity_Mesh:
-        if (!read_binary_mesh_chunk(_is, _bi, _opt, swap))
+        if (!read_binary_mesh_chunk(_is, _bi, swap))
           return false;
         break;
       case OMFormat::Chunk::Entity_Sentinel:
@@ -284,7 +280,7 @@ bool _OMReader_::supports(const OMFormat::uint8 /* version */) const
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, Options &_opt, bool _swap) const
+bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, bool _swap) const
 {
   using OMFormat::Chunk;
 
@@ -382,7 +378,7 @@ bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, 
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary_face_chunk(std::istream &_is, BaseImporter &_bi, Options &_opt, bool _swap) const
+bool _OMReader_::read_binary_face_chunk(std::istream &_is, BaseImporter &_bi, bool _swap) const
 {
   using OMFormat::Chunk;
 
@@ -490,7 +486,7 @@ bool _OMReader_::read_binary_face_chunk(std::istream &_is, BaseImporter &_bi, Op
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary_edge_chunk(std::istream &_is, BaseImporter &_bi, Options &_opt, bool _swap) const
+bool _OMReader_::read_binary_edge_chunk(std::istream &_is, BaseImporter &_bi, bool _swap) const
 {
   using OMFormat::Chunk;
 
@@ -531,7 +527,7 @@ bool _OMReader_::read_binary_edge_chunk(std::istream &_is, BaseImporter &_bi, Op
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi, Options & _opt, bool _swap) const
+bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi, bool _swap) const
 {
   using OMFormat::Chunk;
 
@@ -606,7 +602,7 @@ bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary_mesh_chunk(std::istream &_is, BaseImporter &_bi, Options & /* _opt */, bool _swap) const
+bool _OMReader_::read_binary_mesh_chunk(std::istream &_is, BaseImporter &_bi, bool _swap) const
 {
   using OMFormat::Chunk;
 

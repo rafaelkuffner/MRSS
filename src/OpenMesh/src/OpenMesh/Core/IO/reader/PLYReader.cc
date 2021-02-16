@@ -103,7 +103,7 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool _PLYReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi, Options &_opt) {
+		bool _PLYReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi) {
 
 			std::fstream in(_filename, (std::ios_base::binary | std::ios_base::in));
 
@@ -112,7 +112,7 @@ namespace OpenMesh {
 				return false;
 			}
 
-			bool result = read(in, _bi, _opt);
+			bool result = read(in, _bi);
 
 			in.close();
 			return result;
@@ -121,7 +121,7 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool _PLYReader_::read(std::istream &_in, BaseImporter &_bi, Options &_opt) {
+		bool _PLYReader_::read(std::istream &_in, BaseImporter &_bi) {
 
 			if (!_in.good()) {
 				omerr() << "[PLYReader] : cannot not use stream" << std::endl;
@@ -136,7 +136,7 @@ namespace OpenMesh {
 
 			// filter relevant options for reading
 			// byte swap option not used anymore?
-			bool swap = _opt.check(OptionBits::Swap);
+			bool swap = _bi.user_options().check(OptionBits::Swap);
 
 			// TODO create/populate halfedge attribs if desired			
 			_bi.request_vattribs(options_.vattribs);
@@ -147,7 +147,7 @@ namespace OpenMesh {
 			//    if ( options_.is_binary() && userOptions_.color_has_alpha() )
 			//      options_ += Options::ColorAlpha;
 
-			return (options_.is_binary() ? read_binary(_in, _bi, swap, _opt) : read_ascii(_in, _bi, _opt));
+			return (options_.is_binary() ? read_binary(_in, _bi, swap) : read_ascii(_in, _bi));
 
 		}
 
@@ -256,7 +256,7 @@ namespace OpenMesh {
 
 		//-----------------------------------------------------------------------------
 
-		bool _PLYReader_::read_ascii(std::istream &_in, BaseImporter &_bi, const Options &_opt) const {
+		bool _PLYReader_::read_ascii(std::istream &_in, BaseImporter &_bi) const {
 
 			unsigned int i, j, k, l, idx;
 			unsigned int nV;
@@ -384,11 +384,11 @@ namespace OpenMesh {
 						}
 
 						_bi.set_point(vh, v);
-						if (_opt.vertex_has_normal())
+						if (_bi.file_options().vertex_has_normal())
 							_bi.set_normal(vh, n);
-						if (_opt.vertex_has_texcoord())
+						if (_bi.file_options().vertex_has_texcoord())
 							_bi.set_texcoord(vh, t);
-						if (_opt.vertex_has_color())
+						if (_bi.file_options().vertex_has_color())
 							_bi.set_color(vh, Vec4uc(c));
 					}
 				} else if (e_it->element_ == FACE)
@@ -476,7 +476,7 @@ namespace OpenMesh {
 								break;
 							}
 						}
-						if (_opt.face_has_color())
+						if (_bi.file_options().face_has_color())
 							_bi.set_color(fh, Vec4uc(c));
 					}
 				} else
@@ -508,7 +508,7 @@ namespace OpenMesh {
 
 		//-----------------------------------------------------------------------------
 
-		bool _PLYReader_::read_binary(std::istream &_in, BaseImporter &_bi, bool /*_swap*/, const Options &_opt) const {
+		bool _PLYReader_::read_binary(std::istream &_in, BaseImporter &_bi, bool /*_swap*/) const {
 
 			OpenMesh::Vec3f        v, n;  // Vertex
 			OpenMesh::Vec2f        t;  // TexCoords
@@ -623,11 +623,11 @@ namespace OpenMesh {
 						}
 
 						_bi.set_point(vh, v);
-						if (_opt.vertex_has_normal())
+						if (_bi.file_options().vertex_has_normal())
 							_bi.set_normal(vh, n);
-						if (_opt.vertex_has_texcoord())
+						if (_bi.file_options().vertex_has_texcoord())
 							_bi.set_texcoord(vh, t);
-						if (_opt.vertex_has_color())
+						if (_bi.file_options().vertex_has_color())
 							_bi.set_color(vh, Vec4uc(c));
 					}
 				} else if (e_it->element_ == FACE) {
@@ -716,7 +716,7 @@ namespace OpenMesh {
 								break;
 							}
 						}
-						if (_opt.face_has_color())
+						if (_bi.file_options().face_has_color())
 							_bi.set_color(fh, Vec4uc(c));
 					}
 				} else {

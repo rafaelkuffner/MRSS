@@ -28,19 +28,15 @@ namespace green {
 		/** Reads a mesh given by a filename. Usually this method opens a stream
 		and passes it to stream read method. Acceptance checks by filename
 		extension can be placed here.
-
-		Options can be passed via _opt. After execution _opt contains the Options
-		that were available
 		*/
-		virtual bool read(const std::filesystem::path& _filename, OpenMesh::IO::BaseImporter& _bi, OpenMesh::IO::Options& _opt) override;
+		virtual bool read(const std::filesystem::path& _filename, OpenMesh::IO::BaseImporter& _bi) override;
 
 		/** Reads a mesh given by a std::stream. This method usually uses the same stream reading method
-		that read uses. Options can be passed via _opt. After execution _opt contains the Options
-		that were available.
+		that read uses.
 
 		Please make sure that if _is is std::ifstream, the correct std::ios_base::openmode flags are set. 
 		*/
-		virtual bool read(std::istream& _is, OpenMesh::IO::BaseImporter& _bi, OpenMesh::IO::Options& _opt) override;
+		virtual bool read(std::istream& _is, OpenMesh::IO::BaseImporter& _bi) override;
 
 		/** \brief Returns true if writer can parse _filename (checks extension).
 		* _filename can also provide an extension without a name for a file e.g. _filename == "om" checks, if the reader can read the "om" extension

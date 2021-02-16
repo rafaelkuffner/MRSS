@@ -90,13 +90,9 @@ namespace OpenMesh {
 			std::string get_description() const { return "Alias/Wavefront"; }
 			std::string get_extensions()  const { return "obj"; }
 
-			bool read(const std::filesystem::path &_filename,
-				BaseImporter &_bi,
-				Options &_opt);
+			bool read(const std::filesystem::path &_filename, BaseImporter &_bi);
 
-			bool read(std::istream &_in,
-				BaseImporter &_bi,
-				Options &_opt);
+			bool read(std::istream &_in, BaseImporter &_bi);
 
 		private:
 

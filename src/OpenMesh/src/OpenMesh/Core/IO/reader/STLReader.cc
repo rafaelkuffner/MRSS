@@ -94,9 +94,7 @@ _STLReader_()
 //-----------------------------------------------------------------------------
 
 
-bool
-_STLReader_::
-read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
+bool _STLReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi)
 {
   bool result = false;
 
@@ -122,15 +120,14 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
   {
     case STLA:
     {
-      result = read_stla(_filename, _bi, _opt);
-      _opt -= OptionBits::Binary;
+      result = read_stla(_filename, _bi);
       break;
     }
 
     case STLB:
     {
-      result = read_stlb(_filename, _bi, _opt);
-      _opt += OptionBits::Binary;
+      result = read_stlb(_filename, _bi);
+      _bi.set_file_options(OptionBits::Binary);
       break;
     }
 
@@ -145,18 +142,15 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
   return result;
 }
 
-bool
-_STLReader_::read(std::istream& _is,
-		 BaseImporter& _bi,
-		 Options& _opt)
+bool _STLReader_::read(std::istream& _is, BaseImporter& _bi)
 {
 
   bool result = false;
 
-  if (_opt.check(OptionBits::Binary))
-    result = read_stlb(_is, _bi, _opt);
+  if (_bi.user_options().check(OptionBits::Binary))
+    result = read_stlb(_is, _bi);
   else
-    result = read_stla(_is, _bi, _opt);
+    result = read_stla(_is, _bi);
 
   return result;
 }
@@ -209,9 +203,7 @@ void trimStdString( std::string& _string) {
 
 //-----------------------------------------------------------------------------
 
-bool
-_STLReader_::
-read_stla(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const
+bool _STLReader_::read_stla(const std::filesystem::path& _filename, BaseImporter& _bi) const
 {
   std::fstream in( _filename, std::ios_base::in );
 
@@ -223,7 +215,7 @@ read_stla(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _o
     return false;
   }
 
-  bool res = read_stla(in, _bi, _opt);
+  bool res = read_stla(in, _bi);
 
   if (in)
     in.close();
@@ -233,9 +225,7 @@ read_stla(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _o
 
 //-----------------------------------------------------------------------------
 
-bool
-_STLReader_::
-read_stla(std::istream& _in, BaseImporter& _bi, Options& _opt) const
+bool _STLReader_::read_stla(std::istream& _in, BaseImporter& _bi) const
 {
 
   unsigned int               i;
@@ -342,9 +332,7 @@ read_stla(std::istream& _in, BaseImporter& _bi, Options& _opt) const
 
 //-----------------------------------------------------------------------------
 
-bool
-_STLReader_::
-read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt) const
+bool _STLReader_::read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi) const
 {
   std::fstream in( _filename.c_str(), std::ios_base::in | std::ios_base::binary);
 
@@ -356,7 +344,7 @@ read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _o
     return false;
   }
 
-  bool res = read_stlb(in, _bi, _opt);
+  bool res = read_stlb(in, _bi);
 
   if (in)
     in.close();
@@ -366,9 +354,7 @@ read_stlb(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _o
 
 //-----------------------------------------------------------------------------
 
-bool
-_STLReader_::
-read_stlb(std::istream& _in, BaseImporter& _bi, Options& _opt) const
+bool _STLReader_::read_stlb(std::istream& _in, BaseImporter& _bi) const
 {
   char                       dummy[100];
   bool                       swapFlag;
