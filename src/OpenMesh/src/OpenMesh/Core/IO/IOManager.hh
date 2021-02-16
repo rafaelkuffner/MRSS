@@ -146,7 +146,7 @@ public:
   */
   bool write(const std::filesystem::path& _filename,
 	     BaseExporter& _be,
-	     Options _opt=Options::Default,
+	     Options _opt = {},
              std::streamsize _precision = 6);
 
 /** Write a mesh to open std::ostream _os. The source data structure is specified
@@ -158,7 +158,7 @@ public:
   bool write(std::ostream& _filename,
 	     const std::filesystem::path& _ext,
 	     BaseExporter& _be,
-	     Options _opt=Options::Default,
+	     Options _opt = {},
              std::streamsize _precision = 6);
 
 
@@ -171,7 +171,7 @@ public:
 
   size_t binary_size(const std::filesystem::path& _format,
 		     BaseExporter& _be,
-		     Options _opt = Options::Default)
+		     Options _opt = {})
   {
     const BaseWriter *bw = find_writer(_format);
     return bw ? bw->binary_size(_be,_opt) : 0;

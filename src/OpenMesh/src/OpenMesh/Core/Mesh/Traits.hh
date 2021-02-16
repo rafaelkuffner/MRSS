@@ -74,33 +74,34 @@ namespace OpenMesh {
 
 //== CLASS DEFINITION =========================================================
 
+// TODO make macros into MACRO_CASE
 
 /// Macro for defining the vertex attributes. See \ref mesh_type.
-#define VertexAttributes(_i) enum { VertexAttributes = _i }
+#define DeclareVertexAttributes(_i) static constexpr OpenMesh::AttributeBits VertexAttributes = (_i)
 
 /// Macro for defining the halfedge attributes. See \ref mesh_type.
-#define HalfedgeAttributes(_i) enum { HalfedgeAttributes = _i }
+#define DeclareHalfedgeAttributes(_i) static constexpr OpenMesh::AttributeBits HalfedgeAttributes = (_i)
 
 /// Macro for defining the edge attributes. See \ref mesh_type.
-#define EdgeAttributes(_i) enum { EdgeAttributes = _i }
+#define DeclareEdgeAttributes(_i) static constexpr OpenMesh::AttributeBits EdgeAttributes = (_i)
 
 /// Macro for defining the face attributes. See \ref mesh_type.
-#define FaceAttributes(_i) enum { FaceAttributes = _i }
+#define DeclareFaceAttributes(_i) static constexpr OpenMesh::AttributeBits FaceAttributes = (_i)
 
 /// Macro for defining the vertex traits. See \ref mesh_type.
-#define VertexTraits \
+#define DeclareVertexTraits \
   template <class Base, class Refs> struct VertexT : public Base
 
 /// Macro for defining the halfedge traits. See \ref mesh_type.
-#define HalfedgeTraits \
+#define DeclareHalfedgeTraits \
   template <class Base, class Refs> struct HalfedgeT : public Base
 
 /// Macro for defining the edge traits. See \ref mesh_type.
-#define EdgeTraits \
+#define DeclareEdgeTraits \
   template <class Base, class Refs> struct EdgeT : public Base
 
 /// Macro for defining the face traits. See \ref mesh_type.
-#define FaceTraits \
+#define DeclareFaceTraits \
   template <class Base, class Refs> struct FaceT : public Base
 
 
@@ -140,16 +141,16 @@ struct DefaultTraits
   typedef Vec3uc Color;
 
 #ifndef DOXY_IGNORE_THIS
-  VertexTraits    {};
-  HalfedgeTraits  {};
-  EdgeTraits      {};
-  FaceTraits      {};
+  DeclareVertexTraits    {};
+  DeclareHalfedgeTraits  {};
+  DeclareEdgeTraits      {};
+  DeclareFaceTraits      {};
 #endif
 
-  VertexAttributes(0);
-  HalfedgeAttributes(Attributes::PrevHalfedge);
-  EdgeAttributes(0);
-  FaceAttributes(0);
+  DeclareVertexAttributes(AttributeBits::None);
+  DeclareHalfedgeAttributes(AttributeBits::PrevHalfedge);
+  DeclareEdgeAttributes(AttributeBits::None);
+  DeclareFaceAttributes(AttributeBits::None);
 };
 
 
@@ -177,10 +178,10 @@ template <class _Traits1, class _Traits2> struct MergeTraits
     typedef _Traits2  T2;
 
 
-    VertexAttributes   ( T1::VertexAttributes   | T2::VertexAttributes   );
-    HalfedgeAttributes ( T1::HalfedgeAttributes | T2::HalfedgeAttributes );
-    EdgeAttributes     ( T1::EdgeAttributes     | T2::EdgeAttributes     );
-    FaceAttributes     ( T1::FaceAttributes     | T2::FaceAttributes     );
+    DeclareVertexAttributes   ( T1::VertexAttributes   | T2::VertexAttributes   );
+    DeclareHalfedgeAttributes ( T1::HalfedgeAttributes | T2::HalfedgeAttributes );
+    DeclareEdgeAttributes     ( T1::EdgeAttributes     | T2::EdgeAttributes     );
+    DeclareFaceAttributes     ( T1::FaceAttributes     | T2::FaceAttributes     );
 
 
     typedef typename T1::Point    Point;

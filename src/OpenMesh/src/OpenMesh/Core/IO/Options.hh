@@ -46,210 +46,184 @@
 #define OPENMESH_IO_OPTIONS_HH
 
 
-//=== INCLUDES ================================================================
+ //=== INCLUDES ================================================================
 
 
-// OpenMesh
+ // OpenMesh
 #include <OpenMesh/Core/System/config.h>
+#include <OpenMesh/Core/Mesh/Attributes.hh>
 
+#include <cstdlib>
 
 //== NAMESPACES ==============================================================
 
 
 namespace OpenMesh {
-namespace IO   {
+	namespace IO {
 
+		//=== IMPLEMENTATION ==========================================================
 
-//=== IMPLEMENTATION ==========================================================
+		/// Definitions of %Options for reading and writing. The options can be
+		/// or'ed.
+		enum class OptionBits : unsigned {
+			None = 0,
+			Default = 0x00, ///< No options
+			Binary = 0x01, ///< Set binary mode for r/w
+			MSB = 0x02, ///< Assume big endian byte ordering
+			LSB = 0x04, ///< Assume little endian byte ordering
+			Swap = 0x08, ///< Swap byte order in binary mode
+			// TODO per-element color settings? (-> attribs)
+			// - are these related to the Color typedef in the mesh traits?
+			ColorAlpha = 0x10, ///< Has (r) / store (w) alpha values for colors
+			ColorFloat = 0x20, ///< Has (r) / store (w) float values for colors (currently only implemented for PLY and OFF files)
+			Custom = 0x40, ///< Has (r)             custom properties (currently only implemented in PLY Reader ASCII version)
+		};
 
+		inline bool operator!(OptionBits x) {
+			return x == OptionBits::None;
+		}
 
-/** \name Mesh Reading / Writing
-    Option for reader and writer modules.
-*/
-//@{
+		inline OptionBits operator~(OptionBits x) {
+			return OptionBits(~unsigned(x));
+		}
 
+		inline OptionBits operator|(OptionBits l, OptionBits r) {
+			return OptionBits(unsigned(l) | unsigned(r));
+		}
 
-//-----------------------------------------------------------------------------
+		inline OptionBits operator&(OptionBits l, OptionBits r) {
+			return OptionBits(unsigned(l) & unsigned(r));
+		}
 
-/** \brief Set options for reader/writer modules.
- *
- *  The class is used in a twofold way.
- *  -# In combination with reader modules the class is used
- *     - to pass hints to the reading module, whether the input is
- *     binary and what byte ordering the binary data has
- *     - to retrieve information about the file contents after
- *     succesful reading.
- *  -# In combination with write modules the class gives directions to
- *     the writer module, whether to
- *     - use binary mode or not and what byte order to use
- *     - store one of the standard properties.
- *
- *  The option are defined in \c Options::Flag as bit values and stored in
- *  an \c int value as a bitset.
- */
-class Options
-{
-public:
-  typedef int       enum_type;
-  typedef enum_type value_type;
+		inline OptionBits & operator|=(OptionBits &l, OptionBits r) {
+			l = l | r;
+			return l;
+		}
 
-  /// Definitions of %Options for reading and writing. The options can be
-  /// or'ed.
-  enum Flag {
-      Default          = 0x00000, ///< No options
-      Binary           = 0x00001, ///< Set binary mode for r/w
-      MSB              = 0x00002, ///< Assume big endian byte ordering
-      LSB              = 0x00004, ///< Assume little endian byte ordering
-      Swap             = 0x00008, ///< Swap byte order in binary mode
-      VertexNormal     = 0x00010, ///< Has (r) / store (w) vertex normals
-      VertexColor      = 0x00020, ///< Has (r) / store (w) vertex colors
-      VertexTexCoord   = 0x00040, ///< Has (r) / store (w) texture coordinates
-      HalfedgeNormal   = 0x00080, ///< Has (r) / store (w) halfedge normals
-      HalfedgeTexCoord = 0x00100, ///< Has (r) / store (w) halfedge texture coordinates
-      EdgeColor        = 0x00200, ///< Has (r) / store (w) edge colors
-      FaceNormal       = 0x00400, ///< Has (r) / store (w) face normals
-      FaceColor        = 0x00800, ///< Has (r) / store (w) face colors
-      FaceTexIndex     = 0x01000, ///< Has (r) / store (w) face texture index
-      ColorAlpha       = 0x10000, ///< Has (r) / store (w) alpha values for colors
-      ColorFloat       = 0x20000, ///< Has (r) / store (w) float values for colors (currently only implemented for PLY and OFF files)
-      Custom           = 0x40000, ///< Has (r)             custom properties (currently only implemented in PLY Reader ASCII version)
-      Status           = 0x80000  ///< Has (r) / store (w) status properties
-  };
+		inline OptionBits & operator&=(OptionBits &l, OptionBits r) {
+			l = l & r;
+			return l;
+		}
 
-public:
+		/** \name Mesh Reading / Writing
+			Option for reader and writer modules.
+		*/
 
-  /// Default constructor
-  Options() : flags_( Default )
-  { }
+		//-----------------------------------------------------------------------------
 
+		/** \brief Set options for reader/writer modules.
+		 *
+		 *  The class is used in a twofold way.
+		 *  -# In combination with reader modules the class is used
+		 *     - to pass hints to the reading module, whether the input is
+		 *     binary and what byte ordering the binary data has
+		 *     - to retrieve information about the file contents after
+		 *     succesful reading.
+		 *  -# In combination with write modules the class gives directions to
+		 *     the writer module, whether to
+		 *     - use binary mode or not and what byte order to use
+		 *     - store one of the standard properties.
+		 *
+		 *  The option are defined in \c Options::Flag as bit values and stored in
+		 *  an \c int value as a bitset.
+		 */
+		struct Options
+		{
+			OptionBits flags = OptionBits::Default;
+			AttributeBits vattribs = AttributeBits::None;
+			AttributeBits eattribs = AttributeBits::None;
+			AttributeBits hattribs = AttributeBits::None;
+			AttributeBits fattribs = AttributeBits::None;
 
-  /// Copy constructor
-  Options(const Options& _opt) : flags_(_opt.flags_)
-  { }
+			/// Restore state after default constructor.
+			void cleanup(void)
+			{
+				*this = Options();
+			}
 
+			/// Clear all bits.
+			void clear(void)
+			{
+				*this = Options();
+			}
 
-  /// Initializing constructor setting a single option
-  Options(Flag _flg) : flags_( _flg)
-  { }
+			/// Returns true if all bits are zero.
+			bool is_empty(void) const
+			{
+				return *this == Options();
+			}
 
+			/// Unset options defined in _rhs.
+			Options &operator-=(const OptionBits _rhs)
+			{
+				flags = OptionBits(flags & ~_rhs);
+				return *this;
+			}
 
-  /// Initializing constructor setting multiple options
-  Options(const value_type _flgs) : flags_( _flgs)
-  { }
+			Options &unset(const OptionBits _rhs)
+			{
+				return (*this -= _rhs);
+			}
 
+			/// Set options defined in _rhs
+			Options &operator+=(const OptionBits _rhs)
+			{
+				flags = OptionBits(flags | _rhs);
+				return *this;
+			}
 
-  ~Options()
-  { }
+			Options &set(const OptionBits _rhs)
+			{
+				return (*this += _rhs);
+			}
 
-  /// Restore state after default constructor.
-  void cleanup(void)
-  { flags_ = Default; }
+			/// Returns true if _rhs has the same options enabled.
+			bool operator==(const Options &rhs) const
+			{
+				// assuming bitwise equality (beware padding!)
+				return std::memcmp(this, &rhs, sizeof(Options)) == 0;
+			}
 
-  /// Clear all bits.
-  void clear(void)
-  { flags_ = 0; }
+			/// Returns true if _rhs does not have the same options enabled.
+			bool operator!=(const Options &rhs) const
+			{
+				return !(*this == rhs);
+			}
 
-  /// Returns true if all bits are zero.
-  bool is_empty(void) const { return !flags_; }
+			// Check if an option or several options are set.
+			bool check(const OptionBits _rhs) const
+			{
+				return (flags & _rhs) == _rhs;
+			}
 
-public:
+			bool is_binary()               const { return check(OptionBits::Binary); }
+			bool color_has_alpha()         const { return check(OptionBits::ColorAlpha); }
+			bool color_is_float()          const { return check(OptionBits::ColorFloat); }
+			bool vertex_has_normal()       const { return !!(vattribs & AttributeBits::Normal); }
+			bool vertex_has_color()        const { return !!(vattribs & AttributeBits::Color); }
+			bool vertex_has_texcoord1D()   const { return !!(vattribs & AttributeBits::TexCoord1D); }
+			bool vertex_has_texcoord2D()   const { return !!(vattribs & AttributeBits::TexCoord2D); }
+			bool vertex_has_texcoord3D()   const { return !!(vattribs & AttributeBits::TexCoord3D); }
+			bool vertex_has_texcoord()     const { return !!(vattribs & (AttributeBits::TexCoord1D | AttributeBits::TexCoord2D | AttributeBits::TexCoord3D)); }
+			bool vertex_has_status()       const { return !!(vattribs & AttributeBits::Status); }
+			bool halfedge_has_normal()     const { return !!(hattribs & AttributeBits::Normal); }
+			bool halfedge_has_color()      const { return !!(hattribs & AttributeBits::Color); }
+			bool halfedge_has_texcoord1D() const { return !!(hattribs & AttributeBits::TexCoord1D); }
+			bool halfedge_has_texcoord2D() const { return !!(hattribs & AttributeBits::TexCoord2D); }
+			bool halfedge_has_texcoord3D() const { return !!(hattribs & AttributeBits::TexCoord3D); }
+			bool halfedge_has_texcoord()   const { return !!(hattribs & (AttributeBits::TexCoord1D | AttributeBits::TexCoord2D | AttributeBits::TexCoord3D)); }
+			bool halfedge_has_status()     const { return !!(hattribs & AttributeBits::Status); }
+			bool edge_has_color()          const { return !!(eattribs & AttributeBits::Color); }
+			bool edge_has_status()         const { return !!(eattribs & AttributeBits::Status); }
+			bool face_has_normal()         const { return !!(fattribs & AttributeBits::Normal); }
+			bool face_has_color()          const { return !!(fattribs & AttributeBits::Color); }
+			bool face_has_texindex()       const { return !!(fattribs & AttributeBits::TextureIndex); }
+			bool face_has_status()         const { return !!(fattribs & AttributeBits::Status); }
+		};
 
+		//=============================================================================
 
-  //@{
-  /// Copy options defined in _rhs.
-
-  Options& operator = ( const Options& _rhs )
-  { flags_ = _rhs.flags_; return *this; }
-
-  Options& operator = ( const value_type _rhs )
-  { flags_ = _rhs; return *this; }
-
-  //@}
-
-
-  //@{
-  /// Unset options defined in _rhs.
-
-  Options& operator -= ( const value_type _rhs )
-  { flags_ &= ~_rhs; return *this; }
-
-  Options& unset( const value_type _rhs)
-  { return (*this -= _rhs); }
-
-  //@}
-
-
-
-  //@{
-  /// Set options defined in _rhs
-
-  Options& operator += ( const value_type _rhs )
-  { flags_ |= _rhs; return *this; }
-
-  Options& set( const value_type _rhs)
-  { return (*this += _rhs); }
-
-  //@}
-
-public:
-
-
-  // Check if an option or several options are set.
-  bool check(const value_type _rhs) const
-  {
-    return (flags_ & _rhs)==_rhs;
-  }
-
-  bool is_binary()           const { return check(Binary); }
-  bool vertex_has_normal()   const { return check(VertexNormal); }
-  bool vertex_has_color()    const { return check(VertexColor); }
-  bool vertex_has_texcoord() const { return check(VertexTexCoord); }
-  bool vertex_has_status()   const { return check(Status); }
-  bool halfedge_has_normal()   const { return check(HalfedgeNormal); }
-  // TODO never true atm
-  bool halfedge_has_color()   const { return false; }
-  bool halfedge_has_texcoord()   const { return check(HalfedgeTexCoord); }
-  bool halfedge_has_status() const { return check(Status); }
-  bool edge_has_color()      const { return check(EdgeColor); }
-  bool edge_has_status()     const { return check(Status); }
-  bool face_has_normal()     const { return check(FaceNormal); }
-  bool face_has_color()      const { return check(FaceColor); }
-  bool face_has_texindex()     const { return check(FaceTexIndex); }
-  bool face_has_status()     const { return check(Status); }
-  bool color_has_alpha()     const { return check(ColorAlpha); }
-  bool color_is_float()      const { return check(ColorFloat); }
-
-
-  /// Returns true if _rhs has the same options enabled.
-  bool operator == (const value_type _rhs) const
-  { return flags_ == _rhs; }
-
-
-  /// Returns true if _rhs does not have the same options enabled.
-  bool operator != (const value_type _rhs) const
-  { return flags_ != _rhs; }
-
-
-  /// Returns the option set.
-  operator value_type ()     const { return flags_; }
-
-private:
-
-  bool operator && (const value_type _rhs) const;
-
-  value_type flags_;
-};
-
-//-----------------------------------------------------------------------------
-
-
-
-
-//@}
-
-
-//=============================================================================
-} // namespace IO
+	} // namespace IO
 } // namespace OpenMesh
 //=============================================================================
 #endif

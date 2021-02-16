@@ -80,7 +80,7 @@ bool
 _OFFWriter_::
 write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
-  std::ofstream out(_filename, (_opt.check(Options::Binary) ? std::ios_base::binary | std::ios_base::out
+  std::ofstream out(_filename, (_opt.check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
                                                            : std::ios_base::out) );
 
   return write(out, _be, _opt, _precision);
@@ -99,9 +99,10 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
 
 
   // check writer features
-  if ( _opt.check(Options::FaceNormal) ) // not supported by format
-    return false;
-
+  if (_opt.face_has_normal()) {
+      omerr() << "[OFFWriter] : FaceNormal not supported by OBJ Writer" << std::endl;
+      _opt.fattribs &= ~AttributeBits::Normal;
+  }
 
   if (!_os.good())
   {
@@ -111,18 +112,19 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
   }
 
   // write header line
-  if (_opt.check(Options::VertexTexCoord)) _os << "ST";
-  if (_opt.check(Options::VertexColor) || _opt.check(Options::FaceColor))    _os << "C";
-  if (_opt.check(Options::VertexNormal))   _os << "N";
+  if (_opt.vertex_has_texcoord2D()) _os << "ST";
+  if (_opt.vertex_has_color() || _opt.face_has_color())    _os << "C";
+  if (_opt.vertex_has_normal())   _os << "N";
   _os << "OFF";
-  if (_opt.check(Options::Binary)) _os << " BINARY";
+  if (_opt.check(OptionBits::Binary)) _os << " BINARY";
   _os << "\n";
 
-  if (!_opt.check(Options::Binary))
+  // FIXME non-stupid precision
+  if (!_opt.check(OptionBits::Binary))
     _os.precision(_precision);
 
   // write to file
-  bool result = (_opt.check(Options::Binary) ?
+  bool result = (_opt.check(OptionBits::Binary) ?
 		 write_binary(_os, _be, _opt) :
 		 write_ascii(_os, _be, _opt));
 

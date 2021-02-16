@@ -85,15 +85,15 @@ write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, s
   // binary or ascii ?
   if (_filename.extension() == ".stla")
   {
-    _opt -= Options::Binary;
+    _opt -= OptionBits::Binary;
   }
   else if (_filename.extension() == ".stlb")
   {
-    _opt += Options::Binary;
+    _opt += OptionBits::Binary;
   }
 
   // open file
-  std::fstream out(_filename, (_opt.check(Options::Binary) ? std::ios_base::binary | std::ios_base::out
+  std::fstream out(_filename, (_opt.check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
                                                                    : std::ios_base::out) );
 
   bool result = write(out, _be, _opt, _precision);
@@ -114,15 +114,15 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
   if (!check(_be, _opt)) return false;
 
   // check writer features
-  if (_opt.check(Options::VertexNormal)   ||
-      _opt.check(Options::VertexTexCoord) ||
-      _opt.check(Options::FaceColor))
+  if (_opt.vertex_has_normal()   ||
+      _opt.vertex_has_texcoord() ||
+      _opt.face_has_color())
     return false;
 
-  if (!_opt.check(Options::Binary))
+  if (!_opt.check(OptionBits::Binary))
     _os.precision(_precision);
 
-  if (_opt & Options::Binary)
+  if (_opt.check(OptionBits::Binary))
     return write_stlb(_os, _be, _opt);
   else
     return write_stla(_os, _be, _opt);

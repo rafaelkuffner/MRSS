@@ -140,24 +140,17 @@ _OFFReader_::read(std::istream& _in, BaseImporter& _bi, Options& _opt )
    }
 
    // filter relevant options for reading
-   bool swap = _opt.check( Options::Swap );
-
-
-   userOptions_ = _opt;
-
-   // build options to be returned
-   _opt.clear();
-
-   if (options_.vertex_has_normal() && userOptions_.vertex_has_normal())     _opt += Options::VertexNormal;
-   if (options_.vertex_has_texcoord() && userOptions_.vertex_has_texcoord()) _opt += Options::VertexTexCoord;
-   if (options_.vertex_has_color() && userOptions_.vertex_has_color())       _opt += Options::VertexColor;
-   if (options_.face_has_color() && userOptions_.face_has_color())           _opt += Options::FaceColor;
-   if (options_.is_binary())                                                 _opt += Options::Binary;
+   bool swap = _opt.check( OptionBits::Swap );
 
    //force user-choice for the alpha value when reading binary
-   if ( options_.is_binary() && userOptions_.color_has_alpha() )
-     options_ += Options::ColorAlpha;
+   if (options_.is_binary() && _bi.user_options().color_has_alpha())
+     options_ += OptionBits::ColorAlpha;
 
+   _bi.request_vattribs(options_.vattribs);
+   _bi.request_fattribs(options_.fattribs);
+   _bi.set_file_options(options_.flags);
+
+   // note: options_ represents the file structure and is needed for parsing irrespective of user options
     return (options_.is_binary() ?
  	   read_binary(_in, _bi, _opt, swap) :
 	   read_ascii(_in, _bi, _opt));
@@ -210,7 +203,7 @@ _OFFReader_::read_ascii(std::istream& _in, BaseImporter& _bi, Options& _opt) con
 
       _in >> n[0]; _in >> n[1]; _in >> n[2];
 
-      if ( userOptions_.vertex_has_normal() )
+      if (_bi.file_options().vertex_has_normal())
         _bi.set_normal(vh, n);
     }
 
@@ -232,26 +225,26 @@ _OFFReader_::read_ascii(std::istream& _in, BaseImporter& _bi, Options& _opt) con
         case 2 : stream >> trash; stream >> trash; break; //corrupt format (ignore)
         // rgb int
         case 3 : stream >> c3[0];  stream >> c3[1];  stream >> c3[2];
-            if ( userOptions_.vertex_has_color() )
+            if (_bi.file_options().vertex_has_color())
               _bi.set_color( vh, Vec3uc( c3 ) );
             break;
         // rgba int
         case 4 : stream >> c4[0];  stream >> c4[1];  stream >> c4[2]; stream >> c4[3];
-            if ( userOptions_.vertex_has_color() )
+            if (_bi.file_options().vertex_has_color())
               _bi.set_color( vh, Vec4uc( c4 ) );
             break;
         // rgb floats
         case 5 : stream >> c3f[0];  stream >> c3f[1];  stream >> c3f[2];
-            if ( userOptions_.vertex_has_color() ) {
+            if (_bi.file_options().vertex_has_color()) {
               _bi.set_color( vh, c3f );
-              _opt += Options::ColorFloat;
+              _bi.set_file_options(OptionBits::ColorFloat);
             }
             break;
         // rgba floats
         case 6 : stream >> c4f[0];  stream >> c4f[1];  stream >> c4f[2]; stream >> c4f[3];
-            if ( userOptions_.vertex_has_color() ) {
+            if (_bi.file_options().vertex_has_color()) {
               _bi.set_color( vh, c4f );
-              _opt += Options::ColorFloat;
+              _bi.set_file_options(OptionBits::ColorFloat);
             }
             break;
 
@@ -263,7 +256,7 @@ _OFFReader_::read_ascii(std::istream& _in, BaseImporter& _bi, Options& _opt) con
     //perhaps read TEXTURE COORDs
     if ( options_.vertex_has_texcoord() ){
       stream >> t[0]; stream >> t[1];
-      if ( userOptions_.vertex_has_texcoord() )
+      if (_bi.file_options().vertex_has_texcoord())
         _bi.set_texcoord(vh, t);
     }
   }
@@ -316,26 +309,26 @@ _OFFReader_::read_ascii(std::istream& _in, BaseImporter& _bi, Options& _opt) con
         case 2 : stream >> trash; stream >> trash; break; //corrupt format (ignore)
         // rgb int
         case 3 : stream >> c3[0];  stream >> c3[1];  stream >> c3[2];
-            if ( userOptions_.face_has_color() )
+            if (_bi.file_options().face_has_color())
               _bi.set_color( fh, Vec3uc( c3 ) );
             break;
         // rgba int
         case 4 : stream >> c4[0];  stream >> c4[1];  stream >> c4[2]; stream >> c4[3];
-            if ( userOptions_.face_has_color() )
+            if (_bi.file_options().face_has_color())
               _bi.set_color( fh, Vec4uc( c4 ) );
             break;
         // rgb floats
         case 5 : stream >> c3f[0];  stream >> c3f[1];  stream >> c3f[2];
-            if ( userOptions_.face_has_color() ) {
+            if (_bi.file_options().face_has_color()) {
               _bi.set_color( fh, c3f );
-              _opt += Options::ColorFloat;
+              _bi.set_file_options(OptionBits::ColorFloat);
             }
             break;
         // rgba floats
         case 6 : stream >> c4f[0];  stream >> c4f[1];  stream >> c4f[2]; stream >> c4f[3];
-            if ( userOptions_.face_has_color() ) {
+            if (_bi.file_options().face_has_color()) {
               _bi.set_color( fh, c4f );
-              _opt += Options::ColorFloat;
+              _bi.set_file_options(OptionBits::ColorFloat);
             }
             break;
 
@@ -465,13 +458,13 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
       readValue(_in, n[1]);
       readValue(_in, n[2]);
 
-      if ( userOptions_.vertex_has_normal() )
+      if (_bi.file_options().vertex_has_normal())
         _bi.set_normal(vh, n);
     }
 
     if ( options_.vertex_has_color() ) {
-      if ( userOptions_.color_is_float() ) {
-        _opt += Options::ColorFloat;
+      if (_bi.user_options().color_is_float()) {
+        _bi.set_file_options(OptionBits::ColorFloat);
         //with alpha
         if ( options_.color_has_alpha() ){
           readValue(_in, cAf[0]);
@@ -479,7 +472,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, cAf[2]);
           readValue(_in, cAf[3]);
 
-          if ( userOptions_.vertex_has_color() )
+          if (_bi.file_options().vertex_has_color())
             _bi.set_color( vh, cAf );
         }else{
 
@@ -488,7 +481,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, cf[1]);
           readValue(_in, cf[2]);
 
-          if ( userOptions_.vertex_has_color() )
+          if (_bi.file_options().vertex_has_color())
             _bi.set_color( vh, cf );
         }
       } else {
@@ -499,7 +492,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, cA[2]);
           readValue(_in, cA[3]);
 
-          if ( userOptions_.vertex_has_color() )
+          if (_bi.file_options().vertex_has_color())
             _bi.set_color( vh, Vec4uc( cA ) );
         }else{
           //without alpha
@@ -507,7 +500,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, c[1]);
           readValue(_in, c[2]);
 
-          if ( userOptions_.vertex_has_color() )
+          if (_bi.file_options().vertex_has_color())
             _bi.set_color( vh, Vec3uc( c ) );
         }
       }
@@ -517,7 +510,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
       readValue(_in, t[0]);
       readValue(_in, t[1]);
 
-      if ( userOptions_.vertex_has_texcoord() )
+      if (_bi.file_options().vertex_has_texcoord())
         _bi.set_texcoord(vh, t);
     }
   }
@@ -552,8 +545,8 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
 
     //face color
     if ( _opt.face_has_color() ) {
-      if ( userOptions_.color_is_float() ) {
-        _opt += Options::ColorFloat;
+      if (_bi.user_options().color_is_float()) {
+        _bi.set_file_options(OptionBits::ColorFloat);
         //with alpha
         if ( options_.color_has_alpha() ){
           readValue(_in, cAf[0]);
@@ -561,7 +554,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, cAf[2]);
           readValue(_in, cAf[3]);
 
-          if ( userOptions_.face_has_color() )
+          if (_bi.file_options().face_has_color())
             _bi.set_color( fh , cAf );
         }else{
           //without alpha
@@ -569,7 +562,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, cf[1]);
           readValue(_in, cf[2]);
 
-          if ( userOptions_.face_has_color() )
+          if (_bi.file_options().face_has_color())
             _bi.set_color( fh, cf );
         }
       } else {
@@ -580,7 +573,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, cA[2]);
           readValue(_in, cA[3]);
 
-          if ( userOptions_.face_has_color() )
+          if (_bi.file_options().face_has_color())
             _bi.set_color( fh , Vec4uc( cA ) );
         }else{
           //without alpha
@@ -588,7 +581,7 @@ _OFFReader_::read_binary(std::istream& _in, BaseImporter& _bi, Options& _opt, bo
           readValue(_in, c[1]);
           readValue(_in, c[2]);
 
-          if ( userOptions_.face_has_color() )
+          if (_bi.file_options().face_has_color())
             _bi.set_color( fh, Vec3uc( c ) );
         }
       }
@@ -641,14 +634,14 @@ bool _OFFReader_::can_u_read(std::istream& _is) const
   // check header: [ST][C][N][4][n]OFF BINARY
 
   if ( ( remainingChars > 1 ) && ( p[0] == 'S' && p[1] == 'T') )
-  { options_ += Options::VertexTexCoord; p += 2; remainingChars -= 2; }
+  { options_.vattribs |= AttributeBits::TexCoord2D; p += 2; remainingChars -= 2; }
 
   if ( ( remainingChars > 0 ) && ( p[0] == 'C') )
-  { options_ += Options::VertexColor;
-    options_ += Options::FaceColor; ++p; --remainingChars; }
+  { options_.vattribs |= AttributeBits::Color;
+    options_.fattribs |= AttributeBits::Color; ++p; --remainingChars; }
 
   if ( ( remainingChars > 0 ) && ( p[0] == 'N') )
-  { options_ += Options::VertexNormal; ++p; --remainingChars; }
+  { options_.vattribs |= AttributeBits::Normal; ++p; --remainingChars; }
 
   if ( ( remainingChars > 0 ) && (p[0] == '4' ) )
   { vertexDimensionTooHigh = true; ++p; --remainingChars; }
@@ -668,7 +661,7 @@ bool _OFFReader_::can_u_read(std::istream& _is) const
     remainingChars = 0;
 
   if ( ( remainingChars >= 6 ) && ( strncmp(p, "BINARY", 6) == 0 ) )
-    options_+= Options::Binary;
+    options_+= OptionBits::Binary;
 
   // vertex Dimensions != 3 are currently not supported
   if (vertexDimensionTooHigh)

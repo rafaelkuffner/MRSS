@@ -54,8 +54,8 @@ namespace green {
 	
 	struct GreenMeshTraits : OpenMesh::DefaultTraits {
 		// we always calc face/vertex normals
-		VertexAttributes(OpenMesh::Attributes::Normal);
-		FaceAttributes(OpenMesh::Attributes::Normal);
+		DeclareVertexAttributes(OpenMesh::AttributeBits::Normal);
+		DeclareFaceAttributes(OpenMesh::AttributeBits::Normal);
 	};
 
 	struct PolyMesh : public OpenMesh::PolyMesh_ArrayKernelT<GreenMeshTraits> {};

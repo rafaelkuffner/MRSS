@@ -134,11 +134,11 @@ protected:
 
   bool check(BaseExporter& _be, Options _opt) const
   {
-    return (_opt.check(Options::VertexNormal ) <= _be.has_vertex_normals())
-       &&  (_opt.check(Options::VertexTexCoord)<= _be.has_vertex_texcoords())
-       &&  (_opt.check(Options::VertexColor)   <= _be.has_vertex_colors())
-       &&  (_opt.check(Options::FaceNormal)    <= _be.has_face_normals())
-       &&  (_opt.check(Options::FaceColor)     <= _be.has_face_colors());
+    return (_opt.vertex_has_normal() <= _be.has_vertex_normals())
+       &&  (_opt.vertex_has_texcoord() <= _be.has_vertex_texcoords())
+       &&  (_opt.vertex_has_color()   <= _be.has_vertex_colors())
+       &&  (_opt.face_has_normal()    <= _be.has_face_normals())
+       &&  (_opt.face_has_color()     <= _be.has_face_colors());
   }
 };
 

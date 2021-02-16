@@ -134,45 +134,14 @@ namespace OpenMesh {
 				return false;
 			}
 
-
-
 			// filter relevant options for reading
-			bool swap = _opt.check(Options::Swap);
+			// byte swap option not used anymore?
+			bool swap = _opt.check(OptionBits::Swap);
 
-			userOptions_ = _opt;
-
-			// build options to be returned
-			_opt.clear();
-
-			// TODO keep better track of file attribs than with the options type
-			// TODO create halfedge attribs if desired
-
-			if (options_.vertex_has_normal() && userOptions_.vertex_has_normal()) {
-				_opt += Options::VertexNormal;
-				_bi.request_vattribs(Attributes::Normal);
-			}
-			if (options_.vertex_has_texcoord() && userOptions_.vertex_has_texcoord()) {
-				_opt += Options::VertexTexCoord;
-				// TODO other-dim texcoords?
-				_bi.request_vattribs(Attributes::TexCoord2D);
-			}
-			if (options_.vertex_has_color() && userOptions_.vertex_has_color()) {
-				_opt += Options::VertexColor;
-				_bi.request_vattribs(Attributes::Color);
-			}
-			if (options_.face_has_color() && userOptions_.face_has_color()) {
-				_opt += Options::FaceColor;
-				_bi.request_fattribs(Attributes::Color);
-			}
-			if (options_.is_binary()) {
-				_opt += Options::Binary;
-			}
-			if (options_.color_is_float()) {
-				_opt += Options::ColorFloat;
-			}
-			if (options_.check(Options::Custom) && userOptions_.check(Options::Custom)) {
-				_opt += Options::Custom;
-			}
+			// TODO create/populate halfedge attribs if desired			
+			_bi.request_vattribs(options_.vattribs);
+			_bi.request_fattribs(options_.fattribs);
+			_bi.set_file_options(options_.flags);
 
 			//    //force user-choice for the alpha value when reading binary
 			//    if ( options_.is_binary() && userOptions_.color_has_alpha() )
@@ -403,7 +372,7 @@ namespace OpenMesh {
 									_in >> c[3];
 								break;
 							case CUSTOM_PROP:
-								if (_opt.check(Options::Custom))
+								if (_bi.file_options().check(OptionBits::Custom))
 									readCustomProperty<false>(_in, _bi, vh, prop.name, prop.value, prop.listIndexType);
 								else
 									_in >> trash;
@@ -496,7 +465,7 @@ namespace OpenMesh {
 								break;
 
 							case CUSTOM_PROP:
-								if (_opt.check(Options::Custom) && fh.is_valid())
+								if (_bi.file_options().check(OptionBits::Custom) && fh.is_valid())
 									readCustomProperty<false>(_in, _bi, fh, prop.name, prop.value, prop.listIndexType);
 								else
 									_in >> trash;
@@ -640,7 +609,7 @@ namespace OpenMesh {
 
 								break;
 							case CUSTOM_PROP:
-								if (_opt.check(Options::Custom))
+								if (_bi.file_options().check(OptionBits::Custom))
 									readCustomProperty<true>(_in, _bi, vh, prop.name, prop.value, prop.listIndexType);
 								else
 									consume_input(_in, scalar_size_[prop.value]);
@@ -736,7 +705,7 @@ namespace OpenMesh {
 									readInteger(prop.value, _in, c[3]);
 								break;
 							case CUSTOM_PROP:
-								if (_opt.check(Options::Custom) && fh.is_valid())
+								if (_bi.file_options().check(OptionBits::Custom) && fh.is_valid())
 									readCustomProperty<true>(_in, _bi, fh, prop.name, prop.value, prop.listIndexType);
 								else
 									consume_input(_in, scalar_size_[prop.value]);
@@ -794,7 +763,7 @@ namespace OpenMesh {
 			case ValueTypeFLOAT32:
 			case ValueTypeFLOAT:
 				float32_t tmp;
-				restore(_in, tmp, options_.check(Options::MSB));
+				restore(_in, tmp, options_.check(OptionBits::MSB));
 				_value = tmp;
 				break;
 			default:
@@ -817,7 +786,7 @@ namespace OpenMesh {
 			case ValueTypeDOUBLE:
 
 				float64_t tmp;
-				restore(_in, tmp, options_.check(Options::MSB));
+				restore(_in, tmp, options_.check(OptionBits::MSB));
 				_value = tmp;
 
 				break;
@@ -878,7 +847,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT32:
 
-				restore(_in, tmp_uint32_t, options_.check(Options::MSB));
+				restore(_in, tmp_uint32_t, options_.check(OptionBits::MSB));
 				_value = tmp_uint32_t;
 
 				break;
@@ -887,7 +856,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT16:
 
-				restore(_in, tmp_uint16_t, options_.check(Options::MSB));
+				restore(_in, tmp_uint16_t, options_.check(OptionBits::MSB));
 				_value = tmp_uint16_t;
 
 				break;
@@ -896,7 +865,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT8:
 
-				restore(_in, tmp_uchar, options_.check(Options::MSB));
+				restore(_in, tmp_uchar, options_.check(OptionBits::MSB));
 				_value = tmp_uchar;
 
 				break;
@@ -926,7 +895,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT32:
 
-				restore(_in, tmp_int32_t, options_.check(Options::MSB));
+				restore(_in, tmp_int32_t, options_.check(OptionBits::MSB));
 				_value = tmp_int32_t;
 
 				break;
@@ -935,7 +904,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT16:
 
-				restore(_in, tmp_int16_t, options_.check(Options::MSB));
+				restore(_in, tmp_int16_t, options_.check(OptionBits::MSB));
 				_value = tmp_int16_t;
 
 				break;
@@ -944,7 +913,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT8:
 
-				restore(_in, tmp_char, options_.check(Options::MSB));
+				restore(_in, tmp_char, options_.check(OptionBits::MSB));
 				_value = tmp_char;
 
 				break;
@@ -975,7 +944,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT32:
 
-				restore(_in, tmp_int32_t, options_.check(Options::MSB));
+				restore(_in, tmp_int32_t, options_.check(OptionBits::MSB));
 				_value = tmp_int32_t;
 
 				break;
@@ -984,7 +953,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT32:
 
-				restore(_in, tmp_uint32_t, options_.check(Options::MSB));
+				restore(_in, tmp_uint32_t, options_.check(OptionBits::MSB));
 				_value = tmp_uint32_t;
 
 				break;
@@ -993,7 +962,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT8:
 
-				restore(_in, tmp_char, options_.check(Options::MSB));
+				restore(_in, tmp_char, options_.check(OptionBits::MSB));
 				_value = tmp_char;
 
 				break;
@@ -1002,7 +971,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT8:
 
-				restore(_in, tmp_uchar, options_.check(Options::MSB));
+				restore(_in, tmp_uchar, options_.check(OptionBits::MSB));
 				_value = tmp_uchar;
 
 				break;
@@ -1033,7 +1002,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT32:
 
-				restore(_in, tmp_uint32_t, options_.check(Options::MSB));
+				restore(_in, tmp_uint32_t, options_.check(OptionBits::MSB));
 				_value = tmp_uint32_t;
 
 				break;
@@ -1042,7 +1011,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT32:
 
-				restore(_in, tmp_int32_t, options_.check(Options::MSB));
+				restore(_in, tmp_int32_t, options_.check(OptionBits::MSB));
 				_value = tmp_int32_t;
 
 				break;
@@ -1051,7 +1020,7 @@ namespace OpenMesh {
 
 			case ValueTypeUINT8:
 
-				restore(_in, tmp_uchar, options_.check(Options::MSB));
+				restore(_in, tmp_uchar, options_.check(OptionBits::MSB));
 				_value = tmp_uchar;
 
 				break;
@@ -1060,7 +1029,7 @@ namespace OpenMesh {
 
 			case ValueTypeINT8:
 
-				restore(_in, tmp_char, options_.check(Options::MSB));
+				restore(_in, tmp_char, options_.check(OptionBits::MSB));
 				_value = tmp_char;
 
 				break;
@@ -1235,18 +1204,16 @@ namespace OpenMesh {
 			}
 
 			if (fileType == "ascii") {
-				options_ -= Options::Binary;
+				options_ -= OptionBits::Binary;
 			} else if (fileType == "binary_little_endian") {
-				options_ += Options::Binary;
-				options_ += Options::LSB;
+				options_ += OptionBits::Binary;
+				options_ += OptionBits::LSB;
 				//if (Endian::local() == Endian::MSB)
-
 				//  options_ += Options::Swap;
 			} else if (fileType == "binary_big_endian") {
-				options_ += Options::Binary;
-				options_ += Options::MSB;
+				options_ += OptionBits::Binary;
+				options_ += OptionBits::MSB;
 				//if (Endian::local() == Endian::LSB)
-
 				//  options_ += Options::Swap;
 			} else {
 				omerr() << "Unsupported PLY format: " << fileType << std::endl;
@@ -1329,7 +1296,7 @@ namespace OpenMesh {
 									elements_.back().properties_.clear();
 								}
 							} else {
-								options_ += Options::Custom;
+								options_ += OptionBits::Custom;
 							}
 
 						} else
@@ -1362,85 +1329,85 @@ namespace OpenMesh {
 								vertexDimension_++;
 							} else if (propertyName == "nx") {
 								entry = PropertyInfo(XNORM, valueType);
-								options_ += Options::VertexNormal;
+								options_.vattribs |= AttributeBits::Normal;
 							} else if (propertyName == "ny") {
 								entry = PropertyInfo(YNORM, valueType);
-								options_ += Options::VertexNormal;
+								options_.vattribs |= AttributeBits::Normal;
 							} else if (propertyName == "nz") {
 								entry = PropertyInfo(ZNORM, valueType);
-								options_ += Options::VertexNormal;
+								options_.vattribs |= AttributeBits::Normal;
 							} else if (propertyName == "u" || propertyName == "s") {
 								entry = PropertyInfo(TEXX, valueType);
-								options_ += Options::VertexTexCoord;
+								options_.vattribs |= AttributeBits::TexCoord2D;
 							} else if (propertyName == "v" || propertyName == "t") {
 								entry = PropertyInfo(TEXY, valueType);
-								options_ += Options::VertexTexCoord;
+								options_.vattribs |= AttributeBits::TexCoord2D;
 							} else if (propertyName == "red") {
 								entry = PropertyInfo(COLORRED, valueType);
-								options_ += Options::VertexColor;
+								options_.vattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "green") {
 								entry = PropertyInfo(COLORGREEN, valueType);
-								options_ += Options::VertexColor;
+								options_.vattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "blue") {
 								entry = PropertyInfo(COLORBLUE, valueType);
-								options_ += Options::VertexColor;
+								options_.vattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "diffuse_red") {
 								entry = PropertyInfo(COLORRED, valueType);
-								options_ += Options::VertexColor;
+								options_.vattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "diffuse_green") {
 								entry = PropertyInfo(COLORGREEN, valueType);
-								options_ += Options::VertexColor;
+								options_.vattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "diffuse_blue") {
 								entry = PropertyInfo(COLORBLUE, valueType);
-								options_ += Options::VertexColor;
+								options_.vattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "alpha") {
 								entry = PropertyInfo(COLORALPHA, valueType);
-								options_ += Options::VertexColor;
-								options_ += Options::ColorAlpha;
+								options_.vattribs |= AttributeBits::Color;
+								options_ += OptionBits::ColorAlpha;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							}
 						} else if (elementName == "face") {
 							if (propertyName == "red") {
 								entry = PropertyInfo(COLORRED, valueType);
-								options_ += Options::FaceColor;
+								options_.fattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "green") {
 								entry = PropertyInfo(COLORGREEN, valueType);
-								options_ += Options::FaceColor;
+								options_.fattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "blue") {
 								entry = PropertyInfo(COLORBLUE, valueType);
-								options_ += Options::FaceColor;
+								options_.fattribs |= AttributeBits::Color;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							} else if (propertyName == "alpha") {
 								entry = PropertyInfo(COLORALPHA, valueType);
-								options_ += Options::FaceColor;
-								options_ += Options::ColorAlpha;
+								options_.fattribs |= AttributeBits::Color;
+								options_ += OptionBits::ColorAlpha;
 								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += Options::ColorFloat;
+									options_ += OptionBits::ColorFloat;
 							}
 						}
 
 						//not a special property, load as custom
 						if (entry.value == Unsupported) {
 							Property prop = CUSTOM_PROP;
-							options_ += Options::Custom;
+							options_ += OptionBits::Custom;
 							entry = PropertyInfo(prop, valueType, propertyName);
 						}
 

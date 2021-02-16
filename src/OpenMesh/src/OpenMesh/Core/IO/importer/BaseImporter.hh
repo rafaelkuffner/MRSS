@@ -84,34 +84,78 @@ namespace OpenMesh {
 		 */
 		class OPENMESHDLLEXPORT BaseImporter
 		{
+		protected:
+			Options useropts_{};
+			Options fileopts_{};
+
 		public:
 
 			// base class needs virtual destructor
 			virtual ~BaseImporter() {}
 
-			virtual const Options & user_options() const = 0;
+			BaseImporter(Options _useropts) : useropts_(_useropts) {}
+
+			// user options (wanted/allowed by user)
+			const Options & user_options() const
+			{
+				return useropts_;
+			}
+
+			// options loaded from file (subset of user options)
+			const Options & file_options() const
+			{
+				return fileopts_;
+			}
+
+			// set file option flags
+			void set_file_options(OptionBits opts) {
+				// not exposing write access to full options to maintain control of attribs with request_* functions
+				fileopts_.flags |= opts;
+			}
 
 			// for reader to request halfedge attribs, falling back to vertex attribs, checked against user options
-			Attributes::AttributeBits request_h_or_v_attribs(Attributes::AttributeBits attribs)
+			AttributeBits request_h_or_v_attribs(AttributeBits attribs)
 			{
 				const auto hattribs = request_hattribs(attribs);
 				const auto vattribs = request_vattribs(attribs & ~hattribs);
 				return hattribs | vattribs;
 			}
 
-			// TODO attrib checks
+			// for reader to request vertex attribs checked against user options.
+			// returns loadable attributes.
+			AttributeBits request_vattribs(AttributeBits attribs)
+			{
+				AttributeBits r = useropts_.vattribs & attribs & ~fileopts_.vattribs;
+				if (!!r) request_vattribs_impl(r);
+				return fileopts_.vattribs |= r;
+			}
 
-			// for reader to request vertex attribs checked against user options
-			virtual Attributes::AttributeBits request_vattribs(Attributes::AttributeBits attribs) = 0;
+			// for reader to request edge attribs checked against user options.
+			// returns loadable attributes.
+			AttributeBits request_eattribs(AttributeBits attribs)
+			{
+				AttributeBits r = useropts_.eattribs & attribs & ~fileopts_.eattribs;
+				if (!!r) request_eattribs_impl(r);
+				return fileopts_.eattribs |= r;
+			}
 
-			// for reader to request edge attribs checked against user options
-			virtual Attributes::AttributeBits request_eattribs(Attributes::AttributeBits attribs) = 0;
+			// for reader to request halfedge attribs checked against user options.
+			// returns loadable attributes.
+			AttributeBits request_hattribs(AttributeBits attribs)
+			{
+				AttributeBits r = useropts_.hattribs & attribs & ~fileopts_.hattribs;
+				if (!!r) request_hattribs_impl(r);
+				return fileopts_.hattribs |= r;
+			}
 
-			// for reader to request halfedge attribs checked against user options
-			virtual Attributes::AttributeBits request_hattribs(Attributes::AttributeBits attribs) = 0;
-
-			// for reader to request face attribs checked against user options
-			virtual Attributes::AttributeBits request_fattribs(Attributes::AttributeBits attribs) = 0;
+			// for reader to request face attribs checked against user options.
+			// returns loadable attributes.
+			AttributeBits request_fattribs(AttributeBits attribs)
+			{
+				AttributeBits r = useropts_.fattribs & attribs & ~fileopts_.fattribs;
+				if (!!r) request_fattribs_impl(r);
+				return fileopts_.hattribs |= r;
+			}
 
 			// add a vertex with coordinate \c _point
 			virtual VertexHandle add_vertex(const Vec3f &_point) = 0;
@@ -247,6 +291,12 @@ namespace OpenMesh {
 
 			// post-processing
 			virtual void finish() {}
+
+		private:
+			virtual void request_vattribs_impl(AttributeBits attribs) = 0;
+			virtual void request_eattribs_impl(AttributeBits attribs) = 0;
+			virtual void request_hattribs_impl(AttributeBits attribs) = 0;
+			virtual void request_fattribs_impl(AttributeBits attribs) = 0;
 		};
 
 

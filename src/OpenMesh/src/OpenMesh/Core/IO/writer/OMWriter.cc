@@ -103,7 +103,7 @@ _OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
   if (_filename.extension() != ".om")
     return false;
 
-  _opt += Options::Binary; // only binary format supported
+  _opt += OptionBits::Binary; // only binary format supported
 
   std::ofstream ofs(_filename.c_str(), std::ios::binary);
 
@@ -141,12 +141,12 @@ _OMWriter_::write(std::ostream& _os, BaseExporter& _be, Options _opt, std::strea
 
   // Maybe an ascii version will be implemented in the future.
   // For now, support only a binary format
-  if ( !_opt.check( Options::Binary ) )
-    _opt += Options::Binary;
+  if ( !_opt.check( OptionBits::Binary ) )
+    _opt += OptionBits::Binary;
 
   // Ignore LSB/MSB bit. Always store in LSB (little endian)
-  _opt += Options::LSB;
-  _opt -= Options::MSB;
+  _opt += OptionBits::LSB;
+  _opt -= OptionBits::MSB;
 
   return write_binary(_os, _be, _opt);
 }
@@ -177,7 +177,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
 
   size_t bytes = 0;
 
-  bool swap = _opt.check(Options::Swap) || (Endian::local() == Endian::MSB);
+  bool swap = _opt.check(OptionBits::Swap) || (Endian::local() == Endian::MSB);
 
   unsigned int i, nV, nF;
   Vec3f v;
@@ -223,7 +223,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
 
 
   // ---------- write vertex normal
-  if (_be.n_vertices() && _opt.check( Options::VertexNormal ))
+  if (_be.n_vertices() && _opt.vertex_has_normal())
   {
     Vec3f n = _be.normal(VertexHandle(0));
 
@@ -241,7 +241,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write vertex color
-  if (_be.n_vertices() && _opt.check( Options::VertexColor ) && _be.has_vertex_colors() )
+  if (_be.n_vertices() && _opt.vertex_has_color() && _be.has_vertex_colors() )
   {
     Vec3uc c = _be.color(VertexHandle(0));
 
@@ -259,7 +259,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write vertex texture coords
-  if (_be.n_vertices() && _opt.check(Options::VertexTexCoord)) {
+  if (_be.n_vertices() && _opt.vertex_has_texcoord2D()) {
 
     t = _be.texcoord(VertexHandle(0));
 
@@ -346,7 +346,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
 
   // ---------- write face normals
 
-  if (_be.n_faces() && _be.has_face_normals() && _opt.check(Options::FaceNormal) )
+  if (_be.n_faces() && _be.has_face_normals() && _opt.face_has_normal())
   {
 #define NEW_STYLE 0
 #if NEW_STYLE
@@ -381,7 +381,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
 
   // ---------- write face color
 
-  if (_be.n_faces() && _be.has_face_colors() && _opt.check( Options::FaceColor ))
+  if (_be.n_faces() && _be.has_face_colors() && _opt.face_has_color())
   {
 #define NEW_STYLE 0
 #if NEW_STYLE
@@ -413,7 +413,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write vertex status
-  if (_be.n_vertices() && _be.has_vertex_status() && _opt.check(Options::Status))
+  if (_be.n_vertices() && _be.has_vertex_status() && _opt.vertex_has_status())
   {
     auto s = _be.status(VertexHandle(0));
     chunk_header.name_ = false;
@@ -432,7 +432,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write edge status
-  if (_be.n_edges() && _be.has_edge_status() && _opt.check(Options::Status))
+  if (_be.n_edges() && _be.has_edge_status() && _opt.edge_has_status())
   {
     auto s = _be.status(EdgeHandle(0));
     chunk_header.name_ = false;
@@ -451,7 +451,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write halfedge status
-  if (_be.n_edges() && _be.has_halfedge_status() && _opt.check(Options::Status))
+  if (_be.n_edges() && _be.has_halfedge_status() && _opt.halfedge_has_status())
   {
     auto s = _be.status(HalfedgeHandle(0));
     chunk_header.name_ = false;
@@ -470,7 +470,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write face status
-  if (_be.n_faces() && _be.has_face_status() && _opt.check(Options::Status))
+  if (_be.n_faces() && _be.has_face_status() && _opt.face_has_status())
   {
     auto s = _be.status(FaceHandle(0));
     chunk_header.name_ = false;

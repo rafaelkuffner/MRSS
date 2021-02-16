@@ -96,13 +96,10 @@ struct FinalMeshItemsT
   typedef typename Refs::TextureIndex    TextureIndex;
 
   //--- get attribute bits from Traits ---
-  enum Attribs
-  {
-    VAttribs = Traits::VertexAttributes,
-    HAttribs = Traits::HalfedgeAttributes,
-    EAttribs = Traits::EdgeAttributes,
-    FAttribs = Traits::FaceAttributes
-  };
+  static constexpr AttributeBits VAttribs = Traits::VertexAttributes;
+  static constexpr AttributeBits HAttribs = Traits::HalfedgeAttributes;
+  static constexpr AttributeBits EAttribs = Traits::EdgeAttributes;
+  static constexpr AttributeBits FAttribs = Traits::FaceAttributes;
   //--- merge internal items with traits items ---
 
 

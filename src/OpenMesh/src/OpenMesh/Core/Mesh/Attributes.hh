@@ -42,17 +42,17 @@
 
 
 
-/**
-    \file Attributes.hh
-    This file provides some macros containing attribute usage.
-*/
+ /**
+	 \file Attributes.hh
+	 This file provides some macros containing attribute usage.
+ */
 
 
 #ifndef OPENMESH_ATTRIBUTES_HH
 #define OPENMESH_ATTRIBUTES_HH
 
 
-//== INCLUDES =================================================================
+ //== INCLUDES =================================================================
 
 
 #include <OpenMesh/Core/System/config.h>
@@ -63,56 +63,59 @@
 
 
 namespace OpenMesh {
-namespace Attributes {
 
+	//== CLASS DEFINITION  ========================================================
 
-//== CLASS DEFINITION  ========================================================
+	/** Attribute bits
+		*
+		*  Use the bits to define a standard property at compile time using traits.
+		*
+		*  \include traits5.cc
+		*
+		*  \see \ref mesh_type
+		*/
+	enum class AttributeBits : unsigned
+	{
+		None = 0,  ///< Clear all attribute bits
+		Normal = 1,  ///< Add normals to mesh item (vertices/faces)
+		Color = 2,  ///< Add colors to mesh item (vertices/faces/edges)
+		PrevHalfedge = 4,  ///< Add storage for previous halfedge (halfedges). The bit is set by default in the DefaultTraits.
+		Status = 8,  ///< Add status to mesh item (all items)
+		TexCoord1D = 16, ///< Add 1D texture coordinates (vertices, halfedges)
+		TexCoord2D = 32, ///< Add 2D texture coordinates (vertices, halfedges)
+		TexCoord3D = 64, ///< Add 3D texture coordinates (vertices, halfedges)
+		TexCoordAll = TexCoord1D | TexCoord2D | TexCoord3D,
+		TextureIndex = 128 ///< Add texture index (faces)
+	};
 
-/** Attribute bits
- *
- *  Use the bits to define a standard property at compile time using traits.
- *
- *  \include traits5.cc
- *
- *  \see \ref mesh_type
- */
-enum AttributeBits
-{
-  None          = 0,  ///< Clear all attribute bits
-  Normal        = 1,  ///< Add normals to mesh item (vertices/faces)
-  Color         = 2,  ///< Add colors to mesh item (vertices/faces/edges)
-  PrevHalfedge  = 4,  ///< Add storage for previous halfedge (halfedges). The bit is set by default in the DefaultTraits.
-  Status        = 8,  ///< Add status to mesh item (all items)
-  TexCoord1D    = 16, ///< Add 1D texture coordinates (vertices, halfedges)
-  TexCoord2D    = 32, ///< Add 2D texture coordinates (vertices, halfedges)
-  TexCoord3D    = 64, ///< Add 3D texture coordinates (vertices, halfedges)
-  TextureIndex  = 128 ///< Add texture index (faces)
-};
+	inline bool operator!(AttributeBits x) {
+		return x == AttributeBits::None;
+	}
 
-inline AttributeBits operator~(AttributeBits x) {
-    return AttributeBits(~int(x));
-}
+	inline AttributeBits operator~(AttributeBits x) {
+		return AttributeBits(~unsigned(x));
+	}
 
-inline AttributeBits operator|(AttributeBits l, AttributeBits r) {
-    return AttributeBits(int(l) | int(r));
-}
+	inline AttributeBits operator|(AttributeBits l, AttributeBits r) {
+		return AttributeBits(unsigned(l) | unsigned(r));
+	}
 
-inline AttributeBits operator&(AttributeBits l, AttributeBits r) {
-    return AttributeBits(int(l) & int(r));
-}
+	inline AttributeBits operator&(AttributeBits l, AttributeBits r) {
+		return AttributeBits(unsigned(l) & unsigned(r));
+	}
 
-inline AttributeBits & operator|=(AttributeBits &l, AttributeBits r) {
-    l = l | r;
-    return l;
-}
+	inline AttributeBits &operator|=(AttributeBits &l, AttributeBits r) {
+		l = l | r;
+		return l;
+	}
 
-inline AttributeBits & operator&=(AttributeBits &l, AttributeBits r) {
-    l = l & r;
-    return l;
-}
+	inline AttributeBits &operator&=(AttributeBits &l, AttributeBits r) {
+		l = l & r;
+		return l;
+	}
 
-//=============================================================================
-} // namespace Attributes
+	//=============================================================================
+
 } // namespace OpenMesh
 //=============================================================================
 #endif // OPENMESH_ATTRIBUTES_HH defined

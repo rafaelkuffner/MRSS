@@ -50,6 +50,8 @@ namespace green {
 		// NOTE assimp appears to support utf8 filenames; see assimp-5.0.1\code\Common\DefaultIOSystem.cpp
 		Assimp::Importer importer;
 		//importer.SetProgressHandler
+		// FIXME halfedge property support
+		// FIXME proper handling of updated openmesh stuff
 		// we need to fuse colocated vertices so the topology works
 		// TODO what is the best way of achieving this?
 		// what is the runtime cost of using assimp's join identical?
@@ -78,20 +80,17 @@ namespace green {
 			for (unsigned j = 0; j < mesh->mNumVertices; j++) {
 				auto vh = _bi.add_vertex(ai2om(mesh->mVertices[j]));
 				if (j == 0) vh0 = vh;
-				if (mesh->HasNormals()) {
+				if (mesh->HasNormals() && !!_bi.request_vattribs(OpenMesh::AttributeBits::Normal)) {
 					_bi.set_normal(vh, ai2om(mesh->mNormals[j]));
-					_opt.set(OpenMesh::IO::Options::VertexNormal);
 				}
 				if (mesh->HasTangentsAndBitangents()) {
 					// openmesh doesnt care?
 				}
-				if (mesh->HasTextureCoords(0)) {
+				if (mesh->HasTextureCoords(0) && !!_bi.request_vattribs(OpenMesh::AttributeBits::TexCoord2D)) {
 					_bi.set_texcoord(vh, ai2om(mesh->mTextureCoords[0][j]));
-					_opt.set(OpenMesh::IO::Options::VertexTexCoord);
 				}
-				if (mesh->HasVertexColors(0)) {
+				if (mesh->HasVertexColors(0) && !!_bi.request_vattribs(OpenMesh::AttributeBits::Color)) {
 					_bi.set_color(vh, ai2om(mesh->mColors[0][j]));
-					_opt.set(OpenMesh::IO::Options::VertexColor);
 				}
 			}
 			// add face indices for this mesh

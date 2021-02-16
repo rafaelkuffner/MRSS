@@ -123,14 +123,14 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
     case STLA:
     {
       result = read_stla(_filename, _bi, _opt);
-      _opt -= Options::Binary;
+      _opt -= OptionBits::Binary;
       break;
     }
 
     case STLB:
     {
       result = read_stlb(_filename, _bi, _opt);
-      _opt += Options::Binary;
+      _opt += OptionBits::Binary;
       break;
     }
 
@@ -153,7 +153,7 @@ _STLReader_::read(std::istream& _is,
 
   bool result = false;
 
-  if (_opt & Options::Binary)
+  if (_opt.check(OptionBits::Binary))
     result = read_stlb(_is, _bi, _opt);
   else
     result = read_stla(_is, _bi, _opt);
@@ -328,10 +328,9 @@ read_stla(std::istream& _in, BaseImporter& _bi, Options& _opt) const
         // set the normal if requested
         // if a normal was requested but could not be found we unset the option
         if (facet_normal) {
-          if (fh.is_valid() && _opt.face_has_normal())
+          if (fh.is_valid() && !!_bi.request_fattribs(AttributeBits::Normal))
             _bi.set_normal(fh, n);
-        } else
-          _opt -= Options::FaceNormal;
+        }
       }
 
       facet_normal = false;
@@ -433,7 +432,7 @@ read_stlb(std::istream& _in, BaseImporter& _bi, Options& _opt) const
 	(vhandles[1] != vhandles[2])) {
       FaceHandle fh = _bi.add_face(vhandles);
 
-      if (fh.is_valid() && _opt.face_has_normal())
+      if (fh.is_valid() && !!_bi.request_fattribs(AttributeBits::Normal))
         _bi.set_normal(fh, n);
     }
 

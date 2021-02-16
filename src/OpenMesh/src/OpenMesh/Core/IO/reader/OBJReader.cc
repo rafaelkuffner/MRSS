@@ -277,13 +277,13 @@ namespace OpenMesh {
 
 		bool
 			_OBJReader_::
-			read_vertices(std::istream &_in, BaseImporter &_bi, Options &_opt,
+			read_vertices(std::istream &_in, BaseImporter &_bi,
 				std::vector<Vec3f> &normals,
 				std::vector<Vec3f> &colors,
 				std::vector<Vec3f> &texcoords3d,
 				std::vector<Vec2f> &texcoords,
-				std::vector<VertexHandle> &vertexHandles,
-				Options &fileOptions)
+				std::vector<VertexHandle> &vertexHandles
+			)
 		{
 			float x, y, z, u, v, w;
 			float r, g, b;
@@ -292,10 +292,6 @@ namespace OpenMesh {
 			std::string keyWrd;
 
 			std::stringstream stream;
-
-
-			// Options supplied by the user
-			const Options &userOptions = _opt;
 
 			while (_in && !_in.eof())
 			{
@@ -330,8 +326,7 @@ namespace OpenMesh {
 
 						if (!stream.fail())
 						{
-							if (userOptions.vertex_has_color()) {
-								fileOptions += Options::VertexColor;
+							if (!!_bi.request_vattribs(AttributeBits::Color)) {
 								colors.push_back(OpenMesh::Vec3f(r, g, b));
 							}
 						}
@@ -345,18 +340,19 @@ namespace OpenMesh {
 
 					if (!stream.fail()) {
 
-						if (userOptions.vertex_has_texcoord() || userOptions.halfedge_has_texcoord()) {
-							texcoords.push_back(OpenMesh::Vec2f(u, v));
+						// try to read the w component as it is optional
+						stream >> w;
 
-							// Can be used for both!
-							fileOptions += Options::VertexTexCoord;
-							fileOptions += Options::HalfedgeTexCoord;
-
-							// try to read the w component as it is optional
-							stream >> w;
-							if (!stream.fail())
+						if (stream.fail()) {
+							// 2d
+							if (!!_bi.request_h_or_v_attribs(AttributeBits::TexCoord2D)) {
+								texcoords.push_back(OpenMesh::Vec2f(u, v));
+							}
+						} else {
+							// 3d
+							if (!!_bi.request_h_or_v_attribs(AttributeBits::TexCoord3D)) {
 								texcoords3d.push_back(OpenMesh::Vec3f(u, v, w));
-
+							}
 						}
 
 					} else {
@@ -372,9 +368,8 @@ namespace OpenMesh {
 					stream >> r; stream >> g; stream >> b;
 
 					if (!stream.fail()) {
-						if (userOptions.vertex_has_color()) {
+						if (!!_bi.request_vattribs(AttributeBits::Color)) {
 							colors.push_back(OpenMesh::Vec3f(r, g, b));
-							fileOptions += Options::VertexColor;
 						}
 					}
 				}
@@ -385,13 +380,15 @@ namespace OpenMesh {
 					stream >> x; stream >> y; stream >> z;
 
 					if (!stream.fail()) {
-						if (userOptions.vertex_has_normal()) {
+						if (!!_bi.request_vattribs(AttributeBits::Normal)) {
 							normals.push_back(OpenMesh::Vec3f(x, y, z));
-							fileOptions += Options::VertexNormal;
-							fileOptions += Options::HalfedgeNormal;
 						}
 					}
 				}
+			}
+
+			if (texcoords.size() && texcoords3d.size()) {
+				omerr() << "OBJ has inconsistent 2D/3D texcoords, they will be broken" << std::endl;
 			}
 
 			return true;
@@ -421,25 +418,12 @@ namespace OpenMesh {
 
 			std::stringstream         stream, lineData, tmp;
 
-
-			// Options supplied by the user
-			Options userOptions = _opt;
-
-			// Options collected via file parsing
-			Options fileOptions;
-
 			// pass 1: read vertices
-			if (!read_vertices(_in, _bi, _opt,
+			if (!read_vertices(_in, _bi,
 				normals, colors, texcoords3d, texcoords,
-				vertexHandles, fileOptions)) {
+				vertexHandles)) {
 				return false;
 			}
-
-			// request mesh attribs
-			if (normals.size()) _bi.request_h_or_v_attribs(Attributes::Normal);
-			if (texcoords.size()) _bi.request_h_or_v_attribs(Attributes::TexCoord2D);
-			if (texcoords3d.size()) _bi.request_h_or_v_attribs(Attributes::TexCoord3D);
-			if (colors.size()) _bi.request_vattribs(Attributes::Color);
 
 			// reset stream for second pass
 			_in.clear();
@@ -618,7 +602,7 @@ namespace OpenMesh {
 								// Obj counts from 1 and not zero .. array counts from zero therefore -1
 								vhandles.push_back(VertexHandle(value - 1));
 								faceVertices.push_back(VertexHandle(value - 1));
-								if (fileOptions.vertex_has_color()) {
+								if (_bi.file_options().vertex_has_color()) {
 									if ((unsigned int) (value - 1) < colors.size()) {
 										_bi.set_color(vhandles.back(), colors[value - 1]);
 									} else {
@@ -636,34 +620,40 @@ namespace OpenMesh {
 								}
 								assert(!vhandles.empty());
 
-								// note: tex coords parsing only produces 3d alongside 2d
-								// because obj only supports one set
-								// TODO handle 3d texcoords properly
-
-								if (fileOptions.vertex_has_texcoord()) {
-
+								if (_bi.file_options().vertex_has_texcoord2D()) {
 									if (!texcoords.empty() && (unsigned int) (value - 1) < texcoords.size()) {
 										// Obj counts from 1 and not zero .. array counts from zero therefore -1
 										_bi.set_texcoord(vhandles.back(), texcoords[value - 1]);
-										if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size())
-											_bi.set_texcoord(vhandles.back(), texcoords3d[value - 1]);
 									} else {
 										omerr() << "Error setting Texture coordinates" << std::endl;
 									}
 
 								}
 
-								if (fileOptions.halfedge_has_texcoord()) {
+								if (_bi.file_options().vertex_has_texcoord3D()) {
+									if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size()) {
+										_bi.set_texcoord(vhandles.back(), texcoords3d[value - 1]);
+									} else {
+										omerr() << "Error setting Texture coordinates" << std::endl;
+									}
 
+								}
+
+								if (_bi.file_options().halfedge_has_texcoord2D()) {
 									if (!texcoords.empty() && (unsigned int) (value - 1) < texcoords.size()) {
 										face_texcoords.push_back(texcoords[value - 1]);
-										if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size())
-											face_texcoords3d.push_back(texcoords3d[value - 1]);
 									} else {
 										omerr() << "Error setting Texture coordinates" << std::endl;
 									}
 								}
 
+								if (_bi.file_options().halfedge_has_texcoord3D()) {
+									if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size()) {
+										face_texcoords3d.push_back(texcoords3d[value - 1]);
+									} else {
+										omerr() << "Error setting Texture coordinates" << std::endl;
+									}
+								}
 
 								break;
 
@@ -676,7 +666,7 @@ namespace OpenMesh {
 								}
 
 								// Obj counts from 1 and not zero .. array counts from zero therefore -1
-								if (fileOptions.vertex_has_normal()) {
+								if (_bi.file_options().vertex_has_normal()) {
 									assert(!vhandles.empty());
 									if ((unsigned int) (value - 1) < normals.size()) {
 										_bi.set_normal(vhandles.back(), normals[value - 1]);
@@ -685,7 +675,7 @@ namespace OpenMesh {
 									}
 								}
 
-								if (fileOptions.halfedge_has_normal()) {
+								if (_bi.file_options().halfedge_has_normal()) {
 									if (!normals.empty() && (unsigned int) (value - 1) < normals.size()) {
 										face_normals.push_back(normals[value - 1]);
 									} else {
@@ -723,60 +713,48 @@ namespace OpenMesh {
 						_bi.add_face_normals(fh, vhandles[0], face_normals);
 					}
 
+					std::vector<FaceHandle> newfaces;
+					for (size_t i = 0; i < _bi.n_faces() - n_faces; ++i) {
+						newfaces.push_back(FaceHandle(int(n_faces + i)));
+					}
+
 					if (!matname.empty())
 					{
-						std::vector<FaceHandle> newfaces;
-
-						for (size_t i = 0; i < _bi.n_faces() - n_faces; ++i)
-							newfaces.push_back(FaceHandle(int(n_faces + i)));
-
 						Material &mat = materials_[matname];
 
 						if (mat.has_Kd()) {
+							// apply mtl color as face color
 							Vec3uc fc = color_cast<Vec3uc, Vec3f>(mat.Kd());
-
-							if (userOptions.face_has_color()) {
-
-								for (std::vector<FaceHandle>::iterator it = newfaces.begin(); it != newfaces.end(); ++it)
+							if (!!_bi.request_fattribs(AttributeBits::Color)) {
+								for (auto it = newfaces.begin(); it != newfaces.end(); ++it) {
 									_bi.set_color(*it, fc);
-
-								fileOptions += Options::FaceColor;
+								}
 							}
 						}
 
-						// Set the texture index in the face index property
 						if (mat.has_map_Kd()) {
-
-							if (userOptions.face_has_texindex()) {
-
-								for (std::vector<FaceHandle>::iterator it = newfaces.begin(); it != newfaces.end(); ++it)
+							// Set the texture index in the face index property
+							if (!!_bi.request_fattribs(AttributeBits::TextureIndex)) {
+								for (auto it = newfaces.begin(); it != newfaces.end(); ++it) {
 									_bi.set_face_texindex(*it, mat.map_Kd_index());
-
-								fileOptions += Options::FaceTexIndex;
-
+								}
 							}
-
 						} else {
-
 							// If we don't have the info, set it to no texture
-							if (userOptions.face_has_texindex()) {
-
-								for (std::vector<FaceHandle>::iterator it = newfaces.begin(); it != newfaces.end(); ++it)
+							if (!!_bi.request_fattribs(AttributeBits::TextureIndex)) {
+								for (auto it = newfaces.begin(); it != newfaces.end(); ++it) {
 									_bi.set_face_texindex(*it, 0);
-
+								}
 							}
 						}
 
 					} else {
-						std::vector<FaceHandle> newfaces;
-
-						for (size_t i = 0; i < _bi.n_faces() - n_faces; ++i)
-							newfaces.push_back(FaceHandle(int(n_faces + i)));
-
 						// Set the texture index to zero as we don't have any information
-						if (userOptions.face_has_texindex())
-							for (std::vector<FaceHandle>::iterator it = newfaces.begin(); it != newfaces.end(); ++it)
+						if (!!_bi.request_fattribs(AttributeBits::TextureIndex)) {
+							for (auto it = newfaces.begin(); it != newfaces.end(); ++it) {
 								_bi.set_face_texindex(*it, 0);
+							}
+						}
 					}
 
 				}
@@ -788,27 +766,26 @@ namespace OpenMesh {
 			if (_bi.n_faces() == 0)
 			{
 				int i = 0;
-				// add normal per vertex
 
+				// add normal per vertex
 				if (normals.size() == _bi.n_vertices()) {
-					if (fileOptions.vertex_has_normal() && userOptions.vertex_has_normal()) {
-						for (std::vector<VertexHandle>::iterator it = vertexHandles.begin(); it != vertexHandles.end(); ++it, i++)
+					if (!!_bi.request_vattribs(AttributeBits::Normal)) {
+						for (auto it = vertexHandles.begin(); it != vertexHandles.end(); ++it, i++) {
 							_bi.set_normal(*it, normals[i]);
+						}
 					}
 				}
 
 				// add color per vertex
 				i = 0;
-				if (colors.size() >= _bi.n_vertices())
-					if (fileOptions.vertex_has_color() && userOptions.vertex_has_color()) {
-						for (std::vector<VertexHandle>::iterator it = vertexHandles.begin(); it != vertexHandles.end(); ++it, i++)
+				if (colors.size() >= _bi.n_vertices()) {
+					if (!!_bi.request_vattribs(AttributeBits::Color)) {
+						for (auto it = vertexHandles.begin(); it != vertexHandles.end(); ++it, i++)
 							_bi.set_color(*it, colors[i]);
 					}
+				}
 
 			}
-
-			// Return, what we actually read
-			_opt = fileOptions;
 
 			return true;
 		}

@@ -89,93 +89,26 @@ namespace OpenMesh {
 			typedef std::vector<VertexHandle>  VHandles;
 
 
-			ImporterT(Mesh &_mesh, Options _useropts) : mesh_(_mesh), useropts_(_useropts) {}
+			ImporterT(Mesh &_mesh, Options _useropts) : BaseImporter(_useropts), mesh_(_mesh) {}
 
-			virtual const Options & user_options() const override
+			virtual void request_vattribs_impl(AttributeBits attribs) override
 			{
-				return useropts_;
+				mesh_.request_vattribs(attribs);
 			}
 
-			virtual Attributes::AttributeBits request_vattribs(Attributes::AttributeBits attribs) override
+			virtual void request_eattribs_impl(AttributeBits attribs) override
 			{
-				Attributes::AttributeBits r = Attributes::None;
-				
-				if (useropts_.vertex_has_normal() && (attribs & Attributes::Normal))
-					mesh_.request_vertex_normals(), r |= Attributes::Normal;
-
-				if (useropts_.vertex_has_color() && (attribs & Attributes::Color))
-					mesh_.request_vertex_colors(), r |= Attributes::Color;
-
-				if (useropts_.vertex_has_texcoord() && (attribs & Attributes::TexCoord1D))
-					mesh_.request_vertex_texcoords1D(), r |= Attributes::TexCoord1D;
-
-				if (useropts_.vertex_has_texcoord() && (attribs & Attributes::TexCoord2D))
-					mesh_.request_vertex_texcoords2D(), r |= Attributes::TexCoord2D;
-
-				if (useropts_.vertex_has_texcoord() && (attribs & Attributes::TexCoord3D))
-					mesh_.request_vertex_texcoords3D(), r |= Attributes::TexCoord3D;
-
-				if (useropts_.vertex_has_texcoord() && (attribs & Attributes::Status))
-					mesh_.request_vertex_status(), r |= Attributes::Status;
-
-				return r;
+				mesh_.request_eattribs(attribs);
 			}
 
-			virtual Attributes::AttributeBits request_eattribs(Attributes::AttributeBits attribs) override
+			virtual void request_hattribs_impl(AttributeBits attribs) override
 			{
-				Attributes::AttributeBits r = Attributes::None;
-
-				if (useropts_.edge_has_color() && (attribs & Attributes::Color))
-					mesh_.request_edge_colors(), r |= Attributes::Color;
-
-				if (useropts_.edge_has_status() && (attribs & Attributes::Status))
-					mesh_.request_edge_status(), r |= Attributes::Status;
-
-				return r;
+				mesh_.request_hattribs(attribs);
 			}
 
-			virtual Attributes::AttributeBits request_hattribs(Attributes::AttributeBits attribs) override
+			virtual void request_fattribs_impl(AttributeBits attribs) override
 			{
-				Attributes::AttributeBits r = Attributes::None;
-
-				if (useropts_.halfedge_has_normal() && (attribs & Attributes::Normal))
-					mesh_.request_halfedge_normals(), r |= Attributes::Normal;
-
-				if (useropts_.halfedge_has_texcoord() && (attribs & Attributes::TexCoord1D))
-					mesh_.request_halfedge_texcoords1D(), r |= Attributes::TexCoord1D;
-
-				if (useropts_.halfedge_has_texcoord() && (attribs & Attributes::TexCoord2D))
-					mesh_.request_halfedge_texcoords2D(), r |= Attributes::TexCoord2D;
-
-				if (useropts_.halfedge_has_texcoord() && (attribs & Attributes::TexCoord3D))
-					mesh_.request_halfedge_texcoords3D(), r |= Attributes::TexCoord3D;
-
-				if (useropts_.halfedge_has_color() && (attribs & Attributes::Color))
-					mesh_.request_halfedge_colors(), r |= Attributes::Color;
-
-				if (useropts_.halfedge_has_status() && (attribs & Attributes::Status))
-					mesh_.request_halfedge_status(), r |= Attributes::Status;
-
-				return r;
-			}
-
-			virtual Attributes::AttributeBits request_fattribs(Attributes::AttributeBits attribs) override
-			{
-				Attributes::AttributeBits r = Attributes::None;
-				
-				if (useropts_.face_has_normal() && (attribs & Attributes::Normal))
-					mesh_.request_face_normals(), r |= Attributes::Normal;
-
-				if (useropts_.face_has_color() && (attribs & Attributes::Color))
-					mesh_.request_face_colors(), r |= Attributes::Color;
-
-				if (useropts_.face_has_texindex() && (attribs & Attributes::TextureIndex))
-					mesh_.request_face_texture_index(), r |= Attributes::TextureIndex;
-
-				if (useropts_.face_has_status() && (attribs & Attributes::Status))
-					mesh_.request_face_status(), r |= Attributes::Status;
-
-				return r;
+				mesh_.request_fattribs(attribs);
 			}
 
 			virtual VertexHandle add_vertex(const Vec3f &_point) override
@@ -534,7 +467,6 @@ namespace OpenMesh {
 
 		private:
 			Mesh &mesh_;
-			Options useropts_;
 		};
 
 

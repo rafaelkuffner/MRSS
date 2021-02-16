@@ -102,13 +102,10 @@ namespace green {
 		// NOTE face status currently breaks decimation
 		//m_trimesh.request_face_status();
 		// TODO what else do we need to ask for and preserve on export?
-		using OMOptions = OpenMesh::IO::Options;
-		OMOptions readOptions =
-			OMOptions::VertexNormal
-			| OMOptions::VertexColor
-			| OMOptions::HalfedgeNormal
-			| OMOptions::HalfedgeTexCoord
-			| OMOptions::Custom;
+		OpenMesh::IO::Options readOptions{OpenMesh::IO::OptionBits::Custom};
+		readOptions.vattribs |= OpenMesh::AttributeBits::Color;
+		readOptions.hattribs |= OpenMesh::AttributeBits::Normal;
+		readOptions.hattribs |= OpenMesh::AttributeBits::TexCoordAll;
 		
 		std::cerr << "Loading model " << fpath.u8string() << std::endl;
 		if (!std::filesystem::is_regular_file(fpath)) {
@@ -129,7 +126,7 @@ namespace green {
 		
 		// copy original vertex colors
 		// (because we need to be able to overwrite the actual vertex colors during export)
-		if (readOptions.check(OpenMesh::IO::Options::VertexColor)) {
+		if (readOptions.vertex_has_color()) {
 			std::cout << "Found vertex colors" << std::endl;
 			m_mesh.add_property(m_prop_vcolor_original);
 			for (auto vIt = m_mesh.vertices_begin(); vIt != m_mesh.vertices_end(); ++vIt) {
@@ -382,9 +379,9 @@ namespace green {
 		}
 		// export!
 		OpenMesh::IO::Options opts{};
-		if (exprops.size()) opts = opts | OpenMesh::IO::Options::Custom;
-		if (sparams.color_mode != model_color_mode::none) opts = opts | OpenMesh::IO::Options::VertexColor;
-		if (sparams.binary) opts = opts | OpenMesh::IO::Options::Binary;
+		if (exprops.size()) opts += OpenMesh::IO::OptionBits::Custom;
+		if (sparams.binary) opts += OpenMesh::IO::OptionBits::Binary;
+		if (sparams.color_mode != model_color_mode::none) opts.vattribs |= OpenMesh::AttributeBits::Color;
 		std::cerr << "Saving model " << fpath.u8string() << std::endl;
 		auto res = OpenMesh::IO::write_mesh(m_mesh, fpath, opts);
 		// remove temp named properties

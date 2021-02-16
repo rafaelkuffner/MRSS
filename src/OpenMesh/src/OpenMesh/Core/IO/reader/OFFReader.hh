@@ -145,8 +145,6 @@ private:
 
   //available options for reading
   mutable Options options_;
-  //options that the user wants to read
-  mutable Options userOptions_;
 };
 
 

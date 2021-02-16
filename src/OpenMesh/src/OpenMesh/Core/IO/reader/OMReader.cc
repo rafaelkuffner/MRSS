@@ -93,8 +93,8 @@ bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
   if (!_bi.kernel())
     return false;
 
-  _opt += Options::Binary; // only binary format supported!
-  fileOptions_ = Options::Binary;
+  _opt += OptionBits::Binary; // only binary format supported!
+  fileOptions_.flags = OptionBits::Binary;
 
   // Open file
   std::ifstream ifs(_filename, std::ios::binary);
@@ -113,10 +113,7 @@ bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi,
   // Pass stream to read method, remember result
   bool result = read(ifs, _bi, _opt);
 
-  // close input stream
-  ifs.close();
-
-  _opt = _opt & fileOptions_;
+  _opt = fileOptions_;
 
   return result;
 }
@@ -130,8 +127,8 @@ bool _OMReader_::read(std::istream& _is, BaseImporter& _bi, Options& _opt)
   if (!_bi.kernel())
     return false;
 
-  _opt += Options::Binary; // only binary format supported!
-  fileOptions_ = Options::Binary;
+  _opt += OptionBits::Binary; // only binary format supported!
+  fileOptions_.flags = OptionBits::Binary;
 
   if (!_is.good()) {
     omerr() << "[OMReader] : cannot read from stream " << std::endl;
@@ -141,10 +138,7 @@ bool _OMReader_::read(std::istream& _is, BaseImporter& _bi, Options& _opt)
   // Pass stream to read method, remember result
   bool result = read_binary(_is, _bi, _opt);
 
-  if (result)
-    _opt += Options::Binary;
-
-  _opt = _opt & fileOptions_;
+  _opt = fileOptions_;
 
   return result;
 }
@@ -164,7 +158,7 @@ bool _OMReader_::read_ascii(std::istream& /* _is */, BaseImporter& /* _bi */, Op
 
 bool _OMReader_::read_binary(std::istream& _is, BaseImporter& _bi, Options& _opt) const
 {
-  bool swap = _opt.check(Options::Swap) || (Endian::local() == Endian::MSB);
+  bool swap = _opt.check(OptionBits::Swap) || (Endian::local() == Endian::MSB);
 
   // Initialize byte counter
   bytes_ = 0;
@@ -307,7 +301,6 @@ bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, 
   switch (chunk_header_.type_) {
     case Chunk::Type_Pos:
       assert( OMFormat::dimensions(chunk_header_) == size_t(OpenMesh::Vec3f::dim()));
-
       for (; vidx < header_.n_vertices_ && !_is.eof(); ++vidx) {
         bytes_ += vector_restore(_is, v3f, _swap);
         _bi.add_vertex(v3f);
@@ -316,35 +309,27 @@ bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, 
 
     case Chunk::Type_Normal:
       assert( OMFormat::dimensions(chunk_header_) == size_t(OpenMesh::Vec3f::dim()));
-
-      fileOptions_ += Options::VertexNormal;
       for (; vidx < header_.n_vertices_ && !_is.eof(); ++vidx) {
         bytes_ += vector_restore(_is, v3f, _swap);
-        if (fileOptions_.vertex_has_normal() && _opt.vertex_has_normal())
+        if (!!_bi.request_vattribs(AttributeBits::Normal))
           _bi.set_normal(VertexHandle(int(vidx)), v3f);
       }
       break;
 
     case Chunk::Type_Texcoord:
       assert( OMFormat::dimensions(chunk_header_) == size_t(OpenMesh::Vec2f::dim()));
-
-      fileOptions_ += Options::VertexTexCoord;
       for (; vidx < header_.n_vertices_ && !_is.eof(); ++vidx) {
         bytes_ += vector_restore(_is, v2f, _swap);
-        if (fileOptions_.vertex_has_texcoord() && _opt.vertex_has_texcoord())
+        if (!!_bi.request_vattribs(AttributeBits::TexCoord2D))
           _bi.set_texcoord(VertexHandle(int(vidx)), v2f);
       }
       break;
 
     case Chunk::Type_Color:
-
       assert( OMFormat::dimensions(chunk_header_) == 3);
-
-      fileOptions_ += Options::VertexColor;
-
       for (; vidx < header_.n_vertices_ && !_is.eof(); ++vidx) {
         bytes_ += vector_restore(_is, v3uc, _swap);
-        if (fileOptions_.vertex_has_color() && _opt.vertex_has_color())
+        if (!!_bi.request_vattribs(AttributeBits::Color))
           _bi.set_color(VertexHandle(int(vidx)), v3uc);
       }
       break;
@@ -352,12 +337,9 @@ bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, 
     case Chunk::Type_Status:
     {
       assert( OMFormat::dimensions(chunk_header_) == 1);
-
-      fileOptions_ += Options::Status;
-
       for (; vidx < header_.n_vertices_ && !_is.eof(); ++vidx) {
         bytes_ += restore(_is, status, _swap);
-        if (fileOptions_.vertex_has_status() && _opt.vertex_has_status())
+        if (!!_bi.request_vattribs(AttributeBits::Status))
           _bi.set_status(VertexHandle(int(vidx)), status);
       }
       break;
@@ -460,35 +442,27 @@ bool _OMReader_::read_binary_face_chunk(std::istream &_is, BaseImporter &_bi, Op
 
     case Chunk::Type_Normal:
       assert( OMFormat::dimensions(chunk_header_) == size_t(OpenMesh::Vec3f::dim()));
-
-      fileOptions_ += Options::FaceNormal;
       for (; fidx < header_.n_faces_ && !_is.eof(); ++fidx) {
         bytes_ += vector_restore(_is, v3f, _swap);
-        if( fileOptions_.face_has_normal() && _opt.face_has_normal())
+        if (!!_bi.request_fattribs(AttributeBits::Normal))
           _bi.set_normal(FaceHandle(int(fidx)), v3f);
       }
       break;
 
     case Chunk::Type_Color:
-
       assert( OMFormat::dimensions(chunk_header_) == 3);
-
-      fileOptions_ += Options::FaceColor;
       for (; fidx < header_.n_faces_ && !_is.eof(); ++fidx) {
         bytes_ += vector_restore(_is, v3uc, _swap);
-        if( fileOptions_.face_has_color() && _opt.face_has_color())
+        if (!!_bi.request_fattribs(AttributeBits::Color))
           _bi.set_color(FaceHandle(int(fidx)), v3uc);
       }
       break;
     case Chunk::Type_Status:
     {
       assert( OMFormat::dimensions(chunk_header_) == 1);
-
-      fileOptions_ += Options::Status;
-
       for (; fidx < header_.n_faces_ && !_is.eof(); ++fidx) {
         bytes_ += restore(_is, status, _swap);
-        if (fileOptions_.face_has_status() && _opt.face_has_status())
+        if (!!_bi.request_fattribs(AttributeBits::Status))
           _bi.set_status(FaceHandle(int(fidx)), status);
       }
       break;
@@ -536,12 +510,9 @@ bool _OMReader_::read_binary_edge_chunk(std::istream &_is, BaseImporter &_bi, Op
     case Chunk::Type_Status:
     {
       assert( OMFormat::dimensions(chunk_header_) == 1);
-
-      fileOptions_ += Options::Status;
-
       for (size_t eidx = 0; eidx < header_.n_edges_ && !_is.eof(); ++eidx) {
         bytes_ += restore(_is, status, _swap);
-        if (fileOptions_.edge_has_status() && _opt.edge_has_status())
+        if (!!_bi.request_eattribs(AttributeBits::Status))
           _bi.set_status(EdgeHandle(int(eidx)), status);
       }
       break;
@@ -613,12 +584,9 @@ bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi
     case Chunk::Type_Status:
     {
       assert( OMFormat::dimensions(chunk_header_) == 1);
-
-      fileOptions_ += Options::Status;
-
       for (size_t hidx = 0; hidx < header_.n_edges_ * 2 && !_is.eof(); ++hidx) {
         bytes_ += restore(_is, status, _swap);
-        if (fileOptions_.halfedge_has_status() && _opt.halfedge_has_status())
+        if (!!_bi.request_hattribs(AttributeBits::Status))
           _bi.set_status(HalfedgeHandle(int(hidx)), status);
       }
       break;
