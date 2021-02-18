@@ -91,22 +91,22 @@ namespace OpenMesh {
 
 			ImporterT(Mesh &_mesh, Options _useropts) : BaseImporter(_useropts), mesh_(_mesh) {}
 
-			virtual void request_vattribs_impl(AttributeBits attribs) override
+			virtual void make_vattribs_impl(AttributeBits attribs) override
 			{
 				mesh_.request_vattribs(attribs);
 			}
 
-			virtual void request_eattribs_impl(AttributeBits attribs) override
+			virtual void make_eattribs_impl(AttributeBits attribs) override
 			{
 				mesh_.request_eattribs(attribs);
 			}
 
-			virtual void request_hattribs_impl(AttributeBits attribs) override
+			virtual void make_hattribs_impl(AttributeBits attribs) override
 			{
 				mesh_.request_hattribs(attribs);
 			}
 
-			virtual void request_fattribs_impl(AttributeBits attribs) override
+			virtual void make_fattribs_impl(AttributeBits attribs) override
 			{
 				mesh_.request_fattribs(attribs);
 			}
@@ -153,9 +153,9 @@ namespace OpenMesh {
 								return fh;
 							}
 
-
 					// try to add face
 					fh = mesh_.add_face(_indices);
+
 					// separate non-manifold faces and mark them
 					if (!fh.is_valid())
 					{
@@ -190,6 +190,8 @@ namespace OpenMesh {
 							}
 						}
 					}
+
+					synthesize_face_hattribs(fh);
 				}
 				return fh;
 			}
@@ -215,38 +217,72 @@ namespace OpenMesh {
 
 			virtual void set_normal(VertexHandle _vh, const Vec3f &_normal) override
 			{
-				if (fileopts_.vertex_has_normal())
+				if (fileopts_.vertex_has_normal()) {
 					mesh_.set_normal(_vh, vector_cast<Normal>(_normal));
+				} else if (synthopts_.halfedge_has_normal()) {
+					if (!vprop_fallback_normal_.is_valid()) mesh_.add_property(vprop_fallback_normal_);
+					mesh_.property(vprop_fallback_normal_, _vh) = vector_cast<Normal>(_normal);
+				}
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec4uc &_color) override
 			{
-				if (fileopts_.vertex_has_color())
+				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
+				} else if (synthopts_.halfedge_has_color()) {
+					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
+				}
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec3uc &_color) override
 			{
-				if (fileopts_.vertex_has_color())
+				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
+				} else if (synthopts_.halfedge_has_color()) {
+					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
+				}
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec4f &_color) override
 			{
-				if (fileopts_.vertex_has_color())
+				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
+				} else if (synthopts_.halfedge_has_color()) {
+					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
+				}
 			}
 
 			virtual void set_color(VertexHandle _vh, const Vec3f &_color) override
 			{
-				if (fileopts_.vertex_has_color())
+				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
+				} else if (synthopts_.halfedge_has_color()) {
+					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
+				}
 			}
 
 			virtual void set_texcoord(VertexHandle _vh, const Vec2f &_texcoord) override
 			{
-				if (fileopts_.vertex_has_texcoord2D())
+				if (fileopts_.vertex_has_texcoord2D()) {
 					mesh_.set_texcoord2D(_vh, vector_cast<TexCoord2D>(_texcoord));
+				} else if (synthopts_.halfedge_has_texcoord2D()) {
+					if (!vprop_fallback_texcoord2D_.is_valid()) mesh_.add_property(vprop_fallback_texcoord2D_);
+					mesh_.property(vprop_fallback_texcoord2D_, _vh) = vector_cast<TexCoord2D>(_texcoord);
+				}
+			}
+
+			virtual void set_texcoord(VertexHandle _vh, const Vec3f &_texcoord) override
+			{
+				if (fileopts_.vertex_has_texcoord3D()) {
+					mesh_.set_texcoord3D(_vh, vector_cast<TexCoord3D>(_texcoord));
+				} else if (synthopts_.halfedge_has_texcoord3D()) {
+					if (!vprop_fallback_texcoord3D_.is_valid()) mesh_.add_property(vprop_fallback_texcoord3D_);
+					mesh_.property(vprop_fallback_texcoord3D_, _vh) = vector_cast<TexCoord3D>(_texcoord);
+				}
 			}
 
 			virtual void set_status(VertexHandle _vh, const OpenMesh::Attributes::StatusInfo &_status) override
@@ -271,24 +307,26 @@ namespace OpenMesh {
 			{
 				if (fileopts_.halfedge_has_texcoord2D())
 					mesh_.set_texcoord2D(_heh, vector_cast<TexCoord2D>(_texcoord));
-			}
-
-			virtual void set_texcoord(VertexHandle _vh, const Vec3f &_texcoord) override
-			{
-				if (fileopts_.vertex_has_texcoord3D())
-					mesh_.set_texcoord3D(_vh, vector_cast<TexCoord3D>(_texcoord));
+				if (synthopts_.vertex_has_texcoord2D())
+					mesh_.set_texcoord2D(mesh_.to_vertex_handle(_heh), vector_cast<TexCoord2D>(_texcoord));
 			}
 
 			virtual void set_texcoord(HalfedgeHandle _heh, const Vec3f &_texcoord) override
 			{
 				if (fileopts_.halfedge_has_texcoord3D())
 					mesh_.set_texcoord3D(_heh, vector_cast<TexCoord3D>(_texcoord));
+				if (synthopts_.vertex_has_texcoord3D())
+					mesh_.set_texcoord3D(mesh_.to_vertex_handle(_heh), vector_cast<TexCoord3D>(_texcoord));
 			}
 
 			virtual void set_normal(HalfedgeHandle _heh, const Vec3f &_normal) override {
 				if (fileopts_.halfedge_has_normal())
 					mesh_.set_normal(_heh, vector_cast<Normal>(_normal));
+				if (synthopts_.vertex_has_normal())
+					mesh_.set_normal(mesh_.to_vertex_handle(_heh), vector_cast<Normal>(_normal));
 			}
+
+			// TODO halfedge color?
 
 			virtual void set_status(HalfedgeHandle _heh, const OpenMesh::Attributes::StatusInfo &_status) override
 			{
@@ -371,7 +409,7 @@ namespace OpenMesh {
 
 			virtual void add_face_texcoords(FaceHandle _fh, VertexHandle _vh, const std::vector<Vec2f> &_face_texcoords) override
 			{
-				if (!fileopts_.halfedge_has_texcoord2D()) return;
+				if (!want_hattribs(AttributeBits::TexCoord2D)) return;
 				
 				// get first halfedge handle
 				HalfedgeHandle cur_heh = mesh_.halfedge_handle(_fh);
@@ -390,7 +428,7 @@ namespace OpenMesh {
 
 			virtual void add_face_texcoords(FaceHandle _fh, VertexHandle _vh, const std::vector<Vec3f> &_face_texcoords) override
 			{
-				if (!fileopts_.halfedge_has_texcoord3D()) return;
+				if (!want_hattribs(AttributeBits::TexCoord3D)) return;
 				
 				// get first halfedge handle
 				HalfedgeHandle cur_heh = mesh_.halfedge_handle(_fh);
@@ -409,7 +447,7 @@ namespace OpenMesh {
 
 			virtual void add_face_normals(FaceHandle _fh, VertexHandle _vh, const std::vector<Vec3f> &_face_normals) override
 			{
-				if (!fileopts_.halfedge_has_normal()) return;
+				if (!want_hattribs(AttributeBits::Normal)) return;
 				
 				// get first halfedge handle
 				HalfedgeHandle cur_heh = mesh_.halfedge_handle(_fh);
@@ -423,6 +461,35 @@ namespace OpenMesh {
 				{
 					set_normal(cur_heh, _face_normals[i]);
 					cur_heh = mesh_.next_halfedge_handle(cur_heh);
+				}
+			}
+
+			void synthesize_face_hattribs(FaceHandle fh)
+			{
+				if (!fh.is_valid() || !synthopts_.hattribs) return;
+				// get vertex props to use for synthesis
+				// note: could theoretically have valid fallback props but synthesis disabled
+				// note: vertex attribs could exist without the importer being allowed to touch them
+				auto vprop_normal = synthopts_.halfedge_has_normal()
+					? (fileopts_.vertex_has_normal() ? mesh_.vertex_normals_pph() : vprop_fallback_normal_)
+					: VPropHandleT<Normal>{};
+				auto vprop_color = synthopts_.halfedge_has_color()
+					? (fileopts_.vertex_has_color() ? mesh_.vertex_colors_pph() : vprop_fallback_color_)
+					: VPropHandleT<Color>{};
+				auto vprop_texcoord2D = synthopts_.halfedge_has_texcoord2D()
+					? (fileopts_.vertex_has_texcoord2D() ? mesh_.vertex_texcoords2D_pph() : vprop_fallback_texcoord2D_)
+					: VPropHandleT<TexCoord2D>{};
+				auto vprop_texcoord3D = synthopts_.halfedge_has_texcoord3D()
+					? (fileopts_.vertex_has_texcoord3D() ? mesh_.vertex_texcoords3D_pph() : vprop_fallback_texcoord3D_)
+					: VPropHandleT<TexCoord3D>{};
+				// synthesize props for all halfedges of the face
+				for (auto hit = mesh_.fh_iter(fh); hit.is_valid(); ++hit) {
+					HalfedgeHandle hh = *hit;
+					VertexHandle vh = mesh_.to_vertex_handle(hh);
+					if (vprop_normal.is_valid()) mesh_.set_normal(hh, mesh_.property(vprop_normal, vh));
+					if (vprop_color.is_valid()) mesh_.set_color(hh, mesh_.property(vprop_color, vh));
+					if (vprop_texcoord2D.is_valid()) mesh_.set_texcoord2D(hh, mesh_.property(vprop_texcoord2D, vh));
+					if (vprop_texcoord3D.is_valid()) mesh_.set_texcoord3D(hh, mesh_.property(vprop_texcoord3D, vh));
 				}
 			}
 
@@ -451,30 +518,43 @@ namespace OpenMesh {
 
 			virtual BaseKernel *kernel() override { return &mesh_; }
 
-			bool is_triangle_mesh() const override
+			virtual bool is_triangle_mesh() const override
 			{
 				return Mesh::is_triangles();
 			}
 
-			void reserve(unsigned int nV, unsigned int nE, unsigned int nF) override
+			virtual void reserve(unsigned int nV, unsigned int nE, unsigned int nF) override
 			{
 				mesh_.reserve(nV, nE, nF);
 			}
 
 			// query number of faces, vertices, normals, texcoords
-			size_t n_vertices()  const override { return mesh_.n_vertices(); }
-			size_t n_faces()     const override { return mesh_.n_faces(); }
-			size_t n_edges()     const override { return mesh_.n_edges(); }
+			virtual size_t n_vertices()  const override { return mesh_.n_vertices(); }
+			virtual size_t n_faces()     const override { return mesh_.n_faces(); }
+			virtual size_t n_edges()     const override { return mesh_.n_edges(); }
 
 
-			void prepare() override { }
+			virtual void prepare() override { }
 
 
-			void finish()  override { }
+			virtual void finish() override
+			{
+				// remove temp properties
+				mesh_.remove_property(vprop_fallback_color_);
+				mesh_.remove_property(vprop_fallback_normal_);
+				mesh_.remove_property(vprop_fallback_texcoord2D_);
+				mesh_.remove_property(vprop_fallback_texcoord3D_);
+			}
 
 
 		private:
 			Mesh &mesh_;
+
+			// fallback properties for vertex -> halfedge attribute conversion
+			VPropHandleT<Normal> vprop_fallback_normal_;
+			VPropHandleT<Color> vprop_fallback_color_;
+			VPropHandleT<TexCoord2D> vprop_fallback_texcoord2D_;
+			VPropHandleT<TexCoord3D> vprop_fallback_texcoord3D_;
 		};
 
 

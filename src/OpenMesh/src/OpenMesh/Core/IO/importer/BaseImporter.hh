@@ -87,6 +87,7 @@ namespace OpenMesh {
 		protected:
 			Options useropts_{};
 			Options fileopts_{};
+			Options synthopts_{};
 
 		public:
 
@@ -101,10 +102,16 @@ namespace OpenMesh {
 				return useropts_;
 			}
 
-			// options loaded from file (subset of user options)
+			// options loaded directly from file (subset of user options)
 			const Options & file_options() const
 			{
 				return fileopts_;
+			}
+
+			// options loaded from file including those synthesized by the importer (subset of user options)
+			const Options final_options() const
+			{
+				return fileopts_ | synthopts_;
 			}
 
 			// set file option flags
@@ -113,48 +120,81 @@ namespace OpenMesh {
 				fileopts_.flags |= opts;
 			}
 
-			// for reader to request halfedge attribs, falling back to vertex attribs, checked against user options
-			AttributeBits request_h_or_v_attribs(AttributeBits attribs)
+			// returns settable subset of queried attributes.
+			AttributeBits want_vattribs(AttributeBits attribs) const
 			{
-				const auto hattribs = request_hattribs(attribs);
-				const auto vattribs = request_vattribs(attribs & ~hattribs);
-				return hattribs | vattribs;
+				return attribs & (fileopts_.vattribs | synthopts_.hattribs);
 			}
 
-			// for reader to request vertex attribs checked against user options.
-			// returns loadable attributes.
+			// returns settable subset of queried attributes.
+			AttributeBits want_hattribs(AttributeBits attribs) const
+			{
+				return attribs & (fileopts_.hattribs | synthopts_.vattribs);
+			}
+
+			// returns settable subset of queried attributes.
+			AttributeBits want_eattribs(AttributeBits attribs) const
+			{
+				return attribs & fileopts_.eattribs;
+			}
+
+			// returns settable subset of queried attributes.
+			AttributeBits want_fattribs(AttributeBits attribs) const
+			{
+				return attribs & fileopts_.fattribs;
+			}
+
+			// for reader to request vertex attribs, falling back to halfedge attribs, checked against user options.
+			// if fallback to halfedge attribs happens, vertex values for those attribs are collected in temporary
+			// properties and applied to halfedges when faces are created.
+			// returns settable subset of requested attributes.
 			AttributeBits request_vattribs(AttributeBits attribs)
 			{
-				AttributeBits r = useropts_.vattribs & attribs & ~fileopts_.vattribs;
-				if (!!r) request_vattribs_impl(r);
-				return fileopts_.vattribs |= r;
+				// request vertex attribs masked by user opts
+				const auto va = attribs & useropts_.vattribs & ~fileopts_.vattribs;
+				if (!!va) make_vattribs_impl(va & ~synthopts_.vattribs);
+				fileopts_.vattribs |= va;
+				synthopts_.vattribs &= ~va;
+				// and also halfedge attribs for synthesis
+				const auto ha = attribs & useropts_.hattribs & ~fileopts_.hattribs;
+				if (!!ha) make_hattribs_impl(ha & ~synthopts_.hattribs);
+				synthopts_.hattribs |= ha;
+				return attribs & (fileopts_.vattribs | synthopts_.hattribs);
+			}
+
+			// for reader to request halfedge attribs, falling back to vertex attribs, checked against user options.
+			// if fallback to vertex attribs happens, halfedge values for those attribs are applied to vertices instead.
+			// returns settable subset of requested attributes.
+			AttributeBits request_hattribs(AttributeBits attribs)
+			{
+				// request halfedge attribs masked by user opts
+				const auto ha = attribs & useropts_.hattribs & ~fileopts_.hattribs;
+				if (!!ha) make_hattribs_impl(ha & ~synthopts_.hattribs);
+				fileopts_.hattribs |= ha;
+				synthopts_.hattribs &= ~ha;
+				// and also vertex attribs for synthesis
+				const auto va = attribs & useropts_.vattribs & ~fileopts_.vattribs;
+				if (!!va) make_vattribs_impl(va & ~synthopts_.vattribs);
+				synthopts_.vattribs |= va;
+				return attribs & (fileopts_.hattribs | synthopts_.vattribs);
 			}
 
 			// for reader to request edge attribs checked against user options.
-			// returns loadable attributes.
+			// returns settable subset of requested attributes.
 			AttributeBits request_eattribs(AttributeBits attribs)
 			{
 				AttributeBits r = useropts_.eattribs & attribs & ~fileopts_.eattribs;
-				if (!!r) request_eattribs_impl(r);
-				return fileopts_.eattribs |= r;
-			}
-
-			// for reader to request halfedge attribs checked against user options.
-			// returns loadable attributes.
-			AttributeBits request_hattribs(AttributeBits attribs)
-			{
-				AttributeBits r = useropts_.hattribs & attribs & ~fileopts_.hattribs;
-				if (!!r) request_hattribs_impl(r);
-				return fileopts_.hattribs |= r;
+				if (!!r) make_eattribs_impl(r);
+				return attribs & (fileopts_.eattribs |= r);
 			}
 
 			// for reader to request face attribs checked against user options.
-			// returns loadable attributes.
+			// returns settable subset of requested attributes.
 			AttributeBits request_fattribs(AttributeBits attribs)
 			{
 				AttributeBits r = useropts_.fattribs & attribs & ~fileopts_.fattribs;
-				if (!!r) request_fattribs_impl(r);
-				return fileopts_.hattribs |= r;
+				if (!!r) make_fattribs_impl(r);
+				return attribs & (fileopts_.hattribs |= r);
 			}
 
 			// add a vertex with coordinate \c _point
@@ -293,10 +333,10 @@ namespace OpenMesh {
 			virtual void finish() {}
 
 		private:
-			virtual void request_vattribs_impl(AttributeBits attribs) = 0;
-			virtual void request_eattribs_impl(AttributeBits attribs) = 0;
-			virtual void request_hattribs_impl(AttributeBits attribs) = 0;
-			virtual void request_fattribs_impl(AttributeBits attribs) = 0;
+			virtual void make_vattribs_impl(AttributeBits attribs) = 0;
+			virtual void make_eattribs_impl(AttributeBits attribs) = 0;
+			virtual void make_hattribs_impl(AttributeBits attribs) = 0;
+			virtual void make_fattribs_impl(AttributeBits attribs) = 0;
 		};
 
 

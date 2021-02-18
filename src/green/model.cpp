@@ -123,7 +123,15 @@ namespace green {
 		// not triangulating breaks some stuff atm, probably in vertex area
 		// NOTE currently done by assimp too
 		//m_mesh.triangulate();
-		
+
+		if (readOptions.halfedge_has_normal() && m_mesh.has_halfedge_normals()) {
+			std::cout << "Found halfedge normals" << std::endl;
+		}
+
+		if (readOptions.halfedge_has_texcoord2D() && m_mesh.has_halfedge_texcoords2D()) {
+			std::cout << "Found halfedge texcoords2D" << std::endl;
+		}
+
 		// copy original vertex colors
 		// (because we need to be able to overwrite the actual vertex colors during export)
 		if (readOptions.vertex_has_color()) {

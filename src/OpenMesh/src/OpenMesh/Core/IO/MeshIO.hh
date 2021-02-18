@@ -146,7 +146,7 @@ namespace OpenMesh {
 			if (_clear) _mesh.clear();
 			ImporterT<Mesh> importer(_mesh, _opt);
 			bool r = IOManager().read(_filename, importer, _opt);
-			_opt = r ? importer.file_options() : Options{};
+			_opt = r ? importer.final_options() : Options{};
 			return r;
 		}
 
@@ -181,7 +181,7 @@ namespace OpenMesh {
 			if (_clear) _mesh.clear();
 			ImporterT<Mesh> importer(_mesh);
 			bool r = IOManager().read(_is, _ext, importer, _opt);
-			_opt = r ? importer.file_options() : Options{};
+			_opt = r ? importer.final_options() : Options{};
 			return r;
 		}
 

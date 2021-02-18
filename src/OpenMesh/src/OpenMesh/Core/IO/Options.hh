@@ -223,6 +223,36 @@ namespace OpenMesh {
 
 		//=============================================================================
 
+		inline Options & operator|=(Options &l, const Options &r) {
+			l.flags |= r.flags;
+			l.vattribs |= r.vattribs;
+			l.eattribs |= r.eattribs;
+			l.hattribs |= r.hattribs;
+			l.fattribs |= r.fattribs;
+			return l;
+		}
+
+		inline Options & operator&=(Options &l, const Options &r) {
+			l.flags &= r.flags;
+			l.vattribs &= r.vattribs;
+			l.eattribs &= r.eattribs;
+			l.hattribs &= r.hattribs;
+			l.fattribs &= r.fattribs;
+			return l;
+		}
+
+		inline Options operator|(const Options &l, const Options &r) {
+			Options o{l};
+			o |= r;
+			return o;
+		}
+
+		inline Options operator&(const Options &l, const Options &r) {
+			Options o{l};
+			o &= r;
+			return o;
+		}
+
 	} // namespace IO
 } // namespace OpenMesh
 //=============================================================================

@@ -138,7 +138,6 @@ namespace OpenMesh {
 			// byte swap option not used anymore?
 			bool swap = _bi.user_options().check(OptionBits::Swap);
 
-			// TODO create/populate halfedge attribs if desired			
 			_bi.request_vattribs(options_.vattribs);
 			_bi.request_fattribs(options_.fattribs);
 			_bi.set_file_options(options_.flags);
@@ -195,12 +194,12 @@ namespace OpenMesh {
 				}
 
 				//init vector
-				int numberOfValues;
+				unsigned int numberOfValues;
 				read(_listType, _in, numberOfValues, OpenMesh::GenProg::Bool2Type<binary>());
 				std::vector<T> vec;
 				vec.reserve(numberOfValues);
 				//read and assign
-				for (int i = 0; i < numberOfValues; ++i)
+				for (unsigned int i = 0; i < numberOfValues; ++i)
 				{
 					T in;
 					read(_valueType, _in, in, OpenMesh::GenProg::Bool2Type<binary>());
@@ -384,12 +383,9 @@ namespace OpenMesh {
 						}
 
 						_bi.set_point(vh, v);
-						if (_bi.file_options().vertex_has_normal())
-							_bi.set_normal(vh, n);
-						if (_bi.file_options().vertex_has_texcoord())
-							_bi.set_texcoord(vh, t);
-						if (_bi.file_options().vertex_has_color())
-							_bi.set_color(vh, Vec4uc(c));
+						_bi.set_normal(vh, n);
+						_bi.set_color(vh, Vec4uc(c));
+						_bi.set_texcoord(vh, t);
 					}
 				} else if (e_it->element_ == FACE)
 				{
@@ -476,8 +472,7 @@ namespace OpenMesh {
 								break;
 							}
 						}
-						if (_bi.file_options().face_has_color())
-							_bi.set_color(fh, Vec4uc(c));
+						_bi.set_color(fh, Vec4uc(c));
 					}
 				} else
 				{
@@ -623,12 +618,9 @@ namespace OpenMesh {
 						}
 
 						_bi.set_point(vh, v);
-						if (_bi.file_options().vertex_has_normal())
-							_bi.set_normal(vh, n);
-						if (_bi.file_options().vertex_has_texcoord())
-							_bi.set_texcoord(vh, t);
-						if (_bi.file_options().vertex_has_color())
-							_bi.set_color(vh, Vec4uc(c));
+						_bi.set_normal(vh, n);
+						_bi.set_color(vh, Vec4uc(c));
+						_bi.set_texcoord(vh, t);
 					}
 				} else if (e_it->element_ == FACE) {
 					for (unsigned i = 0; i < e_it->count_ && !_in.eof(); ++i) {
@@ -716,8 +708,7 @@ namespace OpenMesh {
 								break;
 							}
 						}
-						if (_bi.file_options().face_has_color())
-							_bi.set_color(fh, Vec4uc(c));
+						_bi.set_color(fh, Vec4uc(c));
 					}
 				} else {
 					for (unsigned int i = 0; i < e_it->count_ && !_in.eof(); ++i)

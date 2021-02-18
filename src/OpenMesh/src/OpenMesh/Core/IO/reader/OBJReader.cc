@@ -343,12 +343,12 @@ namespace OpenMesh {
 
 						if (stream.fail()) {
 							// 2d
-							if (!!_bi.request_h_or_v_attribs(AttributeBits::TexCoord2D)) {
+							if (!!_bi.request_hattribs(AttributeBits::TexCoord2D)) {
 								texcoords.push_back(OpenMesh::Vec2f(u, v));
 							}
 						} else {
 							// 3d
-							if (!!_bi.request_h_or_v_attribs(AttributeBits::TexCoord3D)) {
+							if (!!_bi.request_hattribs(AttributeBits::TexCoord3D)) {
 								texcoords3d.push_back(OpenMesh::Vec3f(u, v, w));
 							}
 						}
@@ -378,7 +378,7 @@ namespace OpenMesh {
 					stream >> x; stream >> y; stream >> z;
 
 					if (!stream.fail()) {
-						if (!!_bi.request_vattribs(AttributeBits::Normal)) {
+						if (!!_bi.request_hattribs(AttributeBits::Normal)) {
 							normals.push_back(OpenMesh::Vec3f(x, y, z));
 						}
 					}
@@ -598,7 +598,7 @@ namespace OpenMesh {
 								// Obj counts from 1 and not zero .. array counts from zero therefore -1
 								vhandles.push_back(VertexHandle(value - 1));
 								faceVertices.push_back(VertexHandle(value - 1));
-								if (_bi.file_options().vertex_has_color()) {
+								if (!!_bi.want_vattribs(AttributeBits::Color)) {
 									if ((unsigned int) (value - 1) < colors.size()) {
 										_bi.set_color(vhandles.back(), colors[value - 1]);
 									} else {
@@ -616,26 +616,8 @@ namespace OpenMesh {
 								}
 								assert(!vhandles.empty());
 
-								if (_bi.file_options().vertex_has_texcoord2D()) {
-									if (!texcoords.empty() && (unsigned int) (value - 1) < texcoords.size()) {
-										// Obj counts from 1 and not zero .. array counts from zero therefore -1
-										_bi.set_texcoord(vhandles.back(), texcoords[value - 1]);
-									} else {
-										omerr() << "Error setting Texture coordinates" << std::endl;
-									}
-
-								}
-
-								if (_bi.file_options().vertex_has_texcoord3D()) {
-									if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size()) {
-										_bi.set_texcoord(vhandles.back(), texcoords3d[value - 1]);
-									} else {
-										omerr() << "Error setting Texture coordinates" << std::endl;
-									}
-
-								}
-
-								if (_bi.file_options().halfedge_has_texcoord2D()) {
+								// Obj counts from 1 and not zero .. array counts from zero therefore -1
+								if (!!_bi.want_hattribs(AttributeBits::TexCoord2D)) {
 									if (!texcoords.empty() && (unsigned int) (value - 1) < texcoords.size()) {
 										face_texcoords.push_back(texcoords[value - 1]);
 									} else {
@@ -643,7 +625,7 @@ namespace OpenMesh {
 									}
 								}
 
-								if (_bi.file_options().halfedge_has_texcoord3D()) {
+								if (!!_bi.want_hattribs(AttributeBits::TexCoord3D)) {
 									if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size()) {
 										face_texcoords3d.push_back(texcoords3d[value - 1]);
 									} else {
@@ -662,16 +644,7 @@ namespace OpenMesh {
 								}
 
 								// Obj counts from 1 and not zero .. array counts from zero therefore -1
-								if (_bi.file_options().vertex_has_normal()) {
-									assert(!vhandles.empty());
-									if ((unsigned int) (value - 1) < normals.size()) {
-										_bi.set_normal(vhandles.back(), normals[value - 1]);
-									} else {
-										omerr() << "Error setting vertex normal" << std::endl;
-									}
-								}
-
-								if (_bi.file_options().halfedge_has_normal()) {
+								if (!!_bi.want_hattribs(AttributeBits::Normal)) {
 									if (!normals.empty() && (unsigned int) (value - 1) < normals.size()) {
 										face_normals.push_back(normals[value - 1]);
 									} else {
