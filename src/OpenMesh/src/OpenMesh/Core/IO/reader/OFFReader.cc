@@ -73,6 +73,8 @@ using std::isspace;
 #ifndef WIN32
 #endif
 
+#define OMLOG_SOURCE OFFReader
+
 //=== NAMESPACES ==============================================================
 
 
@@ -109,9 +111,7 @@ bool _OFFReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi
 
   if (!ifile.is_open() || !ifile.good())
   {
-    omerr() << "[OFFReader] : cannot not open file "
-	  << _filename.u8string()
-	  << std::endl;
+    OMLOG_ERROR << "cannot not open file " << _filename.u8string();
 
     return false;
   }
@@ -131,8 +131,7 @@ bool _OFFReader_::read(std::istream& _in, BaseImporter& _bi)
 {
    if (!_in.good())
    {
-     omerr() << "[OMReader] : cannot not use stream "
-       << std::endl;
+     OMLOG_ERROR << "cannot not use stream";
      return false;
    }
 

@@ -54,6 +54,7 @@
 
  //== INCLUDES =================================================================
 
+#include <string>
 
 #include <OpenMesh/Core/System/config.h>
 #include <OpenMesh/Core/Mesh/Status.hh>
@@ -112,6 +113,21 @@ namespace OpenMesh {
 	inline AttributeBits &operator&=(AttributeBits &l, AttributeBits r) {
 		l = l & r;
 		return l;
+	}
+
+	inline std::string to_string(const AttributeBits &attrs)
+	{
+		std::string r;
+		if (!!(attrs & AttributeBits::Normal)) r += "Normal|";
+		if (!!(attrs & AttributeBits::Color)) r += "Color|";
+		if (!!(attrs & AttributeBits::PrevHalfedge)) r += "PrevHalfedge|";
+		if (!!(attrs & AttributeBits::Status)) r += "Status|";
+		if (!!(attrs & AttributeBits::TexCoord1D)) r += "TexCoord1D|";
+		if (!!(attrs & AttributeBits::TexCoord2D)) r += "TexCoord2D|";
+		if (!!(attrs & AttributeBits::TexCoord3D)) r += "TexCoord3D|";
+		if (!!(attrs & AttributeBits::TextureIndex)) r += "TextureIndex|";
+		if (r.length()) r.pop_back();
+		return r;
 	}
 
 	//=============================================================================

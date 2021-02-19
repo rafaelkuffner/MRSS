@@ -48,12 +48,15 @@
  //STL
 #include <fstream>
 #include <limits>
+#include <map>
 
 // OpenMesh
 #include <OpenMesh/Core/IO/BinaryHelper.hh>
 #include <OpenMesh/Core/IO/writer/OBJWriter.hh>
 #include <OpenMesh/Core/IO/IOManager.hh>
 #include <OpenMesh/Core/Utils/color_cast.hh>
+
+#define OMLOG_SOURCE OBJWriter
 
 //=== NAMESPACES ==============================================================
 
@@ -87,8 +90,7 @@ namespace OpenMesh {
 
 			if (!out)
 			{
-				omerr() << "[OBJWriter] : cannot open file "
-					<< _filename.u8string() << std::endl;
+				OMLOG_ERROR << "cannot open file " << _filename.u8string();
 				return false;
 			}
 
@@ -218,7 +220,7 @@ namespace OpenMesh {
 			OpenMesh::Vec3f c;
 			OpenMesh::Vec4f cA;
 
-			omlog() << "[OBJWriter] : write file\n";
+			OMLOG_INFO << "write file";
 
 			_out.precision(_precision);
 
@@ -228,19 +230,19 @@ namespace OpenMesh {
 
 			// No binary mode for OBJ
 			if (_opt.check(OptionBits::Binary)) {
-				omout() << "[OBJWriter] : Warning, Binary mode requested for OBJ Writer (No support for Binary mode), falling back to standard." << std::endl;
+				OMLOG_WARNING << "Binary mode not supported by OBJ Writer, falling back to standard";
 			}
 
 			// check for unsupported writer features
 			if (_opt.face_has_normal()) {
-				omerr() << "[OBJWriter] : FaceNormal not supported by OBJ Writer" << std::endl;
+				OMLOG_WARNING << "FaceNormal not supported by OBJ Writer";
 				_opt.fattribs &= ~AttributeBits::Normal;
 			}
 
 			// check for unsupported writer features
 			if (_opt.vertex_has_color()) {
 				// TODO implement OBJ vertex color export
-				omerr() << "[OBJWriter] : VertexColor not supported by OBJ Writer" << std::endl;
+				OMLOG_WARNING << "VertexColor not supported by OBJ Writer";
 				_opt.vattribs &= ~AttributeBits::Color;
 			}
 
@@ -255,7 +257,7 @@ namespace OpenMesh {
 
 				if (!matStream)
 				{
-					omerr() << "[OBJWriter] : cannot write material file " << matFile.u8string() << std::endl;
+					OMLOG_ERROR << "[OBJWriter] : cannot write material file " << matFile.u8string();
 
 				} else {
 					useMatrial = writeMaterial(matStream, _be, _opt);

@@ -62,6 +62,7 @@
 #include <OpenMesh/Core/Mesh/Attributes.hh>
 #include <OpenMesh/Core/System/omstream.hh>
 
+#define OMLOG_SOURCE Importer
 
 //== NAMESPACES ===============================================================
 
@@ -93,21 +94,25 @@ namespace OpenMesh {
 
 			virtual void make_vattribs_impl(AttributeBits attribs) override
 			{
+				OMLOG_INFO << "making vertex attribs " << to_string(attribs);
 				mesh_.request_vattribs(attribs);
 			}
 
 			virtual void make_eattribs_impl(AttributeBits attribs) override
 			{
+				OMLOG_INFO << "making edge attribs " << to_string(attribs);
 				mesh_.request_eattribs(attribs);
 			}
 
 			virtual void make_hattribs_impl(AttributeBits attribs) override
 			{
+				OMLOG_INFO << "making halfedge attribs " << to_string(attribs);
 				mesh_.request_hattribs(attribs);
 			}
 
 			virtual void make_fattribs_impl(AttributeBits attribs) override
 			{
+				OMLOG_INFO << "making face attribs " << to_string(attribs);
 				mesh_.request_fattribs(attribs);
 			}
 
@@ -139,7 +144,7 @@ namespace OpenMesh {
 					for (it = _indices.begin(); it != end; ++it)
 						if (! mesh_.is_valid_handle(*it))
 						{
-							omerr() << "ImporterT: Face contains invalid vertex index\n";
+							OMLOG_WARNING << "Face contains invalid vertex index";
 							return fh;
 						}
 
@@ -149,7 +154,7 @@ namespace OpenMesh {
 						for (it2 = it + 1; it2 != end; ++it2)
 							if (*it == *it2)
 							{
-								omerr() << "ImporterT: Face has equal vertices\n";
+								OMLOG_WARNING << "Face has equal vertices";
 								return fh;
 							}
 
@@ -220,7 +225,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_normal()) {
 					mesh_.set_normal(_vh, vector_cast<Normal>(_normal));
 				} else if (synthopts_.halfedge_has_normal()) {
-					if (!vprop_fallback_normal_.is_valid()) mesh_.add_property(vprop_fallback_normal_);
+					if (!vprop_fallback_normal_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex normals";
+						mesh_.add_property(vprop_fallback_normal_);
+					}
 					mesh_.property(vprop_fallback_normal_, _vh) = vector_cast<Normal>(_normal);
 				}
 			}
@@ -230,7 +238,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 				} else if (synthopts_.halfedge_has_color()) {
-					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					if (!vprop_fallback_color_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex colors";
+						mesh_.add_property(vprop_fallback_color_);
+					}
 					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
 				}
 			}
@@ -240,7 +251,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 				} else if (synthopts_.halfedge_has_color()) {
-					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					if (!vprop_fallback_color_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex colors";
+						mesh_.add_property(vprop_fallback_color_);
+					}
 					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
 				}
 			}
@@ -250,7 +264,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 				} else if (synthopts_.halfedge_has_color()) {
-					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					if (!vprop_fallback_color_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex colors";
+						mesh_.add_property(vprop_fallback_color_);
+					}
 					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
 				}
 			}
@@ -260,7 +277,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_color()) {
 					mesh_.set_color(_vh, color_cast<Color>(_color));
 				} else if (synthopts_.halfedge_has_color()) {
-					if (!vprop_fallback_color_.is_valid()) mesh_.add_property(vprop_fallback_color_);
+					if (!vprop_fallback_color_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex colors";
+						mesh_.add_property(vprop_fallback_color_);
+					}
 					mesh_.property(vprop_fallback_color_, _vh) = color_cast<Color>(_color);
 				}
 			}
@@ -270,7 +290,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_texcoord2D()) {
 					mesh_.set_texcoord2D(_vh, vector_cast<TexCoord2D>(_texcoord));
 				} else if (synthopts_.halfedge_has_texcoord2D()) {
-					if (!vprop_fallback_texcoord2D_.is_valid()) mesh_.add_property(vprop_fallback_texcoord2D_);
+					if (!vprop_fallback_texcoord2D_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex texcoords2D";
+						mesh_.add_property(vprop_fallback_texcoord2D_);
+					}
 					mesh_.property(vprop_fallback_texcoord2D_, _vh) = vector_cast<TexCoord2D>(_texcoord);
 				}
 			}
@@ -280,7 +303,10 @@ namespace OpenMesh {
 				if (fileopts_.vertex_has_texcoord3D()) {
 					mesh_.set_texcoord3D(_vh, vector_cast<TexCoord3D>(_texcoord));
 				} else if (synthopts_.halfedge_has_texcoord3D()) {
-					if (!vprop_fallback_texcoord3D_.is_valid()) mesh_.add_property(vprop_fallback_texcoord3D_);
+					if (!vprop_fallback_texcoord3D_.is_valid()) {
+						OMLOG_DEBUG << "making fallback vertex texcoords3d";
+						mesh_.add_property(vprop_fallback_texcoord3D_);
+					}
 					mesh_.property(vprop_fallback_texcoord3D_, _vh) = vector_cast<TexCoord3D>(_texcoord);
 				}
 			}
@@ -564,3 +590,5 @@ namespace OpenMesh {
 //=============================================================================
 #endif
 //=============================================================================
+
+#undef OMLOG_SOURCE

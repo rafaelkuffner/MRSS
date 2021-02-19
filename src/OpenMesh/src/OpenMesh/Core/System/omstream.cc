@@ -41,14 +41,14 @@
 
 
 
-//=============================================================================
-//
-//  CLASS mostream - IMPLEMENTATION
-//
-//=============================================================================
+ //=============================================================================
+ //
+ //  CLASS mostream - IMPLEMENTATION
+ //
+ //=============================================================================
 
 
-//== INCLUDES =================================================================
+ //== INCLUDES =================================================================
 
 #include <OpenMesh/Core/System/omstream.hh>
 #include <iostream>
@@ -56,47 +56,37 @@
 
 //== IMPLEMENTATION ========================================================== 
 
-
-OpenMesh::mostream& omlog() 
+namespace OpenMesh
 {
-  static bool initialized = false;
-  static OpenMesh::mostream mystream;
-  if (!initialized)
-  {
-    mystream.connect(std::clog);
-#ifdef NDEBUG
-    mystream.disable();
-#endif
-    initialized = true;
-  }
-  return mystream;
+
+	static log_handler_t current_log_handler = default_log_handler;
+
+	static std::string_view name(log_level l) {
+		switch (l) {
+		case log_level::debug: return "Debug";
+		case log_level::info: return "Info";
+		case log_level::warning: return "Warning";
+		case log_level::error: return "Error";
+		default: return "?";
+		}
+	}
+
+	void OpenMesh::set_log_handler(log_handler_t f) noexcept
+	{
+		if (!f) return;
+		current_log_handler = f;
+	}
+
+	log_handler_t OpenMesh::get_log_handler() noexcept
+	{
+		return current_log_handler;
+	}
+
+	void OpenMesh::default_log_handler(log_message &&msg) noexcept
+	{
+		std::cerr << "[OM:" << msg.source << "] " << name(msg.level) << " : " << msg.message << std::endl;
+	}
+
 }
-
-
-OpenMesh::mostream& omout() 
-{
-  static bool initialized = false;
-  static OpenMesh::mostream mystream;
-  if (!initialized)
-  {
-    mystream.connect(std::cout);
-    initialized = true;
-  }
-  return mystream;
-}
-
-
-OpenMesh::mostream& omerr() 
-{
-  static bool initialized = false;
-  static OpenMesh::mostream mystream;
-  if (!initialized)
-  {
-    mystream.connect(std::cerr);
-    initialized = true;
-  }
-  return mystream;
-}
-
 
 //=============================================================================

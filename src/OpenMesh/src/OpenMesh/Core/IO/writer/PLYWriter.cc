@@ -54,6 +54,8 @@
 #include <iostream>
 #include <iomanip>
 
+#define OMLOG_SOURCE PLYWriter
+
 //=== NAMESPACES ==============================================================
 
 
@@ -120,7 +122,7 @@ namespace OpenMesh {
 				// Uncheck these options and output message that
 				// they are not written out even though they were requested
 				_opt.fattribs &= ~AttributeBits::Normal;
-				omerr() << "[PLYWriter] : Warning: Face normals are not supported and thus not exported! " << std::endl;
+				OMLOG_WARNING << "Face normals are not supported and thus not exported!";
 			}
 
 			options_ = _opt;
@@ -128,7 +130,7 @@ namespace OpenMesh {
 
 			if (!_os.good())
 			{
-				omerr() << "[PLYWriter] : cannot write to stream " << std::endl;
+				OMLOG_ERROR << "cannot write to stream";
 				return false;
 			}
 

@@ -8,6 +8,8 @@
 #include <OpenMesh/Core/IO/IOManager.hh>
 #include <OpenMesh/Core/Utils/color_cast.hh>
 
+#define OMLOG_SOURCE VTKWriter
+
 //=== NAMESPACES ==============================================================
 
 namespace OpenMesh {
@@ -29,7 +31,7 @@ bool _VTKWriter_::write(const std::filesystem::path& _filename, BaseExporter& _b
     std::ofstream out(_filename);
 
     if (!out) {
-        omerr() << "[VTKWriter] : cannot open file " << _filename.u8string() << std::endl;
+        OMLOG_ERROR << "cannot open file " << _filename.u8string();
         return false;
     }
 
@@ -53,11 +55,11 @@ bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be, Options _opt, std
 
     // check writer features
     if (!_opt.is_empty()) {
-        omlog() << "[VTKWriter] : writer does not support any options\n";
+        OMLOG_ERROR << "[VTKWriter] : writer does not support any options";
         return false;
     }
 
-    omlog() << "[VTKWriter] : write file\n";
+    OMLOG_INFO << "write file";
     _out.precision(_precision);
 
     std::vector<VertexHandle> vhandles;

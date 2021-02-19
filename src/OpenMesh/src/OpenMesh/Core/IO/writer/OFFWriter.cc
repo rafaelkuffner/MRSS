@@ -52,6 +52,8 @@
 #include <OpenMesh/Core/IO/BinaryHelper.hh>
 #include <OpenMesh/Core/IO/writer/OFFWriter.hh>
 
+#define OMLOG_SOURCE OFFWriter
+
 //=== NAMESPACES ==============================================================
 
 
@@ -100,14 +102,13 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
 
   // check writer features
   if (_opt.face_has_normal()) {
-      omerr() << "[OFFWriter] : FaceNormal not supported by OBJ Writer" << std::endl;
+      OMLOG_WARNING<< "FaceNormal not supported by OBJ Writer";
       _opt.fattribs &= ~AttributeBits::Normal;
   }
 
   if (!_os.good())
   {
-    omerr() << "[OFFWriter] : cannot write to stream "
-	  << std::endl;
+    OMLOG_ERROR << "cannot write to stream ";
     return false;
   }
 

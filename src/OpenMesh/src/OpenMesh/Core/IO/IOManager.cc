@@ -56,6 +56,7 @@
 
 #include <iostream>
 
+#define OMLOG_SOURCE IOManager
 
 //== NAMESPACES ===============================================================
 
@@ -91,7 +92,7 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 
   if( it == it_end ) 
   { 
-    omerr() << "[OpenMesh::IO::_IOManager_] No reading modules available!\n"; 
+    OMLOG_ERROR << "No reading modules available!"; 
     return false; 
   } 
 
@@ -147,7 +148,7 @@ write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, s
 
   if ( it == it_end )
   {
-    omerr() << "[OpenMesh::IO::_IOManager_] No writing modules available!\n";
+    OMLOG_ERROR << "No writing modules available!";
     return false;
   }
 
@@ -176,7 +177,7 @@ write(std::ostream& _os,const std::filesystem::path &_ext, BaseExporter& _be, Op
 
   if ( it == it_end )
   {
-    omerr() << "[OpenMesh::IO::_IOManager_] No writing modules available!\n";
+    OMLOG_ERROR << "No writing modules available!";
     return false;
   }
 

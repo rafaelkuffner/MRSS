@@ -45,6 +45,8 @@
 #include <OpenMesh/Core/Mesh/PolyConnectivity.hh>
 #include <set>
 
+#define OMLOG_SOURCE PolyConnectivity
+
 namespace OpenMesh {
 
 const PolyConnectivity::VertexHandle    PolyConnectivity::InvalidVertexHandle;
@@ -141,7 +143,7 @@ PolyConnectivity::add_face(const VertexHandle* _vertex_handles, size_t _vhs_size
   {
     if ( !is_boundary(_vertex_handles[i]) )
     {
-      omerr() << "PolyMeshT::add_face: complex vertex\n";
+      OMLOG_WARNING << "add_face: complex vertex";
       return InvalidFaceHandle;
     }
 
@@ -153,7 +155,7 @@ PolyConnectivity::add_face(const VertexHandle* _vertex_handles, size_t _vhs_size
 
     if (!edgeData_[i].is_new && !is_boundary(edgeData_[i].halfedge_handle))
     {
-      omerr() << "PolyMeshT::add_face: complex edge\n";
+      OMLOG_WARNING << "add_face: complex edge";
       return InvalidFaceHandle;
     }
   }
@@ -185,7 +187,7 @@ PolyConnectivity::add_face(const VertexHandle* _vertex_handles, size_t _vhs_size
         // ok ?
         if (boundary_prev == inner_prev)
         {
-          omerr() << "PolyMeshT::add_face: patch re-linking failed\n";
+          OMLOG_WARNING << "add_face: patch re-linking failed";
           return InvalidFaceHandle;
         }
 

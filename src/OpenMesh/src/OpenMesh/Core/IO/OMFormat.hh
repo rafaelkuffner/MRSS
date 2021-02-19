@@ -63,6 +63,7 @@
 #  include <limits>
 #endif
 
+#define OMLOG_SOURCE OMFormat
 
 //== NAMESPACES ==============================================================
 
@@ -266,7 +267,7 @@ namespace OMFormat {
 	  std::string::operator = ( _rhs );
 	else
 	{
-	  omerr() << "Warning! Property name too long. Will be shortened!\n";
+	  OMLOG_WARNING << "Property name too long. Will be shortened!";
 	  this->std::string::operator = ( _rhs.substr(0, size_max) );
 	}
 
@@ -746,3 +747,5 @@ namespace OMFormat {
 //=============================================================================
 #endif
 //=============================================================================
+
+#undef OMLOG_SOURCE

@@ -64,6 +64,7 @@
   #define strnicmp strncasecmp
 #endif
 
+#define OMLOG_SOURCE STLReader
 
 //=== NAMESPACES ==============================================================
 
@@ -209,9 +210,7 @@ bool _STLReader_::read_stla(const std::filesystem::path& _filename, BaseImporter
 
   if (!in)
   {
-    omerr() << "[STLReader] : cannot not open file "
-	  << _filename.u8string()
-	  << std::endl;
+    OMLOG_ERROR << "cannot not open file " << _filename.u8string();
     return false;
   }
 
@@ -249,7 +248,7 @@ bool _STLReader_::read_stla(std::istream& _in, BaseImporter& _bi) const
     // Get one line
     std::getline(_in, line);
     if ( _in.bad() ){
-      omerr() << "  Warning! Could not read stream properly!\n";
+      OMLOG_ERROR << "Could not read stream properly!";
       return false;
     }
 
@@ -338,9 +337,7 @@ bool _STLReader_::read_stlb(const std::filesystem::path& _filename, BaseImporter
 
   if (!in)
   {
-    omerr() << "[STLReader] : cannot not open file "
-	  << _filename.u8string()
-	  << std::endl;
+    OMLOG_ERROR << "cannot not open file " << _filename.u8string();
     return false;
   }
 
@@ -368,7 +365,7 @@ bool _STLReader_::read_stlb(std::istream& _in, BaseImporter& _bi) const
 
   // check size of types
   if ((sizeof(float) != 4) || (sizeof(int) != 4)) {
-    omerr() << "[STLReader] : wrong type size\n";
+    OMLOG_ERROR << "wrong type size";
     return false;
   }
 
@@ -440,7 +437,7 @@ check_stl_type(const std::filesystem::path& _filename) const
    std::ifstream ifs (_filename, std::ifstream::binary);
    if(!ifs.good())
    {
-     omerr() << "could not open file" << _filename.u8string() << std::endl;
+     OMLOG_ERROR << "could not open file" << _filename.u8string();
      return NONE;
    }
 

@@ -66,6 +66,7 @@
 #include <OpenMesh/Core/IO/Options.hh>
 #include <OpenMesh/Core/Mesh/Attributes.hh>
 
+#define OMLOG_SOURCE Importer
 
 //== NAMESPACES ===============================================================
 
@@ -156,9 +157,12 @@ namespace OpenMesh {
 				fileopts_.vattribs |= va;
 				synthopts_.vattribs &= ~va;
 				// and also halfedge attribs for synthesis
-				const auto ha = attribs & useropts_.hattribs & ~fileopts_.hattribs;
-				if (!!ha) make_hattribs_impl(ha & ~synthopts_.hattribs);
-				synthopts_.hattribs |= ha;
+				const auto ha = attribs & useropts_.hattribs & ~fileopts_.hattribs & ~synthopts_.hattribs;
+				if (!!ha) {
+					OMLOG_INFO << "synthesizing halfedge attribs " << to_string(ha);
+					make_hattribs_impl(ha);
+					synthopts_.hattribs |= ha;
+				}
 				return attribs & (fileopts_.vattribs | synthopts_.hattribs);
 			}
 
@@ -173,9 +177,12 @@ namespace OpenMesh {
 				fileopts_.hattribs |= ha;
 				synthopts_.hattribs &= ~ha;
 				// and also vertex attribs for synthesis
-				const auto va = attribs & useropts_.vattribs & ~fileopts_.vattribs;
-				if (!!va) make_vattribs_impl(va & ~synthopts_.vattribs);
-				synthopts_.vattribs |= va;
+				const auto va = attribs & useropts_.vattribs & ~fileopts_.vattribs & ~synthopts_.vattribs;
+				if (!!va) {
+					OMLOG_INFO << "synthesizing vertex attribs " << to_string(va);
+					make_vattribs_impl(va);
+					synthopts_.vattribs |= va;
+				}
 				return attribs & (fileopts_.hattribs | synthopts_.vattribs);
 			}
 
@@ -346,3 +353,5 @@ namespace OpenMesh {
 //=============================================================================
 #endif
 //=============================================================================
+
+#undef OMLOG_SOURCE

@@ -61,6 +61,7 @@
 #include <string>
 #include <cstdio>
 #include <vector>
+#include <map>
 
 #include <OpenMesh/Core/System/config.h>
 #include <OpenMesh/Core/Utils/SingletonT.hh>

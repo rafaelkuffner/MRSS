@@ -41,11 +41,11 @@
 
 
 
-//=============================================================================
-//
-//  OpenMesh streams: omlog, omout, omerr
-//
-//=============================================================================
+ //=============================================================================
+ //
+ //  OpenMesh streams: omlog, omout, omerr
+ //
+ //=============================================================================
 
 #ifndef OPENMESH_OMSTREAMS_HH
 #define OPENMESH_OMSTREAMS_HH
@@ -53,25 +53,78 @@
 
 //== INCLUDES =================================================================
 
-#include <OpenMesh/Core/System/mostream.hh>
+//#include <OpenMesh/Core/System/mostream.hh>
+#include <OpenMesh/Core/System/config.h>
 
+#include <string>
+#include <string_view>
+#include <sstream>
+#include <type_traits>
+#include <utility>
 
 //== CLASS DEFINITION =========================================================
 
-/** \file omstream.hh
-    This file provides the streams omlog, omout, and omerr.
-*/
+namespace OpenMesh
+{
+	enum class log_level {
+		debug, info, warning, error
+	};
 
-/** \name stream replacements
-    These stream provide replacements for clog, cout, and cerr. They have
-    the advantage that they can easily be multiplexed.
-    \see OpenMesh::mostream
-*/
-//@{
-OPENMESHDLLEXPORT OpenMesh::mostream& omlog();
-OPENMESHDLLEXPORT OpenMesh::mostream& omout();
-OPENMESHDLLEXPORT OpenMesh::mostream& omerr();
-//@}
+	struct log_message {
+		std::string_view source;
+		std::string_view file;
+		int line;
+		log_level level;
+		std::string message;
+	};
+
+	using log_handler_t = void(*)(log_message &&) noexcept;
+
+	OPENMESHDLLEXPORT void set_log_handler(log_handler_t) noexcept;
+
+	OPENMESHDLLEXPORT log_handler_t get_log_handler() noexcept;
+
+	OPENMESHDLLEXPORT void default_log_handler(log_message &&) noexcept;
+
+	class log_submission {
+	private:
+		log_message m_msg;
+		std::ostringstream m_oss;
+
+	public:
+		~log_submission()
+		{
+			m_msg.message = m_oss.str();
+			get_log_handler()(std::move(m_msg));
+		}
+
+		log_submission(std::string_view source_, std::string_view file_, int line_, log_level level_) :
+			m_msg{source_, file_, line_, level_}
+		{}
+
+		log_submission(const log_submission &) = delete;
+		log_submission & operator=(const log_submission &) = delete;
+
+		template <typename T, typename = std::void_t<decltype(std::declval<std::ostream &>() << std::declval<const T &>())>>
+		log_submission & operator<<(const T &t)
+		{
+			m_oss << t;
+			return *this;
+		}
+
+	};
+
+}
+
+#define OM_STRINGIZE_IMPL(x) #x
+#define OM_STRINGIZE(x) OM_STRINGIZE_IMPL(x)
+
+// #define OMLOG_SOURCE to something before using these
+#define OMLOG_DEBUG ::OpenMesh::log_submission(OM_STRINGIZE(OMLOG_SOURCE), __FILE__, __LINE__, ::OpenMesh::log_level::debug)
+#define OMLOG_INFO ::OpenMesh::log_submission(OM_STRINGIZE(OMLOG_SOURCE), __FILE__, __LINE__, ::OpenMesh::log_level::info)
+#define OMLOG_WARNING ::OpenMesh::log_submission(OM_STRINGIZE(OMLOG_SOURCE), __FILE__, __LINE__, ::OpenMesh::log_level::warning)
+#define OMLOG_ERROR ::OpenMesh::log_submission(OM_STRINGIZE(OMLOG_SOURCE), __FILE__, __LINE__, ::OpenMesh::log_level::error)
+
 
 //=============================================================================
 #endif // OPENMESH_OMSTREAMS_HH defined

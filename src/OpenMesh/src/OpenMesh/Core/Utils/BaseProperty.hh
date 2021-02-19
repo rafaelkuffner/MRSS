@@ -48,6 +48,8 @@
 #include <OpenMesh/Core/IO/StoreRestore.hh>
 #include <OpenMesh/Core/System/omstream.hh>
 
+#define OMLOG_SOURCE BaseProperty
+
 namespace OpenMesh {
 
 //== CLASS DEFINITION =========================================================
@@ -166,7 +168,7 @@ protected:
   void check_and_set_persistent( bool _yn )
   {
     if ( _yn && !IO::is_streamable<T>() )
-      omerr() << "Warning! Type of property value is not binary storable!\n";
+      OMLOG_WARNING << "Type of property value is not binary storable!";
     persistent_ = IO::is_streamable<T>() && _yn;
   }
 
@@ -180,4 +182,4 @@ private:
 
 #endif //OPENMESH_BASEPROPERTY_HH
 
-
+#undef OMLOG_SOURCE

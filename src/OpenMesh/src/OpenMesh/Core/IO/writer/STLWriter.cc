@@ -55,6 +55,8 @@
 #include <OpenMesh/Core/IO/IOManager.hh>
 #include <OpenMesh/Core/IO/writer/STLWriter.hh>
 
+#define OMLOG_SOURCE STLWriter
+
 //=== NAMESPACES ==============================================================
 
 
@@ -139,7 +141,7 @@ bool
 _STLWriter_::
 write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /* _opt */) const
 {
-  omlog() << "[STLWriter] : write ascii file\n";
+  OMLOG_INFO << "write ascii file";
 
 
   // open file
@@ -150,7 +152,7 @@ write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
 #endif
   if (!out)
   {
-    omerr() << "[STLWriter] : cannot open file " << _filename.u8string() << std::endl;
+    OMLOG_ERROR << "cannot open file " << _filename.u8string();
     return false;
   }
 
@@ -188,7 +190,7 @@ write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
       fprintf(out, "vertex %.10f %.10f %.10f",   c[0], c[1], c[2]);
     }
     else
-      omerr() << "[STLWriter] : Warning non-triangle data!\n";
+      OMLOG_WARNING << "skipped non-triangle data!";
 
     fprintf(out, "\nendloop\nendfacet\n");
   }
@@ -208,7 +210,7 @@ bool
 _STLWriter_::
 write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::streamsize _precision) const
 {
-  omlog() << "[STLWriter] : write ascii file\n";
+  OMLOG_INFO << "write ascii file";
 
   int i, nF(int(_be.n_faces()));
   Vec3f  a, b, c, n;
@@ -242,7 +244,7 @@ write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
       _out << "vertex " << b[0] << " " << b[1] << " " << b[2] << "\n";
       _out << "vertex " << c[0] << " " << c[1] << " " << c[2] << "\n";
     } else {
-      omerr() << "[STLWriter] : Warning non-triangle data!\n";
+      OMLOG_WARNING << "skipped non-triangle data!";
     }
 
     _out << "\nendloop\nendfacet\n";
@@ -260,7 +262,7 @@ bool
 _STLWriter_::
 write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /* _opt */) const
 {
-  omlog() << "[STLWriter] : write binary file\n";
+  OMLOG_INFO << "write binary file";
 
 
   // open file
@@ -271,7 +273,7 @@ write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
 #endif
   if (!out)
   {
-    omerr() << "[STLWriter] : cannot open file " << _filename.u8string() << std::endl;
+    OMLOG_ERROR << "cannot open file " << _filename.u8string();
     return false;
   }
 
@@ -330,7 +332,7 @@ write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
       write_short(0, out);
     }
     else
-      omerr() << "[STLWriter] : Warning: Skipped non-triangle data!\n";
+      OMLOG_WARNING << "skipped non-triangle data!";
   }
 
 
@@ -344,7 +346,7 @@ bool
 _STLWriter_::
 write_stlb(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::streamsize _precision) const
 {
-  omlog() << "[STLWriter] : write binary file\n";
+  OMLOG_INFO << "write binary file";
 
 
   int i, nF(int(_be.n_faces()));
@@ -402,7 +404,7 @@ write_stlb(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
       write_short(0, _out);
     }
     else
-      omerr() << "[STLWriter] : Warning: Skipped non-triangle data!\n";
+      OMLOG_WARNING << "skipped non-triangle data!";
   }
 
 
@@ -431,7 +433,7 @@ binary_size(BaseExporter& _be, Options /* _opt */) const
     if (_be.get_vhandles(FaceHandle(i), vhandles) == 3)
       bytes += _12floats + sizeof(short);
     else
-      omerr() << "[STLWriter] : Warning: Skipped non-triangle data!\n";
+      OMLOG_WARNING << "skipped non-triangle data!";
 
   return bytes;
 }

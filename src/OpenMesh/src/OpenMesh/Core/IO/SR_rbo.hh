@@ -68,6 +68,8 @@
 #include <OpenMesh/Core/IO/SR_types.hh>
 #include <OpenMesh/Core/Utils/GenProg.hh>
 
+#define OMLOG_SOURCE SR_rbo
+
 //== NAMESPACES ===============================================================
 
 namespace OpenMesh {
@@ -163,7 +165,7 @@ inline void compile_time_error__no_fundamental_type()
 // surprising behaviour!
 template <typename T> T& reverse_byte_order(  T& _t )
 {
-  omerr() << "Not defined for type " << typeid(T).name() << std::endl;
+  OMLOG_ERROR << "Not defined for type " << typeid(T).name();
   compile_time_error__no_fundamental_type();
   return _t;
 }
@@ -249,3 +251,4 @@ T reverse_byte_order(const T& a)
 #endif // OPENMESH_SR_RBO_HH defined
 //=============================================================================
 
+#undef OMLOG_SOURCE

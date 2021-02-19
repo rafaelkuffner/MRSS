@@ -65,6 +65,8 @@ using std::isspace;
 
 #include <fstream>
 
+#define OMLOG_SOURCE OBJReader
+
 //=== NAMESPACES ==============================================================
 
 
@@ -125,9 +127,7 @@ namespace OpenMesh {
 
 			if (!in.is_open() || !in.good())
 			{
-				omerr() << "[OBJReader] : cannot not open file "
-					<< _filename.u8string()
-					<< std::endl;
+				OMLOG_ERROR << "cannot not open file " << _filename.u8string();
 				return false;
 			}
 
@@ -175,7 +175,7 @@ namespace OpenMesh {
 			{
 				std::getline(_in, line);
 				if (_in.bad()) {
-					omerr() << "  Warning! Could not read file properly!\n";
+					OMLOG_WARNING << "Could not read material file properly!";
 					return false;
 				}
 
@@ -295,7 +295,7 @@ namespace OpenMesh {
 			{
 				std::getline(_in, line);
 				if (_in.bad()) {
-					omerr() << "  Warning! Could not read file properly!\n";
+					OMLOG_WARNING << "Could not read file properly!";
 					return false;
 				}
 
@@ -354,8 +354,7 @@ namespace OpenMesh {
 						}
 
 					} else {
-						omerr() << "Only single 2D or 3D texture coordinate per vertex"
-							<< "allowed!" << std::endl;
+						OMLOG_ERROR << "Only single 2D or 3D texture coordinate per vertex allowed!";
 						return false;
 					}
 				}
@@ -386,7 +385,7 @@ namespace OpenMesh {
 			}
 
 			if (texcoords.size() && texcoords3d.size()) {
-				omerr() << "OBJ has inconsistent 2D/3D texcoords, they will be broken" << std::endl;
+				OMLOG_ERROR << "file has inconsistent 2D/3D texcoords, they will be broken";
 			}
 
 			return true;
@@ -434,7 +433,7 @@ namespace OpenMesh {
 			{
 				std::getline(_in, line);
 				if (_in.bad()) {
-					omerr() << "  Warning! Could not read file properly!\n";
+					OMLOG_WARNING << "Could not read file properly!";
 					return false;
 				}
 
@@ -469,12 +468,10 @@ namespace OpenMesh {
 
 					if (matStream) {
 
-						if (!read_material(matStream))
-							omerr() << "  Warning! Could not read file properly!\n";
-						matStream.close();
+						if (!read_material(matStream)) matStream.close();
 
 					} else
-						omerr() << "  Warning! Material file '" << matFile << "' not found!\n";
+						OMLOG_WARNING << "Material file '" << matFile << "' not found!";
 
 					//omlog() << "  " << materials_.size() << " materials loaded.\n";
 
@@ -493,8 +490,7 @@ namespace OpenMesh {
 					stream >> matname;
 					if (materials_.find(matname) == materials_.end())
 					{
-						omerr() << "Warning! Material '" << matname
-							<< "' not defined in material file.\n";
+						OMLOG_WARNING << "Material '" << matname << "' not defined in material file.";
 						matname = "";
 					}
 				}
@@ -602,7 +598,7 @@ namespace OpenMesh {
 									if ((unsigned int) (value - 1) < colors.size()) {
 										_bi.set_color(vhandles.back(), colors[value - 1]);
 									} else {
-										omerr() << "Error setting vertex color" << std::endl;
+										OMLOG_ERROR << "Error setting vertex color at " << value;
 									}
 								}
 								break;
@@ -621,7 +617,7 @@ namespace OpenMesh {
 									if (!texcoords.empty() && (unsigned int) (value - 1) < texcoords.size()) {
 										face_texcoords.push_back(texcoords[value - 1]);
 									} else {
-										omerr() << "Error setting Texture coordinates" << std::endl;
+										OMLOG_ERROR << "Error setting texture coordinates at " << value;
 									}
 								}
 
@@ -629,7 +625,7 @@ namespace OpenMesh {
 									if (!texcoords3d.empty() && (unsigned int) (value - 1) < texcoords3d.size()) {
 										face_texcoords3d.push_back(texcoords3d[value - 1]);
 									} else {
-										omerr() << "Error setting Texture coordinates" << std::endl;
+										OMLOG_ERROR << "Error setting texture coordinates at " << value;
 									}
 								}
 
@@ -648,7 +644,7 @@ namespace OpenMesh {
 									if (!normals.empty() && (unsigned int) (value - 1) < normals.size()) {
 										face_normals.push_back(normals[value - 1]);
 									} else {
-										omerr() << "Error setting vertex normal" << std::endl;
+										OMLOG_ERROR << "Error setting vertex normal at " << value;
 									}
 								}
 

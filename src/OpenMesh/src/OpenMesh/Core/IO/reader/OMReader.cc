@@ -58,6 +58,7 @@
 #include <OpenMesh/Core/IO/reader/OMReader.hh>
 #include <OpenMesh/Core/IO/writer/OMWriter.hh>
 
+#define OMLOG_SOURCE OMReader
 
 //=== NAMESPACES ==============================================================
 
@@ -106,7 +107,7 @@ bool _OMReader_::read(const std::filesystem::path& _filename, BaseImporter& _bi)
   ifs.unsetf(std::ios::skipws);
 
   if (!ifs.is_open() || !ifs.good()) {
-    omerr() << "[OMReader] : cannot not open file " << _filename.u8string() << std::endl;
+    OMLOG_ERROR << "cannot not open file " << _filename.u8string();
     return false;
   }
 
@@ -129,7 +130,7 @@ bool _OMReader_::read(std::istream& _is, BaseImporter& _bi)
   _bi.set_file_options(OptionBits::Binary);
 
   if (!_is.good()) {
-    omerr() << "[OMReader] : cannot read from stream " << std::endl;
+    OMLOG_ERROR << "cannot read from stream ";
     return false;
   }
 
@@ -164,9 +165,9 @@ bool _OMReader_::read_binary(std::istream& _is, BaseImporter& _bi) const
 
   if (header_.version_ > _OMWriter_::get_version())
   {
-    omerr() << "File uses .om version " << OMFormat::as_string(header_.version_) << " but reader only "
+    OMLOG_ERROR << "File uses .om version " << OMFormat::as_string(header_.version_) << " but reader only "
             << "supports up to version " << OMFormat::as_string(_OMWriter_::get_version()) << ".\n"
-            << "Please update your OpenMesh." << std::endl;
+            << "Please update your OpenMesh.";
     return false;
   }
 
@@ -364,7 +365,7 @@ bool _OMReader_::read_binary_vertex_chunk(std::istream &_is, BaseImporter &_bi, 
 
     default: // skip unknown chunks
     {
-      omerr() << "Unknown chunk type ignored!\n";
+      OMLOG_WARNING << "Unknown chunk type ignored!";
       size_t size_of = header_.n_vertices_ * OMFormat::vector_size(chunk_header_);
       _is.ignore(size_of);
       bytes_ += size_of;
@@ -474,7 +475,7 @@ bool _OMReader_::read_binary_face_chunk(std::istream &_is, BaseImporter &_bi, bo
 
     default: // skip unknown chunks
     {
-      omerr() << "Unknown chunk type ignore!\n";
+      OMLOG_WARNING << "Unknown chunk type ignore!";
       size_t size_of = OMFormat::chunk_data_size(header_, chunk_header_);
       _is.ignore(size_of);
       bytes_ += size_of;
@@ -590,7 +591,7 @@ bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi
 
     default:
       // skip unknown chunk
-      omerr() << "Unknown chunk type ignored!\n";
+      OMLOG_WARNING << "Unknown chunk type ignored!";
       size_t size_of = OMFormat::chunk_data_size(header_, chunk_header_);
       _is.ignore(size_of);
       bytes_ += size_of;
@@ -663,7 +664,7 @@ size_t _OMReader_::restore_binary_custom_data(std::istream& _is, BaseProperty* _
 
       block_size = 0;
     } else {
-      omerr() << "Warning! Property " << _bp->name() << " not loaded: " << "Mismatching data sizes!n";
+      OMLOG_WARNING << "Property " << _bp->name() << " not loaded: " << "Mismatching data sizes!";
     }
   }
 

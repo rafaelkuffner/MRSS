@@ -62,6 +62,8 @@
 #include <OpenMesh/Core/IO/exporter/BaseExporter.hh>
 #include <OpenMesh/Core/IO/writer/OMWriter.hh>
 
+#define OMLOG_SOURCE OMWriter
+
 //=== NAMESPACES ==============================================================
 
 
@@ -110,7 +112,7 @@ _OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
   // check if file is open
   if (!ofs.is_open())
   {
-    omerr() << "[OMWriter] : cannot open file " << _filename.u8string() << std::endl;
+    OMLOG_ERROR << "cannot open file " << _filename.u8string();
     return false;
   }
 
@@ -135,7 +137,7 @@ _OMWriter_::write(std::ostream& _os, BaseExporter& _be, Options _opt, std::strea
   // check exporter features
   if ( !check( _be, _opt ) )
   {
-    omerr() << "[OMWriter]: exporter does not support wanted feature!\n";
+    OMLOG_ERROR << "exporter does not support wanted feature!";
     return false;
   }
 
@@ -171,10 +173,6 @@ template <typename T> struct Enabler
 bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
                                Options _opt) const
 {
-  #ifndef DOXY_IGNORE_THIS
-    Enabler<mostream> enabler(omlog());
-  #endif
-
   size_t bytes = 0;
 
   bool swap = _opt.check(OptionBits::Swap) || (Endian::local() == Endian::MSB);

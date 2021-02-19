@@ -58,6 +58,8 @@
 #ifndef WIN32
 #endif
 
+#define OMLOG_SOURCE PLYReader
+
 //=== NAMESPACES ==============================================================
 
 
@@ -108,7 +110,7 @@ namespace OpenMesh {
 			std::fstream in(_filename, (std::ios_base::binary | std::ios_base::in));
 
 			if (!in.is_open() || !in.good()) {
-				omerr() << "[PLYReader] : cannot not open file " << _filename.u8string() << std::endl;
+				OMLOG_ERROR << "cannot not open file " << _filename.u8string();
 				return false;
 			}
 
@@ -124,13 +126,13 @@ namespace OpenMesh {
 		bool _PLYReader_::read(std::istream &_in, BaseImporter &_bi) {
 
 			if (!_in.good()) {
-				omerr() << "[PLYReader] : cannot not use stream" << std::endl;
+				OMLOG_ERROR << "cannot not use stream";
 				return false;
 			}
 
 			// Reparse the header
 			if (!can_u_read(_in)) {
-				omerr() << "[PLYReader] : Unable to parse header\n";
+				OMLOG_ERROR << "unable to parse header";
 				return false;
 			}
 
@@ -270,22 +272,16 @@ namespace OpenMesh {
 			_bi.reserve(vertexCount_, 3 * vertexCount_, faceCount_);
 
 			if (vertexDimension_ != 3) {
-				omerr() << "[PLYReader] : Only vertex dimension 3 is supported." << std::endl;
+				OMLOG_ERROR << "Only vertex dimension 3 is supported";
 				return false;
 			}
 
-			const bool err_enabled = omerr().is_enabled();
 			size_t complex_faces = 0;
-			if (err_enabled)
-				omerr().disable();
 
 			for (std::vector<ElementInfo>::iterator e_it = elements_.begin(); e_it != elements_.end(); ++e_it)
 			{
 				if (_in.eof()) {
-					if (err_enabled)
-						omerr().enable();
-
-					omerr() << "Unexpected end of file while reading." << std::endl;
+					OMLOG_ERROR << "Unexpected end of file while reading";
 					return false;
 				}
 
@@ -491,11 +487,8 @@ namespace OpenMesh {
 					break;
 			}
 
-			if (err_enabled)
-				omerr().enable();
-
 			if (complex_faces)
-				omerr() << complex_faces << "The reader encountered invalid faces, that could not be added.\n";
+				OMLOG_ERROR << "The reader encountered " << complex_faces << " invalid faces, that could not be added";
 
 			// File was successfully parsed.
 			return true;
@@ -514,10 +507,7 @@ namespace OpenMesh {
 
 			_bi.reserve(vertexCount_, 3 * vertexCount_, faceCount_);
 
-			const bool err_enabled = omerr().is_enabled();
 			size_t complex_faces = 0;
-			if (err_enabled)
-				omerr().disable();
 
 			for (std::vector<ElementInfo>::iterator e_it = elements_.begin(); e_it != elements_.end(); ++e_it)
 			{
@@ -723,10 +713,7 @@ namespace OpenMesh {
 				}
 
 				if (_in.eof()) {
-					if (err_enabled)
-						omerr().enable();
-
-					omerr() << "Unexpected end of file while reading." << std::endl;
+					OMLOG_ERROR << "Unexpected end of file while reading";
 					return false;
 				}
 
@@ -734,11 +721,8 @@ namespace OpenMesh {
 					// stop reading after the faces since additional elements are not preserved anyway
 					break;
 			}
-			if (err_enabled)
-				omerr().enable();
-
 			if (complex_faces)
-				omerr() << complex_faces << "The reader encountered invalid faces, that could not be added.\n";
+				OMLOG_ERROR << "The reader encountered " << complex_faces << " invalid faces, that could not be added";
 
 
 			return true;
@@ -1190,7 +1174,7 @@ namespace OpenMesh {
 			_is >> version;
 
 			if (_is.bad()) {
-				omerr() << "Defect PLY header detected" << std::endl;
+				OMLOG_ERROR << "Defect PLY header detected";
 				return false;
 			}
 
@@ -1207,7 +1191,7 @@ namespace OpenMesh {
 				//if (Endian::local() == Endian::LSB)
 				//  options_ += Options::Swap;
 			} else {
-				omerr() << "Unsupported PLY format: " << fileType << std::endl;
+				OMLOG_ERROR << "Unsupported PLY format: " << fileType;
 				return false;
 			}
 
@@ -1232,7 +1216,7 @@ namespace OpenMesh {
 						faceCount_ = elementCount;
 						element.element_ = FACE;
 					} else {
-						omerr() << "PLY header unsupported element type: " << elementName << std::endl;
+						OMLOG_WARNING << "PLY header unsupported element type: " << elementName;
 						element.element_ = UNKNOWN;
 					}
 
@@ -1261,14 +1245,14 @@ namespace OpenMesh {
 						} else if (listIndexType == "int") {
 							indexType = ValueTypeINT;
 						} else {
-							omerr() << "Unsupported Index type for property list: " << listIndexType << std::endl;
+							OMLOG_ERROR << "Unsupported Index type for property list: " << listIndexType;
 							return false;
 						}
 
 						entryType = get_property_type(listEntryType, listEntryType);
 
 						if (entryType == Unsupported) {
-							omerr() << "Unsupported Entry type for property list: " << listEntryType << std::endl;
+							OMLOG_ERROR << "Unsupported Entry type for property list: " << listEntryType;
 						}
 
 						PropertyInfo property(CUSTOM_PROP, entryType, propertyName);
@@ -1283,7 +1267,7 @@ namespace OpenMesh {
 
 								if (!elements_.back().properties_.empty())
 								{
-									omerr() << "Custom face Properties defined, before 'vertex_indices' property was defined. They will be skipped" << std::endl;
+									OMLOG_WARNING << "Custom face Properties defined, before 'vertex_indices' property was defined. They will be skipped";
 									elements_.back().properties_.clear();
 								}
 							} else {
@@ -1291,7 +1275,7 @@ namespace OpenMesh {
 							}
 
 						} else
-							omerr() << "property " << propertyName << " belongs to unsupported element " << elementName << std::endl;
+							OMLOG_WARNING << "property " << propertyName << " belongs to unsupported element " << elementName;
 
 						elements_.back().properties_.push_back(property);
 
@@ -1409,13 +1393,13 @@ namespace OpenMesh {
 					}
 
 				} else {
-					omlog() << "Unsupported keyword : " << keyword << std::endl;
+					OMLOG_WARNING << "Unsupported keyword : " << keyword;
 				}
 
 				streamPos = _is.tellg();
 				_is >> keyword;
 				if (_is.bad()) {
-					omerr() << "Error while reading PLY file header" << std::endl;
+					OMLOG_ERROR << "Error while reading PLY file header";
 					return false;
 				}
 			}

@@ -14,6 +14,8 @@
 
 #include "assimp_openmesh.hpp"
 
+#define OMLOG_SOURCE AssimpReader
+
 namespace stdfs = std::filesystem;
 
 namespace {
@@ -46,7 +48,7 @@ namespace green {
 	}
 
 	bool AssimpReader::read(const std::filesystem::path &_filename, OpenMesh::IO::BaseImporter &_bi) {
-		omerr() << "[Assimp] : loading " << _filename.u8string() << std::endl;
+		OMLOG_INFO << "loading " << _filename.u8string();
 		// NOTE assimp appears to support utf8 filenames; see assimp-5.0.1\code\Common\DefaultIOSystem.cpp
 		Assimp::Importer importer;
 		//importer.SetProgressHandler
@@ -67,7 +69,7 @@ namespace green {
 			| aiProcess_RemoveComponent
 		);
 		if (!scene) {
-			omerr() << "[Assimp] : failed to load " << _filename.u8string() << ": " << importer.GetErrorString() << std::endl;
+			OMLOG_ERROR << "failed to load " << _filename.u8string() << ": " << importer.GetErrorString();
 			return false;
 		}
 		OpenMesh::IO::BaseImporter::VHandles vhandles;
