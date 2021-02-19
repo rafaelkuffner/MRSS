@@ -52,6 +52,7 @@
 #include <istream>
 #include <cassert>
 #include <cstdlib>
+#include <functional>
 
 // This header is not needed by this file but expected by others including
 // this file.
@@ -881,6 +882,21 @@ constexpr OpenMesh::Vec4f operator"" _htmlColor(unsigned long long raw_color) {
             ((raw_color >> 16) & 0xFF) / 255.0f,
             ((raw_color >>  8) & 0xFF) / 255.0f,
             ((raw_color >>  0) & 0xFF) / 255.0f);
+}
+
+namespace std {
+    template <typename T, int N>
+    struct hash<OpenMesh::VectorT<T, N>>
+    {
+        size_t operator()(const OpenMesh::VectorT<T, N> &v) const noexcept {
+            hash<T> ht;
+            size_t r = 0;
+            for (int i = 0; i < N; i++) {
+                r = r * 31 ^ ht(v[i]);
+            }
+            return r;
+        }
+    };
 }
 
 #endif /* OPENMESH_SRC_OPENMESH_CORE_GEOMETRY_VECTOR11T_HH_ */
