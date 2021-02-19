@@ -568,9 +568,52 @@ namespace green {
 		glBindVertexArray(0);
 	}
 
+	void Model::update_vao_boundaries() {
+		// like edges, but only boundary ones (next to a topological hole)
+		bool makevao = false;
+		if (!m_vao_boundaries) makevao = true, m_vao_boundaries = cgu::gl_object::gen_vertex_array();
+		const auto nedges = m_mesh.n_edges();
+		assert(nedges <= std::numeric_limits<decltype(m_vao_nboundaries)>::max());
+		// boundary edges counted while filling ibo
+		m_vao_nboundaries = 0;
+		// TODO this will be generally well over-allocated atm
+		const size_t size_ibo = nedges * 2 * sizeof(GLuint);
+		glBindVertexArray(m_vao_boundaries);
+		// the GL_ELEMENT_ARRAY_BUFFER binding sticks to the VAO so we shouldn't unbind it
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo_boundaries);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, size_ibo, nullptr, GL_STATIC_DRAW);
+		if (nedges) {
+			auto pibo = reinterpret_cast<GLuint *>(
+				glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size_ibo, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
+			);
+			for (auto eit = m_mesh.edges_begin(); eit != m_mesh.edges_end(); ++eit) {
+				auto hh = m_mesh.s_halfedge_handle(*eit, 0);
+				auto ohh = m_mesh.opposite_halfedge_handle(hh);
+				if (m_mesh.is_boundary(hh) || m_mesh.is_boundary(ohh)) {
+					// only add to ibo if a boundary edge
+					m_vao_nboundaries++;
+					*pibo++ = m_mesh.from_vertex_handle(hh).idx();
+					*pibo++ = m_mesh.to_vertex_handle(hh).idx();
+				}
+			}
+			glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+		}
+		if (makevao) {
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_pos);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
+			glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 4, GL_FLOAT, false, sizeof(glm::vec4), 0);
+		}
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+	}
+
 	void Model::update_vaos() {
 		if (!m_ibo_edges) m_ibo_edges = cgu::gl_object::gen_buffer();
 		if (!m_ibo_tris) m_ibo_tris = cgu::gl_object::gen_buffer();
+		if (!m_ibo_boundaries) m_ibo_boundaries = cgu::gl_object::gen_buffer();
 		if (!m_vbo_pos) m_vbo_pos = cgu::gl_object::gen_buffer();
 		if (!m_vbo_col) m_vbo_col = cgu::gl_object::gen_buffer();
 		if (!m_vbo_halfedges) m_vbo_halfedges = cgu::gl_object::gen_buffer();
@@ -590,6 +633,7 @@ namespace green {
 		update_vao_verts();
 		update_vao_edges();
 		update_vao_tris();
+		update_vao_boundaries();
 	}
 
 	void Model::update_vbos() {
@@ -684,17 +728,22 @@ namespace green {
 		return true;
 	}
 
-	void Model::draw(GLenum polymode) const {
-		if (polymode == GL_POINT) {
+	void Model::draw(GLenum polymode, bool boundaries) const {
+		if (polymode == GL_POINT && !boundaries) {
 			if (!m_vao_verts) return;
 			glBindVertexArray(m_vao_verts);
 			glDrawArrays(GL_POINTS, 0, m_vao_nverts);
-		} else if (polymode == GL_LINE) {
+		} else if (polymode == GL_LINE && !boundaries) {
 			if (!m_vao_edges) return;
 			glBindVertexArray(m_vao_edges);
 			// must be uint (not int)
 			glDrawElements(GL_LINES, m_vao_nedges * 2, GL_UNSIGNED_INT, 0);
-		} else if (polymode == GL_FILL) {
+		} else if (polymode == GL_LINE && boundaries) {
+			if (!m_vao_boundaries) return;
+			glBindVertexArray(m_vao_boundaries);
+			// must be uint (not int)
+			glDrawElements(GL_LINES, m_vao_nboundaries * 2, GL_UNSIGNED_INT, 0);
+		} else if (polymode == GL_FILL && !boundaries) {
 			if (!m_vao_tris) return;
 			glBindVertexArray(m_vao_tris);
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -704,8 +753,9 @@ namespace green {
 		glBindVertexArray(0);
 	}
 
-	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode) const {
+	void Model::draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params) const {
 
+		const GLenum polymode = params.polymode;
 		const bool shade_flat = m_force_shade_flat || params.shade_flat;
 
 		// note: need custom depth env
@@ -781,7 +831,7 @@ namespace green {
 		glUniform1i(glGetUniformLocation(prog, "u_color_map"), params.vert_color_map);
 		glUniform1i(glGetUniformLocation(prog, "u_show_samples"), params.show_samples);
 
-		draw(polymode);
+		draw(polymode, params.boundaries);
 
 		if (polymode == GL_FILL) {
 			glActiveTexture(GL_TEXTURE1);

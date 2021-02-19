@@ -849,6 +849,7 @@ namespace green {
 				params.sel = sel;
 				params.entity_id = id();
 				// faces
+				params.polymode = GL_FILL;
 				params.shade_flat = m_shade_flat;
 				params.color = {0.6f, 0.6f, 0.5f, 1};
 				params.vert_color_map = m_color_faces ? color_map : 0;
@@ -858,10 +859,11 @@ namespace green {
 				if (m_show_faces) {
 					glActiveTexture(GL_TEXTURE0);
 					if (tex) glBindTexture(GL_TEXTURE_2D, tex);
-					m_model->draw(view * transform(), proj, zfar, params, GL_FILL);
+					m_model->draw(view * transform(), proj, zfar, params);
 					glBindTexture(GL_TEXTURE_2D, 0);
 				}
 				// edges
+				params.polymode = GL_LINE;
 				params.shade_flat = false;
 				params.shading = 0;
 				params.color = {0.03f, 0.03f, 0.03f, 1};
@@ -869,8 +871,20 @@ namespace green {
 				// culling not supported atm
 				//set_cull_faces(m_cull_edges);
 				glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-				if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params, GL_LINE);
+				if (m_show_edges) m_model->draw(view * transform(), proj, zfar, params);
+				// boundary edges
+				params.boundaries = true;
+				params.shade_flat = false;
+				params.shading = 0;
+				params.color = {1, 0, 0, 1};
+				params.vert_color_map = 0;
+				// culling not supported atm
+				//set_cull_faces(m_cull_edges);
+				glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+				if (m_show_faces) m_model->draw(view * transform(), proj, zfar, params);
 				// verts
+				params.boundaries = false;
+				params.polymode = GL_POINT;
 				params.color = {0.5f, 0, 0, 1};
 				params.vert_color_map = m_color_verts ? color_map : 0;
 				params.sel.hover_entity = -1;
@@ -879,7 +893,8 @@ namespace green {
 				glDisable(GL_CULL_FACE);
 				glPointSize(m_vert_point_size);
 				glColorMaski(1, GL_TRUE, GL_TRUE, GL_FALSE, GL_FALSE);
-				if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params, GL_POINT);
+				if (m_show_verts) m_model->draw(view * transform(), proj, zfar, params);
+
 			}
 		}
 		const auto xform1 = transform();

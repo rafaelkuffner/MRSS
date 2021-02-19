@@ -35,6 +35,7 @@ namespace green {
 	};
 
 	struct model_draw_params {
+		GLenum polymode = GL_FILL;
 		entity_selection sel;
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
 		float shading = 0.9f;
@@ -42,6 +43,7 @@ namespace green {
 		int vert_color_map = 0;
 		bool show_samples = false;
 		bool shade_flat = false;
+		bool boundaries = false;
 	};
 
 	struct model_color_params {
@@ -184,9 +186,9 @@ namespace green {
 		float m_auto_contrast = 1;
 
 		// glsl texelFetch only takes int
-		GLint m_vao_nverts = 0, m_vao_nedges = 0, m_vao_ntris = 0;
-		cgu::gl_object m_vao_verts, m_vao_edges, m_vao_tris;
-		cgu::gl_object m_ibo_edges, m_ibo_tris;
+		GLint m_vao_nverts = 0, m_vao_nedges = 0, m_vao_ntris = 0, m_vao_nboundaries = 0;
+		cgu::gl_object m_vao_verts, m_vao_edges, m_vao_tris, m_vao_boundaries;
+		cgu::gl_object m_ibo_edges, m_ibo_tris, m_ibo_boundaries;
 		cgu::gl_object m_vbo_pos, m_vbo_col, m_vbo_halfedges;
 		cgu::gl_object m_tex_pos, m_tex_col;
 		bool m_force_shade_flat = false;
@@ -271,14 +273,15 @@ namespace green {
 
 		bool update_color(const model_color_params &cparams, model_saliency_errors * = nullptr);
 
-		void draw(GLenum polymode = GL_FILL) const;
+		void draw(GLenum polymode = GL_FILL, bool boundaries = false) const;
 
-		void draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params, GLenum polymode = GL_FILL) const;
+		void draw(const glm::mat4 &modelview, const glm::mat4 &projection, float zfar, const model_draw_params &params) const;
 
 	private:
 		void update_vao_verts();
 		void update_vao_edges();
 		void update_vao_tris();
+		void update_vao_boundaries();
 
 		struct halfedge_vbo_props {
 			// glsl texelFetch only takes int
