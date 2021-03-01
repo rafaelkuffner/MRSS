@@ -723,6 +723,8 @@ namespace OpenMesh {
 				for (auto it = mesh_.cvih_begin(fvk); it.is_valid(); ++it) {
 					mesh_.set_vertex_handle(*it, fvk);
 				}
+				// retain halfedge props on face
+				mesh_.copy_all_properties(h2lose, hkeep, true);
 				// lose the edge
 				mesh_.set_boundary(h2lose);
 				mesh_.delete_edge(mesh_.edge_handle(hlose));
