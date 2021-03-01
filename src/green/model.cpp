@@ -102,7 +102,7 @@ namespace green {
 		// NOTE face status currently breaks decimation
 		//m_trimesh.request_face_status();
 		// TODO what else do we need to ask for and preserve on export?
-		OpenMesh::IO::Options readOptions{OpenMesh::IO::OptionBits::Custom};
+		OpenMesh::IO::Options readOptions{OpenMesh::IO::OptionBits::Custom | OpenMesh::IO::OptionBits::Fuse};
 		readOptions.vattribs |= OpenMesh::AttributeBits::Color;
 		readOptions.hattribs |= OpenMesh::AttributeBits::Normal;
 		readOptions.hattribs |= OpenMesh::AttributeBits::TexCoordAll;
@@ -118,7 +118,7 @@ namespace green {
 			std::cerr << "Failed" << std::endl;
 			throw std::runtime_error("failed to load model");
 		}
-
+		
 		// TODO necessary? optional?
 		// not triangulating breaks some stuff atm, probably in vertex area
 		// NOTE currently done by assimp too

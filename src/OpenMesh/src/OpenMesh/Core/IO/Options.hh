@@ -67,16 +67,17 @@ namespace OpenMesh {
 		/// or'ed.
 		enum class OptionBits : unsigned {
 			None = 0,
-			Default = 0x00, ///< No options
-			Binary = 0x01, ///< Set binary mode for r/w
-			MSB = 0x02, ///< Assume big endian byte ordering
-			LSB = 0x04, ///< Assume little endian byte ordering
-			Swap = 0x08, ///< Swap byte order in binary mode
+			Default = 0x00, // No options
+			Binary = 0x01, // Set binary mode for r/w
+			MSB = 0x02, // Assume big endian byte ordering
+			LSB = 0x04, // Assume little endian byte ordering
+			Swap = 0x08, // Swap byte order in binary mode
+			Fuse = 0x10, // Fuse colocated boundary edges and their vertices (r)
 			// TODO per-element color settings? (-> attribs)
 			// - are these related to the Color typedef in the mesh traits?
-			ColorAlpha = 0x10, ///< Has (r) / store (w) alpha values for colors
-			ColorFloat = 0x20, ///< Has (r) / store (w) float values for colors (currently only implemented for PLY and OFF files)
-			Custom = 0x40, ///< Has (r)             custom properties (currently only implemented in PLY Reader ASCII version)
+			ColorAlpha = 0x100, // Has (r) / store (w) alpha values for colors
+			ColorFloat = 0x200, // Has (r) / store (w) float values for colors (currently only implemented for PLY and OFF files)
+			Custom = 0x400, // Has (r) custom properties (currently only implemented in PLY Reader ASCII version ???)
 		};
 
 		inline bool operator!(OptionBits x) {

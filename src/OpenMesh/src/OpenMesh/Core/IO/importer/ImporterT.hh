@@ -55,12 +55,15 @@
 
 //=== INCLUDES ================================================================
 
+#include <unordered_map>
 
 #include <OpenMesh/Core/IO/importer/BaseImporter.hh>
 #include <OpenMesh/Core/Utils/vector_cast.hh>
 #include <OpenMesh/Core/Utils/color_cast.hh>
 #include <OpenMesh/Core/Mesh/Attributes.hh>
 #include <OpenMesh/Core/System/omstream.hh>
+
+#include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
 
 #define OMLOG_SOURCE Importer
 
@@ -560,11 +563,15 @@ namespace OpenMesh {
 			virtual size_t n_edges()     const override { return mesh_.n_edges(); }
 
 
-			virtual void prepare() override { }
+			virtual void prepare() override {
+				
+			}
 
 
 			virtual void finish() override
 			{
+				if (useropts_.check(OptionBits::Fuse)) fuse_boundary_edges();
+
 				// remove temp properties
 				mesh_.remove_property(vprop_fallback_color_);
 				mesh_.remove_property(vprop_fallback_normal_);
@@ -572,6 +579,163 @@ namespace OpenMesh {
 				mesh_.remove_property(vprop_fallback_texcoord3D_);
 			}
 
+		private:
+			void fuse_boundary_edges() {
+
+				OMLOG_INFO << "fusing colocated boundary edges and their vertices";
+
+				std::vector<HalfedgeHandle> boundary_halfedges;
+				// incoming boundary halfedges for each point
+				std::unordered_map<Point, std::vector<HalfedgeHandle>> fuse_points;
+				int fused_edges = 0;
+
+				// collect incoming boundary halfedges, mapped by point in space
+				for (auto hit = mesh_.halfedges_begin(); hit != mesh_.halfedges_end(); ++hit) {
+					if (mesh_.is_boundary(*hit)) {
+						boundary_halfedges.push_back(*hit);
+						VertexHandle tvh = mesh_.to_vertex_handle(*hit);
+						fuse_points[mesh_.point(tvh)].push_back(*hit);
+					}
+				}
+
+				OMLOG_INFO << "boundary halfedges: " << boundary_halfedges.size();
+
+				if (boundary_halfedges.size()) {
+
+					// need status attribs to delete
+					mesh_.request_vertex_status();
+					mesh_.request_edge_status();
+
+					// fuse boundary edges
+					for (auto hlose : boundary_halfedges) {
+						// edges might be deleted or fixed already
+						if (mesh_.status(mesh_.edge_handle(hlose)).deleted() || !mesh_.is_boundary(hlose)) continue;
+						const Point tp = mesh_.point(mesh_.to_vertex_handle(hlose));
+						const Point fp = mesh_.point(mesh_.from_vertex_handle(hlose));
+						const HalfedgeHandle h2lose = mesh_.opposite_halfedge_handle(hlose);
+						bool fuse = true;
+						// find any conflicting halfedge
+						for (auto hh : fuse_points[tp]) {
+							if (
+								hh != hlose
+								&& !mesh_.status(mesh_.edge_handle(hh)).deleted()
+								&& mesh_.point(mesh_.from_vertex_handle(hh)) == fp
+								) {
+								// dont fuse if conflicts (non-manifold geometry)
+								fuse = false;
+								break;
+							}
+						}
+						// find matching boundary halfedge
+						HalfedgeHandle hkeep{};
+						for (auto hh : fuse_points[fp]) {
+							if (
+								hh != h2lose && mesh_.is_boundary(hh)
+								&& !mesh_.status(mesh_.edge_handle(hh)).deleted()
+								&& mesh_.point(mesh_.from_vertex_handle(hh)) == tp
+								) {
+								// match!
+								// dont fuse if multiple matches (non-manifold geometry)
+								fuse &= !hkeep.is_valid();
+								hkeep = hh;
+							}
+						}
+						if (fuse && hkeep.is_valid()) {
+							//OMLOG_DEBUG << "fusing halfedge " << hlose.idx() << " into " << hkeep.idx();
+							fuse_edge(hkeep, hlose);
+							fused_edges++;
+						} else if (hkeep.is_valid()) {
+							OMLOG_WARNING << "not fusing halfedge " << hlose.idx() << " into non-manifold geometry";
+						}
+					}
+
+					//for (auto hh : boundary_halfedges) {
+					//	if (mesh_.status(mesh_.edge_handle(hh)).deleted()) {
+					//		OMLOG_DEBUG << "halfedge " << hh.idx() << " deleted";
+					//		continue;
+					//	}
+					//	auto vh = mesh_.to_vertex_handle(hh);
+					//	OMLOG_DEBUG << "halfedge " << hh.idx() << " -> vertex " << vh.idx() << (mesh_.status(vh).deleted() ? " deleted" : " ok");
+					//	int i = 0;
+					//	for (auto it = mesh_.cvih_begin(vh); it.is_valid(); ++it, i++) {
+					//		auto eh = mesh_.edge_handle(*it);
+					//		auto vh2 = mesh_.to_vertex_handle(*it);
+					//		OMLOG_DEBUG << " - halfedge " << it->idx() << " (v=" << vh2.idx() << ")"
+					//			<< (mesh_.status(eh).deleted() ? " deleted" : " ok")
+					//			<< (mesh_.is_boundary(*it) ? " boundary" : "");
+					//		if (i > 10) {
+					//			OMLOG_DEBUG << " - ...";
+					//			break;
+					//		}
+					//	}
+					//}
+
+					// actually delete vertices/edges we fused away
+					if (fused_edges) mesh_.garbage_collection();
+
+					// cleanup
+					mesh_.release_vertex_status();
+					mesh_.release_edge_status();
+
+					OMLOG_INFO << "fused boundary edges: " << fused_edges;
+				}
+			}
+
+			// TODO maybe put this function in polyconnectivity
+			void fuse_edge(HalfedgeHandle hkeep, HalfedgeHandle hlose) {
+				// expect opposite boundary halfedges
+				assert(mesh_.has_edge_status());
+				assert(!mesh_.status(mesh_.edge_handle(hkeep)).deleted());
+				assert(!mesh_.status(mesh_.edge_handle(hlose)).deleted());
+				assert(mesh_.is_boundary(hkeep) && mesh_.is_boundary(hlose));
+				if (mesh_.edge_handle(hkeep) == mesh_.edge_handle(hlose)) return;
+				// opposite halfedges (with real faces)
+				const HalfedgeHandle h2keep = mesh_.opposite_halfedge_handle(hkeep);
+				const HalfedgeHandle h2lose = mesh_.opposite_halfedge_handle(hlose);
+				// vertices to keep
+				const VertexHandle tvk = mesh_.to_vertex_handle(hkeep);
+				const VertexHandle fvk = mesh_.to_vertex_handle(h2keep);
+				// vertices to lose
+				const VertexHandle tvl = mesh_.to_vertex_handle(hlose);
+				const VertexHandle fvl = mesh_.to_vertex_handle(h2lose);
+				// face of the disappearing edge
+				const FaceHandle flose = mesh_.face_handle(h2lose);
+				// fix boundary connectivity (get hlose and hkeep out of boundary loop)
+				// set_next sets prev too, set_prev does not set next!
+				mesh_.set_next_halfedge_handle(mesh_.prev_halfedge_handle(hkeep), mesh_.next_halfedge_handle(hlose));
+				mesh_.set_next_halfedge_handle(mesh_.prev_halfedge_handle(hlose), mesh_.next_halfedge_handle(hkeep));
+				// fix face connectivity for disappearing edge (reconnect hkeep)
+				mesh_.set_next_halfedge_handle(mesh_.prev_halfedge_handle(h2lose), hkeep);
+				mesh_.set_next_halfedge_handle(hkeep, mesh_.next_halfedge_handle(h2lose));
+				// fix face of disappearing edge
+				mesh_.set_halfedge_handle(flose, hkeep);
+				mesh_.set_face_handle(hkeep, flose);
+				// fix vertex -> _outgoing_ halfedge
+				mesh_.set_halfedge_handle(tvk, h2keep);
+				mesh_.set_halfedge_handle(fvk, hkeep);
+				// outgoing halfedge of boundary vertex must be a boundary
+				mesh_.adjust_outgoing_halfedge(tvk);
+				mesh_.adjust_outgoing_halfedge(fvk);
+				// fix halfedge -> vertex (halfedge iteration around the kept vertices is now fixed)
+				for (auto it = mesh_.cvih_begin(tvk); it.is_valid(); ++it) {
+					mesh_.set_vertex_handle(*it, tvk);
+				}
+				for (auto it = mesh_.cvih_begin(fvk); it.is_valid(); ++it) {
+					mesh_.set_vertex_handle(*it, fvk);
+				}
+				// lose the edge
+				mesh_.set_boundary(h2lose);
+				mesh_.delete_edge(mesh_.edge_handle(hlose));
+				// maybe lose the vertices
+				if (tvl != fvk) {
+					mesh_.set_isolated(tvl);
+					mesh_.delete_vertex(tvl);
+				}
+				if (fvl != tvk) {
+					mesh_.set_isolated(fvl);
+					mesh_.delete_vertex(fvl);
+				}
+			}
 
 		private:
 			Mesh &mesh_;
