@@ -145,7 +145,7 @@ namespace OpenMesh {
 		{
 			if (_clear) _mesh.clear();
 			ImporterT<Mesh> importer(_mesh, _opt);
-			bool r = IOManager().read(_filename, importer, _opt);
+			bool r = IOManager().read(_filename, importer);
 			_opt = r ? importer.final_options() : Options{};
 			return r;
 		}
@@ -180,7 +180,7 @@ namespace OpenMesh {
 		{
 			if (_clear) _mesh.clear();
 			ImporterT<Mesh> importer(_mesh);
-			bool r = IOManager().read(_is, _ext, importer, _opt);
+			bool r = IOManager().read(_is, _ext, importer);
 			_opt = r ? importer.final_options() : Options{};
 			return r;
 		}
@@ -209,11 +209,10 @@ namespace OpenMesh {
 		template <class Mesh>
 		bool write_mesh(const Mesh &_mesh,
 			const std::filesystem::path &_filename,
-			const Options &_opt = Options::Default,
-			std::streamsize _precision = 6)
+			const Options &_opt = Options::Default)
 		{
 			ExporterT<Mesh> exporter(_mesh, _opt);
-			return IOManager().write(_filename, exporter, _opt, _precision);
+			return IOManager().write(_filename, exporter);
 		}
 
 
@@ -242,11 +241,10 @@ namespace OpenMesh {
 		bool write_mesh(const Mesh &_mesh,
 			std::ostream &_os,
 			const std::filesystem::path &_ext,
-			const Options &_opt = Options::Default,
-			std::streamsize _precision = 6)
+			const Options &_opt = Options::Default)
 		{
 			ExporterT<Mesh> exporter(_mesh, _opt);
-			return IOManager().write(_os, _ext, exporter, _opt, _precision);
+			return IOManager().write(_os, _ext, exporter);
 		}
 
 
@@ -272,8 +270,8 @@ namespace OpenMesh {
 			const std::filesystem::path &_ext,
 			Options            _opt = Options::Default)
 		{
-			ExporterT<Mesh> exporter(_mesh);
-			return IOManager().binary_size(_ext, exporter, _opt);
+			ExporterT<Mesh> exporter(_mesh, _opt);
+			return IOManager().binary_size(_ext, exporter);
 		}
 
 

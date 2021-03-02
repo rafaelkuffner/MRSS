@@ -82,9 +82,7 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool
-			_OBJWriter_::
-			write(const std::filesystem::path &_filename, BaseExporter &_be, Options _opt, std::streamsize _precision) const
+		bool _OBJWriter_::write(const std::filesystem::path &_filename, BaseExporter &_be) const
 		{
 			std::fstream out(_filename.c_str(), std::ios_base::out);
 
@@ -95,7 +93,7 @@ namespace OpenMesh {
 			}
 
 			// Set precision on output stream. The default is set via IOManager and passed through to all writers.
-			out.precision(_precision);
+			out.precision(9);
 
 			// Set fixed output to avoid problems with programs not reading scientific notation correctly
 			out << std::fixed;
@@ -126,7 +124,7 @@ namespace OpenMesh {
 				objName_.replace_extension("");
 			}
 
-			bool result = write(out, _be, _opt, _precision);
+			bool result = write(out, _be);
 
 			out.close();
 			return result;
@@ -160,9 +158,7 @@ namespace OpenMesh {
 
 		//-----------------------------------------------------------------------------
 
-		bool
-			_OBJWriter_::
-			writeMaterial(std::ostream &_out, BaseExporter &_be, Options _opt) const
+		bool _OBJWriter_::writeMaterial(std::ostream &_out, BaseExporter &_be) const
 		{
 			OpenMesh::Vec3f c;
 			OpenMesh::Vec4f cA;
@@ -174,7 +170,7 @@ namespace OpenMesh {
 			for (size_t i = 0, nF = _be.n_faces(); i < nF; ++i)
 			{
 				//color with alpha
-				if (_opt.color_has_alpha()) {
+				if (_be.file_options().color_has_alpha()) {
 					cA = color_cast<OpenMesh::Vec4f> (_be.colorA(FaceHandle(int(i))));
 					getMaterial(cA);
 				} else {
@@ -185,7 +181,7 @@ namespace OpenMesh {
 			}
 
 			//write the materials
-			if (_opt.color_has_alpha())
+			if (_be.file_options().color_has_alpha())
 				for (size_t i = 0; i < materialA_.size(); i++) {
 					_out << "newmtl " << "mat" << i << '\n';
 					_out << "Ka 0.5000 0.5000 0.5000" << '\n';
@@ -206,9 +202,7 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool
-			_OBJWriter_::
-			write(std::ostream &_out, BaseExporter &_be, Options _opt, std::streamsize _precision) const
+		bool _OBJWriter_::write(std::ostream &_out, BaseExporter &_be) const
 		{
 			unsigned int idx;
 			size_t i, j, nV, nF;
@@ -222,28 +216,28 @@ namespace OpenMesh {
 
 			OMLOG_INFO << "write file";
 
-			_out.precision(_precision);
+			_out.precision(9);
 
 			// No binary mode for OBJ
-			if (_opt.check(OptionBits::Binary)) {
+			if (_be.file_options().check(OptionBits::Binary)) {
 				OMLOG_WARNING << "Binary mode not supported by OBJ Writer, falling back to standard";
 			}
 
 			// check for unsupported writer features
-			if (_opt.face_has_normal()) {
+			if (_be.file_options().face_has_normal()) {
 				OMLOG_WARNING << "FaceNormal not supported by OBJ Writer";
-				_opt.fattribs &= ~AttributeBits::Normal;
+				//_opt.fattribs &= ~AttributeBits::Normal;
 			}
 
 			// check for unsupported writer features
-			if (_opt.vertex_has_color()) {
+			if (_be.file_options().vertex_has_color()) {
 				// TODO implement OBJ vertex color export
 				OMLOG_WARNING << "VertexColor not supported by OBJ Writer";
-				_opt.vattribs &= ~AttributeBits::Color;
+				//_opt.vattribs &= ~AttributeBits::Color;
 			}
 
 			//create material file if needed
-			if (_opt.face_has_color()) {
+			if (_be.file_options().face_has_color()) {
 
 				auto matFile = path_ / objName_;
 				matFile.replace_extension(".mat");
@@ -256,7 +250,7 @@ namespace OpenMesh {
 					OMLOG_ERROR << "[OBJWriter] : cannot write material file " << matFile.u8string();
 
 				} else {
-					useMatrial = writeMaterial(matStream, _be, _opt);
+					useMatrial = writeMaterial(matStream, _be);
 
 					matStream.close();
 				}
@@ -267,13 +261,13 @@ namespace OpenMesh {
 			_out << _be.n_faces() << " faces" << '\n';
 
 			// material file
-			if (useMatrial && _opt.face_has_color())
+			if (useMatrial && _be.file_options().face_has_color())
 				_out << "mtllib " << objName_ << ".mat" << '\n';
 
 			// TODO export 3d texcoords?
 			std::map<Vec2f, int> texMap;
 			//collect Texturevertices from halfedges
-			if (_opt.halfedge_has_texcoord2D())
+			if (_be.file_options().halfedge_has_texcoord2D())
 			{
 				std::vector<Vec2f> texCoords;
 				//add all texCoords to map
@@ -285,7 +279,7 @@ namespace OpenMesh {
 			}
 
 			//collect Texture coordinates from vertices
-			if (_opt.vertex_has_texcoord2D())
+			if (_be.file_options().vertex_has_texcoord2D())
 			{
 				for (size_t i = 0, nV = _be.n_vertices(); i < nV; ++i)
 				{
@@ -297,7 +291,7 @@ namespace OpenMesh {
 
 			// assign each texcoord in the map its id
 			// and write the vt entries
-			if (_opt.vertex_has_texcoord2D() || _opt.halfedge_has_texcoord2D())
+			if (_be.file_options().vertex_has_texcoord2D() || _be.file_options().halfedge_has_texcoord2D())
 			{
 				int texCount = 0;
 				for (std::map<Vec2f, int>::iterator it = texMap.begin(); it != texMap.end(); ++it)
@@ -317,27 +311,27 @@ namespace OpenMesh {
 
 				_out << "v " << v[0] << " " << v[1] << " " << v[2] << '\n';
 
-				if (_opt.vertex_has_normal())
+				if (_be.file_options().vertex_has_normal())
 					_out << "vn " << n[0] << " " << n[1] << " " << n[2] << '\n';
 			}
 
 			size_t lastMat = std::numeric_limits<std::size_t>::max();
 
 			// we do not want to write seperators if we only write vertex indices
-			bool onlyVertices = !_opt.vertex_has_normal()
-				&& !_opt.vertex_has_texcoord()
-				&& !_opt.halfedge_has_normal()
-				&& !_opt.halfedge_has_texcoord();
+			bool onlyVertices = !_be.file_options().vertex_has_normal()
+				&& !_be.file_options().vertex_has_texcoord()
+				&& !_be.file_options().halfedge_has_normal()
+				&& !_be.file_options().halfedge_has_texcoord();
 
 			// faces (indices starting at 1 not 0)
 			for (i = 0, nF = _be.n_faces(); i < nF; ++i)
 			{
 
-				if (useMatrial && _opt.face_has_color()) {
+				if (useMatrial && _be.file_options().face_has_color()) {
 					size_t material = std::numeric_limits<std::size_t>::max();
 
 					//color with alpha
-					if (_opt.color_has_alpha()) {
+					if (_be.file_options().color_has_alpha()) {
 						cA = color_cast<OpenMesh::Vec4f> (_be.colorA(FaceHandle(int(i))));
 						material = getMaterial(cA);
 					} else {
@@ -369,7 +363,7 @@ namespace OpenMesh {
 						_out << "/";
 
 						//write texCoords index from halfedge
-						if (_opt.halfedge_has_texcoord())
+						if (_be.file_options().halfedge_has_texcoord())
 						{
 							_out << texMap[_be.texcoord(_be.getHeh(FaceHandle(int(i)), vhandles[j]))];
 						}
@@ -377,14 +371,14 @@ namespace OpenMesh {
 						else
 						{
 							// write vertex texture coordinate index
-							if (_opt.vertex_has_texcoord())
+							if (_be.file_options().vertex_has_texcoord())
 								_out << texMap[_be.texcoord(vhandles[j])];
 						}
 
 						// FIXME export halfedge normals
 
 						// write vertex normal index
-						if (_opt.vertex_has_normal()) {
+						if (_be.file_options().vertex_has_normal()) {
 							// write separator
 							_out << "/";
 							_out << idx;

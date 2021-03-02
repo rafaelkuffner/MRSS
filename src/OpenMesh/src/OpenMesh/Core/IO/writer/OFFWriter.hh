@@ -100,11 +100,11 @@ public:
   std::string get_description() const { return "no description"; }
   std::string get_extensions() const  { return "off"; }
 
-  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&) const;
 
-  bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(std::ostream&, BaseExporter&) const;
 
-  size_t binary_size(BaseExporter& _be, Options _opt) const;
+  size_t binary_size(BaseExporter& _be) const;
 
 
 protected:
@@ -112,8 +112,8 @@ protected:
   void writeValue(std::ostream& _out, unsigned int value) const;
   void writeValue(std::ostream& _out, float value) const;
 
-  bool write_ascii(std::ostream& _in, BaseExporter&, Options) const;
-  bool write_binary(std::ostream& _in, BaseExporter&, Options) const;
+  bool write_ascii(std::ostream& _in, BaseExporter&) const;
+  bool write_binary(std::ostream& _in, BaseExporter&) const;
 };
 
 

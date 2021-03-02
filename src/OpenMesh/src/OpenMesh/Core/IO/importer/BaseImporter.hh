@@ -121,6 +121,11 @@ namespace OpenMesh {
 				fileopts_.flags |= opts;
 			}
 
+			// unset file option flags
+			void unset_file_options(OptionBits opts) {
+				fileopts_.flags &= ~opts;
+			}
+
 			// returns settable subset of queried attributes.
 			AttributeBits want_vattribs(AttributeBits attribs) const
 			{

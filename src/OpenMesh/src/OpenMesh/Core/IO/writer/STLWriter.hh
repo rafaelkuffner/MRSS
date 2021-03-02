@@ -91,17 +91,17 @@ public:
   std::string get_description() const { return "Stereolithography Format"; }
   std::string get_extensions()  const { return "stl stla stlb"; }
 
-  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&) const;
 
-  bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(std::ostream&, BaseExporter&) const;
 
-  size_t binary_size(BaseExporter&, Options) const;
+  size_t binary_size(BaseExporter&) const;
 
 private:
-  bool write_stla(const std::filesystem::path&, BaseExporter&, Options) const;
-  bool write_stla(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
-  bool write_stlb(const std::filesystem::path&, BaseExporter&, Options) const;
-  bool write_stlb(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write_stla(const std::filesystem::path&, BaseExporter&) const;
+  bool write_stla(std::ostream&, BaseExporter&) const;
+  bool write_stlb(const std::filesystem::path&, BaseExporter&) const;
+  bool write_stlb(std::ostream&, BaseExporter&) const;
 };
 
 

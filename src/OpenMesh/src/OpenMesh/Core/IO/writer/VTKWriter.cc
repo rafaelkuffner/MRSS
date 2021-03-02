@@ -26,7 +26,7 @@ _VTKWriter_::_VTKWriter_() { IOManager().register_module(this); }
 
 //-----------------------------------------------------------------------------
 
-bool _VTKWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _VTKWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be) const
 {
     std::ofstream out(_filename);
 
@@ -35,12 +35,12 @@ bool _VTKWriter_::write(const std::filesystem::path& _filename, BaseExporter& _b
         return false;
     }
 
-    return write(out, _be, _opt, _precision);
+    return write(out, _be);
 }
 
 //-----------------------------------------------------------------------------
 
-bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be) const
 {
     Vec3f v, n;
     Vec2f t;
@@ -49,13 +49,13 @@ bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be, Options _opt, std
     OpenMesh::Vec4f cA;
 
     // check writer features
-    if (!_opt.is_empty()) {
+    if (!_be.file_options().is_empty()) {
         OMLOG_ERROR << "writer does not support any options";
         return false;
     }
 
     //OMLOG_DEBUG << "write file";
-    _out.precision(_precision);
+    _out.precision(9);
 
     std::vector<VertexHandle> vhandles;
     size_t polygon_table_size = 0;

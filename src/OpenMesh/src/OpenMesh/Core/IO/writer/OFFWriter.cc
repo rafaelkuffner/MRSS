@@ -78,28 +78,24 @@ _OFFWriter_::_OFFWriter_() { IOManager().register_module(this); }
 //-----------------------------------------------------------------------------
 
 
-bool
-_OFFWriter_::
-write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _OFFWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be) const
 {
-  std::ofstream out(_filename, (_opt.check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
-                                                           : std::ios_base::out) );
+  std::ofstream out(_filename, (_be.file_options().check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
+                                                           : std::ios_base::out));
 
-  return write(out, _be, _opt, _precision);
+  return write(out, _be);
 }
 
 //-----------------------------------------------------------------------------
 
 
-bool
-_OFFWriter_::
-write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _OFFWriter_::write(std::ostream& _os, BaseExporter& _be) const
 {
 
   // check writer features
-  if (_opt.face_has_normal()) {
+  if (_be.file_options().face_has_normal()) {
       OMLOG_WARNING<< "FaceNormal not supported by OBJ Writer";
-      _opt.fattribs &= ~AttributeBits::Normal;
+      //_opt.fattribs &= ~AttributeBits::Normal;
   }
 
   if (!_os.good())
@@ -109,21 +105,21 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
   }
 
   // write header line
-  if (_opt.vertex_has_texcoord2D()) _os << "ST";
-  if (_opt.vertex_has_color() || _opt.face_has_color())    _os << "C";
-  if (_opt.vertex_has_normal())   _os << "N";
+  if (_be.file_options().vertex_has_texcoord2D()) _os << "ST";
+  if (_be.file_options().vertex_has_color() || _be.file_options().face_has_color())    _os << "C";
+  if (_be.file_options().vertex_has_normal())   _os << "N";
   _os << "OFF";
-  if (_opt.check(OptionBits::Binary)) _os << " BINARY";
+  if (_be.file_options().check(OptionBits::Binary)) _os << " BINARY";
   _os << "\n";
 
   // FIXME non-stupid precision
-  if (!_opt.check(OptionBits::Binary))
-    _os.precision(_precision);
+  if (!_be.file_options().check(OptionBits::Binary))
+    _os.precision(9);
 
   // write to file
-  bool result = (_opt.check(OptionBits::Binary) ?
-		 write_binary(_os, _be, _opt) :
-		 write_ascii(_os, _be, _opt));
+  bool result = (_be.file_options().check(OptionBits::Binary) ?
+		 write_binary(_os, _be) :
+		 write_ascii(_os, _be));
 
 
   // return result
@@ -133,9 +129,7 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
 //-----------------------------------------------------------------------------
 
 
-bool
-_OFFWriter_::
-write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
+bool _OFFWriter_::write_ascii(std::ostream& _out, BaseExporter& _be) const
 {
 
   unsigned int i, nV, nF;
@@ -154,7 +148,8 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
   _out << _be.n_faces() << " ";
   _out << 0 << "\n";
 
-  if (_opt.color_is_float())
+  // FIXME this wrecks positions, dont do it
+  if (_be.file_options().color_is_float())
     _out << std::fixed;
 
 
@@ -168,16 +163,16 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
     _out << v[0] << " " << v[1] << " " << v[2];
 
     // VertexNormal
-    if ( _opt.vertex_has_normal() ) {
+    if (_be.file_options().vertex_has_normal()) {
       n  = _be.normal(vh);
       _out << " " << n[0] << " " << n[1] << " " << n[2];
     }
 
     // VertexColor
-    if ( _opt.vertex_has_color() ) {
-      if ( _opt.color_is_float() ) {
+    if (_be.file_options().vertex_has_color()) {
+      if (_be.file_options().color_is_float()) {
         //with alpha
-        if ( _opt.color_has_alpha() ){
+        if (_be.file_options().color_has_alpha()){
           cAf  = _be.colorAf(vh);
           _out << " " << cAf;
         }else{
@@ -187,7 +182,7 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
         }
       } else {
         //with alpha
-        if ( _opt.color_has_alpha() ){
+        if (_be.file_options().color_has_alpha()){
           cA  = _be.colorA(vh);
           _out << " " << cA;
         }else{
@@ -199,7 +194,7 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
     }
 
     // TexCoord
-    if (_opt.vertex_has_texcoord() ) {
+    if (_be.file_options().vertex_has_texcoord2D()) {
       t  = _be.texcoord(vh);
       _out << " " << t[0] << " " << t[1];
     }
@@ -220,25 +215,25 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
       _out << vhandles[2].idx();
 
       //face color
-      if ( _opt.face_has_color() ){
-        if ( _opt.color_is_float() ) {
+      if (_be.file_options().face_has_color()){
+        if (_be.file_options().color_is_float()) {
           //with alpha
-          if ( _opt.color_has_alpha() ){
-            cAf  = _be.colorAf( FaceHandle(i) );
+          if (_be.file_options().color_has_alpha()){
+            cAf  = _be.colorAf( FaceHandle(i));
             _out << " " << cAf;
           }else{
             //without alpha
-            cf  = _be.colorf( FaceHandle(i) );
+            cf  = _be.colorf( FaceHandle(i));
             _out << " " << cf;
           }
         } else {
           //with alpha
-          if ( _opt.color_has_alpha() ){
-            cA  = _be.colorA( FaceHandle(i) );
+          if (_be.file_options().color_has_alpha()){
+            cA  = _be.colorA( FaceHandle(i));
             _out << " " << cA;
           }else{
             //without alpha
-            c  = _be.color( FaceHandle(i) );
+            c  = _be.color( FaceHandle(i));
             _out << " " << c;
           }
         }
@@ -256,25 +251,25 @@ write_ascii(std::ostream& _out, BaseExporter& _be, Options _opt) const
 	       _out << vhandles[j].idx() << " ";
 
       //face color
-      if ( _opt.face_has_color() ){
-        if ( _opt.color_is_float() ) {
+      if (_be.file_options().face_has_color()){
+        if (_be.file_options().color_is_float()) {
           //with alpha
-          if ( _opt.color_has_alpha() ){
-            cAf  = _be.colorAf( FaceHandle(i) );
+          if (_be.file_options().color_has_alpha()){
+            cAf  = _be.colorAf( FaceHandle(i));
             _out << " " << cAf;
           }else{
             //without alpha
-            cf  = _be.colorf( FaceHandle(i) );
+            cf  = _be.colorf( FaceHandle(i));
             _out << " " << cf;
           }
         } else {
           //with alpha
-          if ( _opt.color_has_alpha() ){
-            cA  = _be.colorA( FaceHandle(i) );
+          if (_be.file_options().color_has_alpha()){
+            cA  = _be.colorA( FaceHandle(i));
             _out << " " << cA;
           }else{
             //without alpha
-            c  = _be.color( FaceHandle(i) );
+            c  = _be.color( FaceHandle(i));
             _out << " " << c;
           }
         }
@@ -309,9 +304,7 @@ void _OFFWriter_::writeValue(std::ostream& _out, float value) const {
   store(_out, tmp, false);
 }
 
-bool
-_OFFWriter_::
-write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
+bool _OFFWriter_::write_binary(std::ostream& _out, BaseExporter& _be) const
 {
 
   unsigned int i, nV, nF;
@@ -323,8 +316,8 @@ write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
   std::vector<VertexHandle> vhandles;
 
   // #vertices, #faces
-  writeValue(_out, (uint)_be.n_vertices() );
-  writeValue(_out, (uint) _be.n_faces() );
+  writeValue(_out, (uint)_be.n_vertices());
+  writeValue(_out, (uint) _be.n_faces());
   writeValue(_out, 0 );
 
   // vertex data (point, normals, texcoords)
@@ -339,21 +332,21 @@ write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
     writeValue(_out, v[2]);
 
     // vertex normal
-    if ( _opt.vertex_has_normal() ) {
+    if (_be.file_options().vertex_has_normal()) {
       n  = _be.normal(vh);
       writeValue(_out, n[0]);
       writeValue(_out, n[1]);
       writeValue(_out, n[2]);
     }
     // vertex color
-    if ( _opt.vertex_has_color() ) {
-      if ( _opt.color_is_float() ) {
+    if (_be.file_options().vertex_has_color()) {
+      if (_be.file_options().color_is_float()) {
         cf  = _be.colorAf(vh);
         writeValue(_out, cf[0]);
         writeValue(_out, cf[1]);
         writeValue(_out, cf[2]);
 
-        if ( _opt.color_has_alpha() )
+        if (_be.file_options().color_has_alpha())
           writeValue(_out, cf[3]);
       } else {
         c  = _be.colorA(vh);
@@ -361,12 +354,12 @@ write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
         writeValue(_out, c[1]);
         writeValue(_out, c[2]);
 
-        if ( _opt.color_has_alpha() )
+        if (_be.file_options().color_has_alpha())
           writeValue(_out, c[3]);
       }
     }
     // texCoords
-    if (_opt.vertex_has_texcoord() ) {
+    if (_be.file_options().vertex_has_texcoord2D()) {
       t  = _be.texcoord(vh);
       writeValue(_out, t[0]);
       writeValue(_out, t[1]);
@@ -387,22 +380,22 @@ write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
       writeValue(_out, vhandles[2].idx());
 
       //face color
-      if ( _opt.face_has_color() ){
-        if ( _opt.color_is_float() ) {
-          cf  = _be.colorAf( FaceHandle(i) );
+      if (_be.file_options().face_has_color()){
+        if (_be.file_options().color_is_float()) {
+          cf  = _be.colorAf( FaceHandle(i));
           writeValue(_out, cf[0]);
           writeValue(_out, cf[1]);
           writeValue(_out, cf[2]);
 
-          if ( _opt.color_has_alpha() )
+          if (_be.file_options().color_has_alpha())
             writeValue(_out, cf[3]);
         } else {
-          c  = _be.colorA( FaceHandle(i) );
+          c  = _be.colorA( FaceHandle(i));
           writeValue(_out, c[0]);
           writeValue(_out, c[1]);
           writeValue(_out, c[2]);
 
-          if ( _opt.color_has_alpha() )
+          if (_be.file_options().color_has_alpha())
             writeValue(_out, c[3]);
         }
       }
@@ -416,25 +409,25 @@ write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
       nV = _be.get_vhandles(FaceHandle(i), vhandles);
       writeValue(_out, nV);
       for (size_t j=0; j<vhandles.size(); ++j)
-        writeValue(_out, vhandles[j].idx() );
+        writeValue(_out, vhandles[j].idx());
 
       //face color
-      if ( _opt.face_has_color() ){
-        if ( _opt.color_is_float() ) {
-          cf  = _be.colorAf( FaceHandle(i) );
+      if (_be.file_options().face_has_color()){
+        if (_be.file_options().color_is_float()) {
+          cf  = _be.colorAf( FaceHandle(i));
           writeValue(_out, cf[0]);
           writeValue(_out, cf[1]);
           writeValue(_out, cf[2]);
 
-          if ( _opt.color_has_alpha() )
+          if (_be.file_options().color_has_alpha())
             writeValue(_out, cf[3]);
         } else {
-          c  = _be.colorA( FaceHandle(i) );
+          c  = _be.colorA( FaceHandle(i));
           writeValue(_out, c[0]);
           writeValue(_out, c[1]);
           writeValue(_out, c[2]);
 
-          if ( _opt.color_has_alpha() )
+          if (_be.file_options().color_has_alpha())
             writeValue(_out, c[3]);
         }
       }
@@ -447,9 +440,7 @@ write_binary(std::ostream& _out, BaseExporter& _be, Options _opt) const
 // ----------------------------------------------------------------------------
 
 
-size_t
-_OFFWriter_::
-binary_size(BaseExporter& _be, Options _opt) const
+size_t _OFFWriter_::binary_size(BaseExporter& _be) const
 {
   size_t header(0);
   size_t data(0);
@@ -458,7 +449,7 @@ binary_size(BaseExporter& _be, Options _opt) const
   size_t _3ui(3*sizeof(unsigned int));
   size_t _4ui(4*sizeof(unsigned int));
 
-  if ( !_opt.is_binary() )
+  if (!_be.file_options().is_binary())
     return 0;
   else
   {

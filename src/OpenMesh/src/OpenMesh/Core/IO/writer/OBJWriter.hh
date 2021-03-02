@@ -91,11 +91,11 @@ public:
   std::string get_description() const  { return "Alias/Wavefront"; }
   std::string get_extensions()  const  { return "obj"; }
 
-  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&) const;
 
-  bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(std::ostream&, BaseExporter&) const;
 
-  size_t binary_size(BaseExporter&, Options) const { return 0; }
+  size_t binary_size(BaseExporter&) const { return 0; }
 
 private:
 
@@ -109,7 +109,7 @@ private:
 
   size_t getMaterial(OpenMesh::Vec4f _color) const;
 
-  bool writeMaterial(std::ostream& _out, BaseExporter&, Options) const;
+  bool writeMaterial(std::ostream& _out, BaseExporter&) const;
 
 
 };

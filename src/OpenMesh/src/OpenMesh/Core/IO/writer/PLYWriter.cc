@@ -93,34 +93,30 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool
-			_PLYWriter_::
-			write(const std::filesystem::path &_filename, BaseExporter &_be, Options _opt, std::streamsize _precision) const
+		bool _PLYWriter_::write(const std::filesystem::path &_filename, BaseExporter &_be) const
 		{
 
 			// open file
-			std::ofstream out(_filename, (_opt.check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
+			std::ofstream out(_filename, (_be.file_options().check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
 				: std::ios_base::out));
-			return write(out, _be, _opt, _precision);
+			return write(out, _be);
 		}
 
 		//-----------------------------------------------------------------------------
 
 
-		bool
-			_PLYWriter_::
-			write(std::ostream &_os, BaseExporter &_be, Options _opt, std::streamsize _precision) const
+		bool _PLYWriter_::write(std::ostream &_os, BaseExporter &_be) const
 		{
 			// check writer features
-			if (_opt.face_has_normal()) {
+			if (_be.file_options().face_has_normal()) {
 				// Face normals are not supported
 				// Uncheck these options and output message that
 				// they are not written out even though they were requested
-				_opt.fattribs &= ~AttributeBits::Normal;
+				//_opt.fattribs &= ~AttributeBits::Normal;
 				OMLOG_WARNING << "Face normals are not supported and thus not exported!";
 			}
 
-			options_ = _opt;
+			options_ = _be.file_options();
 
 
 			if (!_os.good())
@@ -130,13 +126,13 @@ namespace OpenMesh {
 			}
 
 			// FIXME use non-stupid precision
-			if (!_opt.check(OptionBits::Binary))
-				_os.precision(_precision);
+			if (!_be.file_options().check(OptionBits::Binary))
+				_os.precision(9);
 
 			// write to file
-			bool result = (_opt.check(OptionBits::Binary) ?
-				write_binary(_os, _be, _opt) :
-				write_ascii(_os, _be, _opt));
+			bool result = (_be.file_options().check(OptionBits::Binary) ?
+				write_binary(_os, _be) :
+				write_ascii(_os, _be));
 
 			return result;
 		}
@@ -249,11 +245,11 @@ namespace OpenMesh {
 
 
 
-		void _PLYWriter_::write_header(std::ostream &_out, BaseExporter &_be, Options &_opt, std::vector<CustomProperty> &_ovProps, std::vector<CustomProperty> &_ofProps) const {
+		void _PLYWriter_::write_header(std::ostream &_out, BaseExporter &_be, std::vector<CustomProperty> &_ovProps, std::vector<CustomProperty> &_ofProps) const {
 			//writing header
 			_out << "ply" << '\n';
 
-			if (_opt.is_binary()) {
+			if (_be.file_options().is_binary()) {
 				_out << "format ";
 				if (options_.check(OptionBits::MSB))
 					_out << "binary_big_endian ";
@@ -269,31 +265,31 @@ namespace OpenMesh {
 			_out << "property float y" << '\n';
 			_out << "property float z" << '\n';
 
-			if (_opt.vertex_has_normal()) {
+			if (_be.file_options().vertex_has_normal()) {
 				_out << "property float nx" << '\n';
 				_out << "property float ny" << '\n';
 				_out << "property float nz" << '\n';
 			}
 
-			if (_opt.vertex_has_texcoord()) {
+			if (_be.file_options().vertex_has_texcoord()) {
 				_out << "property float u" << '\n';
 				_out << "property float v" << '\n';
 			}
 
-			if (_opt.vertex_has_color()) {
-				if (_opt.color_is_float()) {
+			if (_be.file_options().vertex_has_color()) {
+				if (_be.file_options().color_is_float()) {
 					_out << "property float red" << '\n';
 					_out << "property float green" << '\n';
 					_out << "property float blue" << '\n';
 
-					if (_opt.color_has_alpha())
+					if (_be.file_options().color_has_alpha())
 						_out << "property float alpha" << '\n';
 				} else {
 					_out << "property uchar red" << '\n';
 					_out << "property uchar green" << '\n';
 					_out << "property uchar blue" << '\n';
 
-					if (_opt.color_has_alpha())
+					if (_be.file_options().color_has_alpha())
 						_out << "property uchar alpha" << '\n';
 				}
 			}
@@ -303,20 +299,20 @@ namespace OpenMesh {
 			_out << "element face " << _be.n_faces() << '\n';
 			_out << "property list uchar int vertex_indices" << '\n';
 
-			if (_opt.face_has_color()) {
-				if (_opt.color_is_float()) {
+			if (_be.file_options().face_has_color()) {
+				if (_be.file_options().color_is_float()) {
 					_out << "property float red" << '\n';
 					_out << "property float green" << '\n';
 					_out << "property float blue" << '\n';
 
-					if (_opt.color_has_alpha())
+					if (_be.file_options().color_has_alpha())
 						_out << "property float alpha" << '\n';
 				} else {
 					_out << "property uchar red" << '\n';
 					_out << "property uchar green" << '\n';
 					_out << "property uchar blue" << '\n';
 
-					if (_opt.color_has_alpha())
+					if (_be.file_options().color_has_alpha())
 						_out << "property uchar alpha" << '\n';
 				}
 			}
@@ -330,9 +326,7 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool
-			_PLYWriter_::
-			write_ascii(std::ostream &_out, BaseExporter &_be, Options _opt) const
+		bool _PLYWriter_::write_ascii(std::ostream &_out, BaseExporter &_be) const
 		{
 
 			unsigned int i, nV, nF;
@@ -349,7 +343,7 @@ namespace OpenMesh {
 			std::vector<CustomProperty> vProps;
 			std::vector<CustomProperty> fProps;
 
-			write_header(_out, _be, _opt, vProps, fProps);
+			write_header(_out, _be, vProps, fProps);
 
 			// should never apply fixed to everything because that would wreck precision for points
 			//if (_opt.color_is_float())
@@ -368,22 +362,22 @@ namespace OpenMesh {
 				_out << v[0] << " " << v[1] << " " << v[2];
 
 				// Vertex Normals
-				if (_opt.vertex_has_normal()) {
+				if (_be.file_options().vertex_has_normal()) {
 					n = _be.normal(vh);
 					_out << " " << n[0] << " " << n[1] << " " << n[2];
 				}
 
 				// Vertex TexCoords
-				if (_opt.vertex_has_texcoord()) {
+				if (_be.file_options().vertex_has_texcoord()) {
 					t = _be.texcoord(vh);
 					_out << " " << t[0] << " " << t[1];
 				}
 
 				// VertexColor
-				if (_opt.vertex_has_color()) {
+				if (_be.file_options().vertex_has_color()) {
 					//with alpha
-					if (_opt.color_has_alpha()) {
-						if (_opt.color_is_float()) {
+					if (_be.file_options().color_has_alpha()) {
+						if (_be.file_options().color_is_float()) {
 							cAf = _be.colorAf(vh);
 							_out << " " << cAf;
 						} else {
@@ -392,7 +386,7 @@ namespace OpenMesh {
 						}
 					} else {
 						//without alpha
-						if (_opt.color_is_float()) {
+						if (_be.file_options().color_is_float()) {
 							cf = _be.colorf(vh);
 							_out << " " << cf;
 						} else {
@@ -422,10 +416,10 @@ namespace OpenMesh {
 					_out << " " << vhandles[j].idx();
 
 				// FaceColor
-				if (_opt.face_has_color()) {
+				if (_be.file_options().face_has_color()) {
 					//with alpha
-					if (_opt.color_has_alpha()) {
-						if (_opt.color_is_float()) {
+					if (_be.file_options().color_has_alpha()) {
+						if (_be.file_options().color_is_float()) {
 							cAf = _be.colorAf(fh);
 							_out << " " << cAf;
 						} else {
@@ -434,7 +428,7 @@ namespace OpenMesh {
 						}
 					} else {
 						//without alpha
-						if (_opt.color_is_float()) {
+						if (_be.file_options().color_is_float()) {
 							cf = _be.colorf(fh);
 							_out << " " << cf;
 						} else {
@@ -589,9 +583,7 @@ namespace OpenMesh {
 			}
 		}
 
-		bool
-			_PLYWriter_::
-			write_binary(std::ostream &_out, BaseExporter &_be, Options _opt) const
+		bool _PLYWriter_::write_binary(std::ostream &_out, BaseExporter &_be) const
 		{
 
 			unsigned int i, nV, nF;
@@ -607,7 +599,7 @@ namespace OpenMesh {
 			std::vector<CustomProperty> vProps;
 			std::vector<CustomProperty> fProps;
 
-			write_header(_out, _be, _opt, vProps, fProps);
+			write_header(_out, _be, vProps, fProps);
 
 			// vertex data (point, normals, texcoords)
 			for (i = 0, nV = int(_be.n_vertices()); i < nV; ++i)
@@ -621,7 +613,7 @@ namespace OpenMesh {
 				writeValue(ValueTypeFLOAT, _out, v[2]);
 
 				// Vertex Normal
-				if (_opt.vertex_has_normal()) {
+				if (_be.file_options().vertex_has_normal()) {
 					n = _be.normal(vh);
 					writeValue(ValueTypeFLOAT, _out, n[0]);
 					writeValue(ValueTypeFLOAT, _out, n[1]);
@@ -629,21 +621,21 @@ namespace OpenMesh {
 				}
 
 				// Vertex TexCoords
-				if (_opt.vertex_has_texcoord()) {
+				if (_be.file_options().vertex_has_texcoord()) {
 					t = _be.texcoord(vh);
 					writeValue(ValueTypeFLOAT, _out, t[0]);
 					writeValue(ValueTypeFLOAT, _out, t[1]);
 				}
 
 				// vertex color
-				if (_opt.vertex_has_color()) {
-					if (_opt.color_is_float()) {
+				if (_be.file_options().vertex_has_color()) {
+					if (_be.file_options().color_is_float()) {
 						cf = _be.colorAf(vh);
 						writeValue(ValueTypeFLOAT, _out, cf[0]);
 						writeValue(ValueTypeFLOAT, _out, cf[1]);
 						writeValue(ValueTypeFLOAT, _out, cf[2]);
 
-						if (_opt.color_has_alpha())
+						if (_be.file_options().color_has_alpha())
 							writeValue(ValueTypeFLOAT, _out, cf[3]);
 					} else {
 						c = _be.colorA(vh);
@@ -651,7 +643,7 @@ namespace OpenMesh {
 						writeValue(ValueTypeUCHAR, _out, (int) c[1]);
 						writeValue(ValueTypeUCHAR, _out, (int) c[2]);
 
-						if (_opt.color_has_alpha())
+						if (_be.file_options().color_has_alpha())
 							writeValue(ValueTypeUCHAR, _out, (int) c[3]);
 					}
 				}
@@ -672,14 +664,14 @@ namespace OpenMesh {
 					writeValue(ValueTypeINT32, _out, vhandles[j].idx());
 
 				// face color
-				if (_opt.face_has_color()) {
-					if (_opt.color_is_float()) {
+				if (_be.file_options().face_has_color()) {
+					if (_be.file_options().color_is_float()) {
 						cf = _be.colorAf(fh);
 						writeValue(ValueTypeFLOAT, _out, cf[0]);
 						writeValue(ValueTypeFLOAT, _out, cf[1]);
 						writeValue(ValueTypeFLOAT, _out, cf[2]);
 
-						if (_opt.color_has_alpha())
+						if (_be.file_options().color_has_alpha())
 							writeValue(ValueTypeFLOAT, _out, cf[3]);
 					} else {
 						c = _be.colorA(fh);
@@ -687,7 +679,7 @@ namespace OpenMesh {
 						writeValue(ValueTypeUCHAR, _out, (int) c[1]);
 						writeValue(ValueTypeUCHAR, _out, (int) c[2]);
 
-						if (_opt.color_has_alpha())
+						if (_be.file_options().color_has_alpha())
 							writeValue(ValueTypeUCHAR, _out, (int) c[3]);
 					}
 				}
@@ -702,9 +694,7 @@ namespace OpenMesh {
 		// ----------------------------------------------------------------------------
 
 
-		size_t
-			_PLYWriter_::
-			binary_size(BaseExporter &_be, Options _opt) const
+		size_t _PLYWriter_::binary_size(BaseExporter &_be) const
 		{
 			size_t header(0);
 			size_t data(0);
@@ -712,7 +702,7 @@ namespace OpenMesh {
 			size_t _3ui(3 * sizeof(unsigned int));
 			size_t _4ui(4 * sizeof(unsigned int));
 
-			if (!_opt.is_binary())
+			if (!_be.file_options().is_binary())
 				return 0;
 			else
 			{

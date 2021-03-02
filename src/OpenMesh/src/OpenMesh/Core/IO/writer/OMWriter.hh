@@ -104,9 +104,9 @@ public:
   std::string get_extensions() const
   { return "om"; }
 
-  bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(std::ostream&, BaseExporter&) const;
 
-  size_t binary_size(BaseExporter& _be, Options _opt) const;
+  size_t binary_size(BaseExporter& _be) const;
 
   static OMFormat::uint8 get_version() { return version_; }
 
@@ -116,9 +116,9 @@ protected:
   static const OMFormat::uchar magic_[3];
   static const OMFormat::uint8 version_;
 
-  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&) const;
 
-  bool write_binary(std::ostream&, BaseExporter&, Options) const;
+  bool write_binary(std::ostream&, BaseExporter&) const;
 
 
   size_t store_binary_custom_chunk( std::ostream&, const BaseProperty&,

@@ -93,9 +93,7 @@ _OMWriter_()
 }
 
 
-bool
-_OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
-                   Options _opt, std::streamsize /*_precision*/) const
+bool _OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be) const
 {
   // check whether exporter can give us an OpenMesh BaseKernel
   if (!_be.kernel()) return false;
@@ -105,7 +103,7 @@ _OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
   if (_filename.extension() != ".om")
     return false;
 
-  _opt += OptionBits::Binary; // only binary format supported
+  //_opt += OptionBits::Binary; // only binary format supported
 
   std::ofstream ofs(_filename.c_str(), std::ios::binary);
 
@@ -117,7 +115,7 @@ _OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
   }
 
   // call stream save method
-  bool rc = write(ofs, _be, _opt);
+  bool rc = write(ofs, _be);
 
   // close filestream
   ofs.close();
@@ -129,21 +127,20 @@ _OMWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be,
 
 //-----------------------------------------------------------------------------
 
-bool
-_OMWriter_::write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize /*_precision*/) const
+bool _OMWriter_::write(std::ostream& _os, BaseExporter& _be) const
 {
 //   std::clog << "[OMWriter]::write( stream )\n";
 
   // Maybe an ascii version will be implemented in the future.
   // For now, support only a binary format
-  if ( !_opt.check( OptionBits::Binary ) )
-    _opt += OptionBits::Binary;
+  //if ( !_opt.check( OptionBits::Binary ) )
+  //  _opt += OptionBits::Binary;
 
   // Ignore LSB/MSB bit. Always store in LSB (little endian)
-  _opt += OptionBits::LSB;
-  _opt -= OptionBits::MSB;
+  //_opt += OptionBits::LSB;
+  //_opt -= OptionBits::MSB;
 
-  return write_binary(_os, _be, _opt);
+  return write_binary(_os, _be);
 }
 
 
@@ -163,12 +160,11 @@ template <typename T> struct Enabler
 #endif
 
 
-bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
-                               Options _opt) const
+bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be) const
 {
   size_t bytes = 0;
 
-  bool swap = _opt.check(OptionBits::Swap) || (Endian::local() == Endian::MSB);
+  bool swap = Endian::local() == Endian::MSB;
 
   unsigned int i, nV, nF;
   Vec3f v;
@@ -214,7 +210,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
 
 
   // ---------- write vertex normal
-  if (_be.n_vertices() && _opt.vertex_has_normal())
+  if (_be.n_vertices() && _be.file_options().vertex_has_normal())
   {
     Vec3f n = _be.normal(VertexHandle(0));
 
@@ -250,7 +246,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
   }
 
   // ---------- write vertex texture coords
-  if (_be.n_vertices() && _opt.vertex_has_texcoord2D()) {
+  if (_be.n_vertices() && _be.file_options().vertex_has_texcoord2D()) {
 
     t = _be.texcoord(VertexHandle(0));
 
@@ -593,7 +589,7 @@ size_t _OMWriter_::store_binary_custom_chunk(std::ostream& _os,
 
 // ----------------------------------------------------------------------------
 
-size_t _OMWriter_::binary_size(BaseExporter& /* _be */, Options /* _opt */) const
+size_t _OMWriter_::binary_size(BaseExporter& /* _be */) const
 {
   // std::clog << "[OMWriter]: binary_size()" << std::endl;
   size_t bytes  = sizeof( OMFormat::Header );

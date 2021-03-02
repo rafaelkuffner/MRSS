@@ -98,11 +98,11 @@ public:
   std::string get_description() const { return "PLY polygon file format"; }
   std::string get_extensions() const  { return "ply"; }
 
-  bool write(const std::filesystem::path&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(const std::filesystem::path&, BaseExporter&) const;
 
-  bool write(std::ostream&, BaseExporter&, Options, std::streamsize _precision = 6) const;
+  bool write(std::ostream&, BaseExporter&) const;
 
-  size_t binary_size(BaseExporter& _be, Options _opt) const;
+  size_t binary_size(BaseExporter& _be) const;
 
   enum ValueType {
     Unsupported = 0,
@@ -150,10 +150,10 @@ protected:
   void writeValue(ValueType _type, std::ostream& _out, float value) const;
   void writeValue(ValueType _type, std::ostream& _out, double value) const;
 
-  bool write_ascii(std::ostream& _out, BaseExporter&, Options) const;
-  bool write_binary(std::ostream& _out, BaseExporter&, Options) const;
+  bool write_ascii(std::ostream& _out, BaseExporter&) const;
+  bool write_binary(std::ostream& _out, BaseExporter&) const;
   /// write header into the stream _out. Returns custom properties (vertex and face) which are written into the header
-  void write_header(std::ostream& _out, BaseExporter& _be, Options& _opt, std::vector<CustomProperty>& _ovProps, std::vector<CustomProperty>& _ofProps) const;
+  void write_header(std::ostream& _out, BaseExporter& _be, std::vector<CustomProperty>& _ovProps, std::vector<CustomProperty>& _ofProps) const;
 };
 
 

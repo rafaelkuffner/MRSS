@@ -107,6 +107,16 @@ namespace OpenMesh {
 				return fileopts_;
 			}
 
+			// set file option flags
+			void set_file_options(OptionBits opts) {
+				fileopts_.flags |= opts;
+			}
+
+			// unset file option flags
+			void unset_file_options(OptionBits opts) {
+				fileopts_.flags &= ~opts;
+			}
+
 			// get vertex data
 			virtual Vec3f  point(VertexHandle _vh)    const = 0;
 			virtual Vec3f  normal(VertexHandle _vh)   const = 0;

@@ -122,9 +122,7 @@ public:
      of its reader modules. True is returned upon success, false if all
      reader modules failed to interprete _filename.
   */
-  bool read(const std::filesystem::path& _filename,
-	    BaseImporter& _bi,
-	    Options& _opt);
+  bool read(const std::filesystem::path& _filename, BaseImporter& _bi);
 
 /**
      Read a mesh from open std::istream _is. The target data structure is specified
@@ -132,10 +130,7 @@ public:
      of its reader modules. True is returned upon success, false if all
      reader modules failed to use _is.
   */
-  bool read(std::istream& _filename,
-	    const std::filesystem::path& _ext,
-	    BaseImporter& _bi,
-	    Options& _opt);
+  bool read(std::istream& _filename, const std::filesystem::path& _ext, BaseImporter& _bi);
 
 
   /** Write a mesh to file _filename. The source data structure is specified
@@ -144,10 +139,7 @@ public:
       writer modules failed to write the requested format.
       Options is determined by _filename's extension.
   */
-  bool write(const std::filesystem::path& _filename,
-	     BaseExporter& _be,
-	     Options _opt = {},
-             std::streamsize _precision = 6);
+  bool write(const std::filesystem::path& _filename, BaseExporter& _be);
 
 /** Write a mesh to open std::ostream _os. The source data structure is specified
       by the given BaseExporter. The \c save method consecutively queries all
@@ -155,11 +147,7 @@ public:
       writer modules failed to write the requested format.
       Options is determined by _filename's extension.
   */
-  bool write(std::ostream& _filename,
-	     const std::filesystem::path& _ext,
-	     BaseExporter& _be,
-	     Options _opt = {},
-             std::streamsize _precision = 6);
+  bool write(std::ostream& _filename, const std::filesystem::path& _ext, BaseExporter& _be);
 
 
   /// Returns true if the format is supported by one of the reader modules.
@@ -169,12 +157,10 @@ public:
   bool can_write( const std::filesystem::path& _format ) const;
 
 
-  size_t binary_size(const std::filesystem::path& _format,
-		     BaseExporter& _be,
-		     Options _opt = {})
+  size_t binary_size(const std::filesystem::path& _format, BaseExporter& _be)
   {
     const BaseWriter *bw = find_writer(_format);
-    return bw ? bw->binary_size(_be,_opt) : 0;
+    return bw ? bw->binary_size(_be) : 0;
   }
 
 

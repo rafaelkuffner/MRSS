@@ -83,9 +83,7 @@ _IOManager_& IOManager()
 
 //-----------------------------------------------------------------------------
 
-bool
-_IOManager_::
-read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
+bool _IOManager_::read(const std::filesystem::path& _filename, BaseImporter& _bi)
 {
   std::set<BaseReader*>::const_iterator it     =  reader_modules_.begin();
   std::set<BaseReader*>::const_iterator it_end =  reader_modules_.end();
@@ -114,9 +112,7 @@ read(const std::filesystem::path& _filename, BaseImporter& _bi, Options& _opt)
 //-----------------------------------------------------------------------------
 
 
-bool
-_IOManager_::
-read(std::istream& _is, const std::filesystem::path& _ext, BaseImporter& _bi, Options& _opt)
+bool _IOManager_::read(std::istream& _is, const std::filesystem::path& _ext, BaseImporter& _bi)
 {
   std::set<BaseReader*>::const_iterator it     =  reader_modules_.begin();
   std::set<BaseReader*>::const_iterator it_end =  reader_modules_.end();
@@ -139,9 +135,7 @@ read(std::istream& _is, const std::filesystem::path& _ext, BaseImporter& _bi, Op
 //-----------------------------------------------------------------------------
 
 
-bool
-_IOManager_::
-write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision)
+bool _IOManager_::write(const std::filesystem::path& _filename, BaseExporter& _be)
 {
   std::set<BaseWriter*>::const_iterator it     = writer_modules_.begin();
   std::set<BaseWriter*>::const_iterator it_end = writer_modules_.end();
@@ -157,7 +151,7 @@ write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, s
   {
     if ((*it)->can_u_write(_filename))
     {
-      return (*it)->write(_filename, _be, _opt, _precision);
+      return (*it)->write(_filename, _be);
     }
   }
 
@@ -168,9 +162,7 @@ write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, s
 //-----------------------------------------------------------------------------
 
 
-bool
-_IOManager_::
-write(std::ostream& _os,const std::filesystem::path &_ext, BaseExporter& _be, Options _opt, std::streamsize _precision)
+bool _IOManager_::write(std::ostream& _os,const std::filesystem::path &_ext, BaseExporter& _be)
 {
   std::set<BaseWriter*>::const_iterator it     = writer_modules_.begin();
   std::set<BaseWriter*>::const_iterator it_end = writer_modules_.end();
@@ -186,7 +178,7 @@ write(std::ostream& _os,const std::filesystem::path &_ext, BaseExporter& _be, Op
   {
     if ((*it)->BaseWriter::can_u_write(_ext)) //Restrict test to the extension check
     {
-      return (*it)->write(_os, _be, _opt, _precision);
+      return (*it)->write(_os, _be);
     }
   }
 

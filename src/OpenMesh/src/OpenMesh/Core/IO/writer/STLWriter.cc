@@ -80,25 +80,23 @@ _STLWriter_::_STLWriter_() { IOManager().register_module(this); }
 //-----------------------------------------------------------------------------
 
 
-bool
-_STLWriter_::
-write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _STLWriter_::write(const std::filesystem::path& _filename, BaseExporter& _be) const
 {
   // binary or ascii ?
   if (_filename.extension() == ".stla")
   {
-    _opt -= OptionBits::Binary;
+    _be.unset_file_options(OptionBits::Binary);
   }
   else if (_filename.extension() == ".stlb")
   {
-    _opt += OptionBits::Binary;
+    _be.set_file_options(OptionBits::Binary);
   }
 
   // open file
-  std::fstream out(_filename, (_opt.check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
+  std::fstream out(_filename, (_be.file_options().check(OptionBits::Binary) ? std::ios_base::binary | std::ios_base::out
                                                                    : std::ios_base::out) );
 
-  bool result = write(out, _be, _opt, _precision);
+  bool result = write(out, _be);
 
   out.close();
 
@@ -108,23 +106,21 @@ write(const std::filesystem::path& _filename, BaseExporter& _be, Options _opt, s
 //-----------------------------------------------------------------------------
 
 
-bool
-_STLWriter_::
-write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _precision) const
+bool _STLWriter_::write(std::ostream& _os, BaseExporter& _be) const
 {
   // check writer features
-  if (_opt.vertex_has_normal()   ||
-      _opt.vertex_has_texcoord() ||
-      _opt.face_has_color())
+  if (_be.file_options().vertex_has_normal()   ||
+      _be.file_options().vertex_has_texcoord() ||
+      _be.file_options().face_has_color())
     return false;
 
-  if (!_opt.check(OptionBits::Binary))
-    _os.precision(_precision);
+  if (!_be.file_options().check(OptionBits::Binary))
+    _os.precision(9);
 
-  if (_opt.check(OptionBits::Binary))
-    return write_stlb(_os, _be, _opt);
+  if (_be.file_options().check(OptionBits::Binary))
+    return write_stlb(_os, _be);
   else
-    return write_stla(_os, _be, _opt);
+    return write_stla(_os, _be);
 
   return false;
 }
@@ -134,12 +130,9 @@ write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _preci
 //-----------------------------------------------------------------------------
 
 
-bool
-_STLWriter_::
-write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /* _opt */) const
+bool _STLWriter_::write_stla(const std::filesystem::path& _filename, BaseExporter& _be) const
 {
   OMLOG_INFO << "write ascii file";
-
 
   // open file
 #ifdef _WIN32
@@ -203,9 +196,7 @@ write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
 //-----------------------------------------------------------------------------
 
 
-bool
-_STLWriter_::
-write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::streamsize _precision) const
+bool _STLWriter_::write_stla(std::ostream& _out, BaseExporter& _be) const
 {
   OMLOG_INFO << "write ascii file";
 
@@ -213,7 +204,7 @@ write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
   Vec3f  a, b, c, n;
   std::vector<VertexHandle> vhandles;
   FaceHandle fh;
-  _out.precision(_precision);
+  _out.precision(9);
 
 
   // header
@@ -255,9 +246,7 @@ write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
 //-----------------------------------------------------------------------------
 
 
-bool
-_STLWriter_::
-write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /* _opt */) const
+bool _STLWriter_::write_stlb(const std::filesystem::path& _filename, BaseExporter& _be) const
 {
   OMLOG_INFO << "write binary file";
 
@@ -339,9 +328,7 @@ write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
 
 //-----------------------------------------------------------------------------
 
-bool
-_STLWriter_::
-write_stlb(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::streamsize _precision) const
+bool _STLWriter_::write_stlb(std::ostream& _out, BaseExporter& _be) const
 {
   OMLOG_INFO << "write binary file";
 
@@ -350,7 +337,7 @@ write_stlb(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
   Vec3f  a, b, c, n;
   std::vector<VertexHandle> vhandles;
   FaceHandle fh;
-  _out.precision(_precision);
+  _out.precision(9);
 
 
    // write header
@@ -412,9 +399,7 @@ write_stlb(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
 //-----------------------------------------------------------------------------
 
 
-size_t
-_STLWriter_::
-binary_size(BaseExporter& _be, Options /* _opt */) const
+size_t _STLWriter_::binary_size(BaseExporter& _be) const
 {
   size_t bytes(0);
   size_t _12floats(12*sizeof(float));
