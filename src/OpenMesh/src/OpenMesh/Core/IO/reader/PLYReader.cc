@@ -141,6 +141,7 @@ namespace OpenMesh {
 			bool swap = _bi.user_options().check(OptionBits::Swap);
 
 			_bi.request_vattribs(options_.vattribs);
+			_bi.request_hattribs(options_.hattribs);
 			_bi.request_fattribs(options_.fattribs);
 			_bi.set_file_options(options_.flags);
 
@@ -259,14 +260,14 @@ namespace OpenMesh {
 
 		bool _PLYReader_::read_ascii(std::istream &_in, BaseImporter &_bi) const {
 
-			unsigned int i, j, k, l, idx;
-			unsigned int nV;
+			unsigned int i;
 			OpenMesh::Vec3f v, n;
 			std::string trash;
 			OpenMesh::Vec2f t;
 			OpenMesh::Vec4i c;
 			float tmp;
 			BaseImporter::VHandles vhandles;
+			std::vector<Vec2f> texcoords2d;
 			VertexHandle vh;
 
 			_bi.reserve(vertexCount_, 3 * vertexCount_, faceCount_);
@@ -388,6 +389,7 @@ namespace OpenMesh {
 					// faces
 					for (i = 0; i < faceCount_ && !_in.eof(); ++i) {
 						FaceHandle fh;
+						unsigned nv;
 
 						c[0] = 0;
 						c[1] = 0;
@@ -399,30 +401,41 @@ namespace OpenMesh {
 							switch (prop.property) {
 
 							case VERTEX_INDICES:
-								// nV = number of Vertices for current face
-								_in >> nV;
-
-								if (nV == 3) {
-									vhandles.resize(3);
-									_in >> j;
-									_in >> k;
-									_in >> l;
-
-									vhandles[0] = VertexHandle(j);
-									vhandles[1] = VertexHandle(k);
-									vhandles[2] = VertexHandle(l);
-								} else {
-									vhandles.clear();
-									for (j = 0; j < nV; ++j) {
-										_in >> idx;
-										vhandles.push_back(VertexHandle(idx));
-									}
+							{
+								// number of vertices for this face
+								nv = 0;
+								_in >> nv;
+								vhandles.resize(nv);
+								for (unsigned j = 0; j < nv; ++j) {
+									int idx;
+									_in >> idx;
+									vhandles[j] = VertexHandle(idx);
 								}
 
 								fh = _bi.add_face(vhandles);
 								if (!fh.is_valid())
 									++complex_faces;
 								break;
+							}
+								
+							case TEXCOORDS:
+							{
+								unsigned n;
+								_in >> n;
+								if (n == nv * 2) {
+									// 2D
+									texcoords2d.resize(nv);
+									for (unsigned j = 0; j < nv; ++j) {
+										float u, v;
+										_in >> u >> v;
+										texcoords2d[j] = {u, v};
+									}
+									if (nv && fh.is_valid()) _bi.add_face_texcoords(fh, vhandles[0], texcoords2d);
+								} else {
+									// TODO bad number of texcoord components
+								}
+								break;
+							}
 
 							case COLORRED:
 								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
@@ -501,6 +514,7 @@ namespace OpenMesh {
 			OpenMesh::Vec3f        v, n;  // Vertex
 			OpenMesh::Vec2f        t;  // TexCoords
 			BaseImporter::VHandles vhandles;
+			std::vector<Vec2f> texcoords2d;
 			VertexHandle           vh;
 			OpenMesh::Vec4i        c;  // Color
 			float                  tmp;
@@ -615,6 +629,7 @@ namespace OpenMesh {
 				} else if (e_it->element_ == FACE) {
 					for (unsigned i = 0; i < e_it->count_ && !_in.eof(); ++i) {
 						FaceHandle fh;
+						unsigned int nv;
 
 						c[0] = 0;
 						c[1] = 0;
@@ -627,33 +642,43 @@ namespace OpenMesh {
 							switch (prop.property) {
 
 							case VERTEX_INDICES:
-								// nV = number of Vertices for current face
-								unsigned int nV;
-								readInteger(prop.listIndexType, _in, nV);
-
-								if (nV == 3) {
-									vhandles.resize(3);
-									unsigned int j, k, l;
-									readInteger(prop.value, _in, j);
-									readInteger(prop.value, _in, k);
-									readInteger(prop.value, _in, l);
-
-									vhandles[0] = VertexHandle(j);
-									vhandles[1] = VertexHandle(k);
-									vhandles[2] = VertexHandle(l);
-								} else {
-									vhandles.clear();
-									for (unsigned j = 0; j < nV; ++j) {
-										unsigned int idx;
-										readInteger(prop.value, _in, idx);
-										vhandles.push_back(VertexHandle(idx));
-									}
+							{
+								// number of vertices for this face
+								nv = 0;
+								readInteger(prop.listIndexType, _in, nv);
+								vhandles.resize(nv);
+								for (unsigned j = 0; j < nv; ++j) {
+									unsigned int idx;
+									readInteger(prop.value, _in, idx);
+									vhandles[j] = VertexHandle(idx);
 								}
 
 								fh = _bi.add_face(vhandles);
 								if (!fh.is_valid())
 									++complex_faces;
 								break;
+							}
+
+							case TEXCOORDS:
+							{
+								unsigned n;
+								readInteger(prop.listIndexType, _in, n);
+								if (n == nv * 2) {
+									// 2D
+									texcoords2d.resize(nv);
+									for (unsigned j = 0; j < nv; ++j) {
+										float u, v;
+										readValue(prop.value, _in, u);
+										readValue(prop.value, _in, v);
+										texcoords2d[j] = {u, v};
+									}
+									if (nv && fh.is_valid()) _bi.add_face_texcoords(fh, vhandles[0], texcoords2d);
+								} else {
+									// TODO bad number of texcoord components
+								}
+								break;
+							}
+
 							case COLORRED:
 								if (prop.value == ValueTypeFLOAT32 ||
 									prop.value == ValueTypeFLOAT) {
@@ -1260,9 +1285,9 @@ namespace OpenMesh {
 
 						if (elementName == "face")
 						{
-							// special case for vertex indices
 							if (propertyName == "vertex_index" || propertyName == "vertex_indices")
 							{
+								// special case for vertex indices
 								property.property = VERTEX_INDICES;
 
 								if (!elements_.back().properties_.empty())
@@ -1270,6 +1295,11 @@ namespace OpenMesh {
 									OMLOG_WARNING << "Custom face Properties defined, before 'vertex_indices' property was defined. They will be skipped";
 									elements_.back().properties_.clear();
 								}
+							} else if (propertyName == "texcoord") {
+								// special case for texture coords (-> halfedge texcoords)
+								// assume these are always 2d
+								property.property = TEXCOORDS;
+								options_.hattribs |= AttributeBits::TexCoord2D;
 							} else {
 								options_ += OptionBits::Custom;
 							}
