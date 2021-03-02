@@ -50,6 +50,11 @@ endif ()
 # use c++17 (for std::filesystem etc) - ben
 target_compile_features(OpenMeshCore PUBLIC cxx_std_17)
 
+if(MSVC)
+# parallel build - ben
+target_compile_options(OpenMeshCore PRIVATE /MP)
+endif()
+
 # source groups as dir tree - ben
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${headers} ${sources})
 
