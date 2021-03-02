@@ -209,10 +209,10 @@ namespace OpenMesh {
 		template <class Mesh>
 		bool write_mesh(const Mesh &_mesh,
 			const std::filesystem::path &_filename,
-			Options            _opt = Options::Default,
-			std::streamsize    _precision = 6)
+			const Options &_opt = Options::Default,
+			std::streamsize _precision = 6)
 		{
-			ExporterT<Mesh> exporter(_mesh);
+			ExporterT<Mesh> exporter(_mesh, _opt);
 			return IOManager().write(_filename, exporter, _opt, _precision);
 		}
 
@@ -242,10 +242,10 @@ namespace OpenMesh {
 		bool write_mesh(const Mesh &_mesh,
 			std::ostream &_os,
 			const std::filesystem::path &_ext,
-			Options            _opt = Options::Default,
-			std::streamsize    _precision = 6)
+			const Options &_opt = Options::Default,
+			std::streamsize _precision = 6)
 		{
-			ExporterT<Mesh> exporter(_mesh);
+			ExporterT<Mesh> exporter(_mesh, _opt);
 			return IOManager().write(_os, _ext, exporter, _opt, _precision);
 		}
 

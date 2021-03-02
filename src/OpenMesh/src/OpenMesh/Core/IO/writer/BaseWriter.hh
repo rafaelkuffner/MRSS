@@ -128,18 +128,6 @@ public:
   /// Returns expected size of file if binary format is supported else 0.
   virtual size_t binary_size(BaseExporter&, Options) const { return 0; }
 
-
-
-protected:
-
-  bool check(BaseExporter& _be, Options _opt) const
-  {
-    return (_opt.vertex_has_normal() <= _be.has_vertex_normals())
-       &&  (_opt.vertex_has_texcoord() <= _be.has_vertex_texcoords())
-       &&  (_opt.vertex_has_color()   <= _be.has_vertex_colors())
-       &&  (_opt.face_has_normal()    <= _be.has_face_normals())
-       &&  (_opt.face_has_color()     <= _be.has_face_colors());
-  }
 };
 
 

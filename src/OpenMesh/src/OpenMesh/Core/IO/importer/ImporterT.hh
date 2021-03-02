@@ -93,7 +93,7 @@ namespace OpenMesh {
 			typedef std::vector<VertexHandle>  VHandles;
 
 
-			ImporterT(Mesh &_mesh, Options _useropts) : BaseImporter(_useropts), mesh_(_mesh) {}
+			ImporterT(Mesh &_mesh, const Options &_useropts) : BaseImporter(_useropts), mesh_(_mesh) {}
 
 			virtual void make_vattribs_impl(AttributeBits attribs) override
 			{

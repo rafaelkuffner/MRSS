@@ -95,10 +95,6 @@ bool
 _OFFWriter_::
 write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
-  // check exporter features
-  if ( !check( _be, _opt ) )
-    return false;
-
 
   // check writer features
   if (_opt.face_has_normal()) {
@@ -473,19 +469,19 @@ binary_size(BaseExporter& _be, Options _opt) const
     data   += _be.n_vertices() * _3floats;    // vertex data
   }
 
-  if ( _opt.vertex_has_normal() && _be.has_vertex_normals() )
+  if (_be.file_options().vertex_has_normal())
   {
     header += 1; // N
     data   += _be.n_vertices() * _3floats;
   }
 
-  if ( _opt.vertex_has_color() && _be.has_vertex_colors() )
+  if (_be.file_options().vertex_has_color())
   {
     header += 1; // C
     data   += _be.n_vertices() * _3floats;
   }
 
-  if ( _opt.vertex_has_texcoord() && _be.has_vertex_texcoords() )
+  if (_be.file_options().vertex_has_texcoord2D())
   {
     size_t _2floats(2*sizeof(float));
     header += 2; // ST
@@ -508,8 +504,8 @@ binary_size(BaseExporter& _be, Options _opt) const
   }
 
   // face colors
-  if ( _opt.face_has_color() && _be.has_face_colors() ){
-    if ( _opt.color_has_alpha() )
+  if (_be.file_options().face_has_color()){
+    if (_be.file_options().color_has_alpha())
       data += _be.n_faces() * _4ui;
     else
       data += _be.n_faces() * _3ui;

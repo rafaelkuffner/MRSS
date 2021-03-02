@@ -112,9 +112,6 @@ bool
 _STLWriter_::
 write(std::ostream& _os, BaseExporter& _be, Options _opt, std::streamsize _precision) const
 {
-  // check exporter features
-  if (!check(_be, _opt)) return false;
-
   // check writer features
   if (_opt.vertex_has_normal()   ||
       _opt.vertex_has_texcoord() ||
@@ -180,7 +177,7 @@ write_stla(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
       a = _be.point(vhandles[0]);
       b = _be.point(vhandles[1]);
       c = _be.point(vhandles[2]);
-      n = (_be.has_face_normals() ?
+      n = (_be.file_options().face_has_normal() ?
      _be.normal(fh) :
      ((c-b) % (a-b)).normalize());
 
@@ -234,7 +231,7 @@ write_stla(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
       a = _be.point(vhandles[0]);
       b = _be.point(vhandles[1]);
       c = _be.point(vhandles[2]);
-      n = (_be.has_face_normals() ?
+      n = (_be.file_options().face_has_normal() ?
      _be.normal(fh) :
      ((c-b) % (a-b)).normalize());
 
@@ -306,7 +303,7 @@ write_stlb(const std::filesystem::path& _filename, BaseExporter& _be, Options /*
       a = _be.point(vhandles[0]);
       b = _be.point(vhandles[1]);
       c = _be.point(vhandles[2]);
-      n = (_be.has_face_normals() ?
+      n = (_be.file_options().face_has_normal() ?
      _be.normal(fh) :
      ((c-b) % (a-b)).normalize());
 
@@ -378,7 +375,7 @@ write_stlb(std::ostream& _out, BaseExporter& _be, Options /* _opt */, std::strea
       a = _be.point(vhandles[0]);
       b = _be.point(vhandles[1]);
       c = _be.point(vhandles[2]);
-      n = (_be.has_face_normals() ?
+      n = (_be.file_options().face_has_normal() ?
      _be.normal(fh) :
      ((c-b) % (a-b)).normalize());
 

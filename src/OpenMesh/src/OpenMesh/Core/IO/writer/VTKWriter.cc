@@ -48,18 +48,13 @@ bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be, Options _opt, std
     OpenMesh::Vec3f c;
     OpenMesh::Vec4f cA;
 
-    // check exporter features
-    if (!check(_be, _opt)) {
-        return false;
-    }
-
     // check writer features
     if (!_opt.is_empty()) {
-        OMLOG_ERROR << "[VTKWriter] : writer does not support any options";
+        OMLOG_ERROR << "writer does not support any options";
         return false;
     }
 
-    OMLOG_INFO << "write file";
+    //OMLOG_DEBUG << "write file";
     _out.precision(_precision);
 
     std::vector<VertexHandle> vhandles;

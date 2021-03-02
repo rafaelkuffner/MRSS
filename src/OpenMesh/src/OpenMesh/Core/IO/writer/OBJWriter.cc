@@ -224,10 +224,6 @@ namespace OpenMesh {
 
 			_out.precision(_precision);
 
-			// check exporter features
-			if (!check(_be, _opt))
-				return false;
-
 			// No binary mode for OBJ
 			if (_opt.check(OptionBits::Binary)) {
 				OMLOG_WARNING << "Binary mode not supported by OBJ Writer, falling back to standard";
