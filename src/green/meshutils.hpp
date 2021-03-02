@@ -15,7 +15,6 @@
 #ifndef GREEN_MESHUTILS_HPP
 #define GREEN_MESHUTILS_HPP
 
-#include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
 
 #include <glm/glm.hpp>

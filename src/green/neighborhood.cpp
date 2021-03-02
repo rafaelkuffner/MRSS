@@ -15,6 +15,7 @@
 #include <limits>
 #include <algorithm>
 #include <functional>
+#include <fstream>
 
 namespace green {
 

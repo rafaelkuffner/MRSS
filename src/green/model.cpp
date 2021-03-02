@@ -1,6 +1,8 @@
 ﻿
 #include "model.hpp"
 
+#include <OpenMesh/Core/IO/MeshIO.hh>
+
 #include <stdexcept>
 #include <iostream>
 #include <sstream>

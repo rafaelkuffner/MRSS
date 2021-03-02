@@ -4,7 +4,6 @@
 #ifndef GREEN_ASSIMP_OPENMESH_HPP
 #define GREEN_ASSIMP_OPENMESH_HPP
 
-#include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/IO/reader/BaseReader.hh>
 
 namespace green {
