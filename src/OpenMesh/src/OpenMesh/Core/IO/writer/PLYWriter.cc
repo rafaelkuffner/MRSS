@@ -331,8 +331,8 @@ namespace OpenMesh {
 
 			unsigned int i, nV, nF;
 			Vec3f v, n;
-			OpenMesh::Vec3ui c;
-			OpenMesh::Vec4ui cA;
+			OpenMesh::Vec3uc c;
+			OpenMesh::Vec4uc cA;
 			OpenMesh::Vec3f cf;
 			OpenMesh::Vec4f cAf;
 			OpenMesh::Vec2f t;
@@ -369,7 +369,7 @@ namespace OpenMesh {
 
 				// Vertex TexCoords
 				if (_be.file_options().vertex_has_texcoord()) {
-					t = _be.texcoord(vh);
+					t = _be.texcoord2D(vh);
 					_out << " " << t[0] << " " << t[1];
 				}
 
@@ -381,7 +381,7 @@ namespace OpenMesh {
 							cAf = _be.colorAf(vh);
 							_out << " " << cAf;
 						} else {
-							cA = _be.colorAi(vh);
+							cA = _be.colorA(vh);
 							_out << " " << cA;
 						}
 					} else {
@@ -390,7 +390,7 @@ namespace OpenMesh {
 							cf = _be.colorf(vh);
 							_out << " " << cf;
 						} else {
-							c = _be.colori(vh);
+							c = _be.color(vh);
 							_out << " " << c;
 						}
 					}
@@ -410,7 +410,7 @@ namespace OpenMesh {
 				fh = FaceHandle(i);
 
 				// write vertex indices per face
-				nV = _be.get_vhandles(fh, vhandles);
+				nV = _be.face_vertex_handles(fh, vhandles);
 				_out << nV;
 				for (size_t j = 0; j < vhandles.size(); ++j)
 					_out << " " << vhandles[j].idx();
@@ -423,7 +423,7 @@ namespace OpenMesh {
 							cAf = _be.colorAf(fh);
 							_out << " " << cAf;
 						} else {
-							cA = _be.colorAi(fh);
+							cA = _be.colorA(fh);
 							_out << " " << cA;
 						}
 					} else {
@@ -432,7 +432,7 @@ namespace OpenMesh {
 							cf = _be.colorf(fh);
 							_out << " " << cf;
 						} else {
-							c = _be.colori(fh);
+							c = _be.color(fh);
 							_out << " " << c;
 						}
 					}
@@ -621,8 +621,8 @@ namespace OpenMesh {
 				}
 
 				// Vertex TexCoords
-				if (_be.file_options().vertex_has_texcoord()) {
-					t = _be.texcoord(vh);
+				if (_be.file_options().vertex_has_texcoord2D()) {
+					t = _be.texcoord2D(vh);
 					writeValue(ValueTypeFLOAT, _out, t[0]);
 					writeValue(ValueTypeFLOAT, _out, t[1]);
 				}
@@ -658,7 +658,7 @@ namespace OpenMesh {
 				fh = FaceHandle(i);
 
 				//face
-				nV = _be.get_vhandles(fh, vhandles);
+				nV = _be.face_vertex_handles(fh, vhandles);
 				writeValue(ValueTypeUINT8, _out, nV);
 				for (size_t j = 0; j < vhandles.size(); ++j)
 					writeValue(ValueTypeINT32, _out, vhandles[j].idx());
@@ -744,7 +744,7 @@ namespace OpenMesh {
 
 				for (i = 0, nF = int(_be.n_faces()); i < nF; ++i)
 				{
-					data += _be.get_vhandles(FaceHandle(i), vhandles) * sizeof(unsigned int);
+					data += _be.face_vertex_handles(FaceHandle(i), vhandles) * sizeof(unsigned int);
 
 				}
 			}

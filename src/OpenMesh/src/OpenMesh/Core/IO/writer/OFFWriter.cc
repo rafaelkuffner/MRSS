@@ -195,7 +195,7 @@ bool _OFFWriter_::write_ascii(std::ostream& _out, BaseExporter& _be) const
 
     // TexCoord
     if (_be.file_options().vertex_has_texcoord2D()) {
-      t  = _be.texcoord(vh);
+      t  = _be.texcoord2D(vh);
       _out << " " << t[0] << " " << t[1];
     }
 
@@ -208,7 +208,7 @@ bool _OFFWriter_::write_ascii(std::ostream& _out, BaseExporter& _be) const
   {
     for (i=0, nF=int(_be.n_faces()); i<nF; ++i)
     {
-      _be.get_vhandles(FaceHandle(i), vhandles);
+      _be.face_vertex_handles(FaceHandle(i), vhandles);
       _out << 3 << " ";
       _out << vhandles[0].idx()  << " ";
       _out << vhandles[1].idx()  << " ";
@@ -245,7 +245,7 @@ bool _OFFWriter_::write_ascii(std::ostream& _out, BaseExporter& _be) const
   {
     for (i=0, nF=int(_be.n_faces()); i<nF; ++i)
     {
-      nV = _be.get_vhandles(FaceHandle(i), vhandles);
+      nV = _be.face_vertex_handles(FaceHandle(i), vhandles);
       _out << nV << " ";
       for (size_t j=0; j<vhandles.size(); ++j)
 	       _out << vhandles[j].idx() << " ";
@@ -360,7 +360,7 @@ bool _OFFWriter_::write_binary(std::ostream& _out, BaseExporter& _be) const
     }
     // texCoords
     if (_be.file_options().vertex_has_texcoord2D()) {
-      t  = _be.texcoord(vh);
+      t  = _be.texcoord2D(vh);
       writeValue(_out, t[0]);
       writeValue(_out, t[1]);
     }
@@ -373,7 +373,7 @@ bool _OFFWriter_::write_binary(std::ostream& _out, BaseExporter& _be) const
     for (i=0, nF=int(_be.n_faces()); i<nF; ++i)
     {
       //face
-      _be.get_vhandles(FaceHandle(i), vhandles);
+      _be.face_vertex_handles(FaceHandle(i), vhandles);
       writeValue(_out, 3);
       writeValue(_out, vhandles[0].idx());
       writeValue(_out, vhandles[1].idx());
@@ -406,7 +406,7 @@ bool _OFFWriter_::write_binary(std::ostream& _out, BaseExporter& _be) const
     for (i=0, nF=int(_be.n_faces()); i<nF; ++i)
     {
       //face
-      nV = _be.get_vhandles(FaceHandle(i), vhandles);
+      nV = _be.face_vertex_handles(FaceHandle(i), vhandles);
       writeValue(_out, nV);
       for (size_t j=0; j<vhandles.size(); ++j)
         writeValue(_out, vhandles[j].idx());
@@ -490,7 +490,7 @@ size_t _OFFWriter_::binary_size(BaseExporter& _be) const
     std::vector<VertexHandle> vhandles;
 
     for (i=0, nF=int(_be.n_faces()); i<nF; ++i)
-      data += _be.get_vhandles(FaceHandle(i), vhandles) * sizeof(unsigned int);
+      data += _be.face_vertex_handles(FaceHandle(i), vhandles) * sizeof(unsigned int);
 
   }
 

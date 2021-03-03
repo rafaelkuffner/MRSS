@@ -391,6 +391,8 @@ namespace green {
 		OpenMesh::IO::Options opts{};
 		if (exprops.size()) opts += OpenMesh::IO::OptionBits::Custom;
 		if (sparams.binary) opts += OpenMesh::IO::OptionBits::Binary;
+		opts.hattribs |= OpenMesh::AttributeBits::Normal;
+		opts.hattribs |= OpenMesh::AttributeBits::TexCoordAll;
 		if (sparams.color_mode != model_color_mode::none) opts.vattribs |= OpenMesh::AttributeBits::Color;
 		std::cerr << "Saving model " << fpath.u8string() << std::endl;
 		auto res = OpenMesh::IO::write_mesh(m_mesh, fpath, opts);

@@ -58,6 +58,8 @@
 
 // STL
 #include <vector>
+#include <type_traits>
+#include <utility>
 
 // OpenMesh
 #include <OpenMesh/Core/System/config.h>
@@ -65,7 +67,8 @@
 #include <OpenMesh/Core/Mesh/BaseKernel.hh>
 #include <OpenMesh/Core/IO/Options.hh>
 #include <OpenMesh/Core/Mesh/Attributes.hh>
-
+#include <OpenMesh/Core/Utils/vector_cast.hh>
+#include <OpenMesh/Core/Utils/color_cast.hh>
 
 //=== NAMESPACES ==============================================================
 
@@ -90,6 +93,7 @@ namespace OpenMesh {
 			Options fileopts_;
 
 		public:
+			using StatusInfo = OpenMesh::Attributes::StatusInfo;
 
 			virtual ~BaseExporter() { }
 
@@ -117,73 +121,65 @@ namespace OpenMesh {
 				fileopts_.flags &= ~opts;
 			}
 
-			// get vertex data
-			virtual Vec3f  point(VertexHandle _vh)    const = 0;
-			virtual Vec3f  normal(VertexHandle _vh)   const = 0;
-			virtual Vec3uc color(VertexHandle _vh)    const = 0;
-			virtual Vec4uc colorA(VertexHandle _vh)   const = 0;
-			virtual Vec3ui colori(VertexHandle _vh)    const = 0;
-			virtual Vec4ui colorAi(VertexHandle _vh)   const = 0;
-			virtual Vec3f colorf(VertexHandle _vh)    const = 0;
-			virtual Vec4f colorAf(VertexHandle _vh)   const = 0;
-			virtual Vec2f  texcoord(VertexHandle _vh) const = 0;
-			virtual Vec2f  texcoord(HalfedgeHandle _heh) const = 0;
-			virtual OpenMesh::Attributes::StatusInfo  status(VertexHandle _vh) const = 0;
+			// vertex properties
+			virtual Vec3f point(VertexHandle _vh) const = 0;
+			virtual Vec3f normal(VertexHandle _vh) const = 0;
+			virtual Vec4uc colorA(VertexHandle _vh) const = 0;
+			virtual Vec4f colorAf(VertexHandle _vh) const = 0;
+			virtual Vec2f texcoord2D(VertexHandle _vh) const = 0;
+			virtual Vec3f texcoord3D(VertexHandle _vh) const = 0;
+			virtual StatusInfo status(VertexHandle _vh) const = 0;
+			Vec3uc color(VertexHandle _vh) const { return color_cast<Vec3uc>(colorA(_vh)); }
+			Vec3f colorf(VertexHandle _vh) const { return color_cast<Vec3f>(colorAf(_vh)); }
 
+			// halfedge properties
+			virtual Vec3f normal(HalfedgeHandle _heh) const = 0;
+			virtual Vec4uc colorA(HalfedgeHandle _heh) const = 0;
+			virtual Vec4f colorAf(HalfedgeHandle _heh) const = 0;
+			virtual Vec2f texcoord2D(HalfedgeHandle _heh) const = 0;
+			virtual Vec3f texcoord3D(HalfedgeHandle _heh) const = 0;
+			virtual StatusInfo status(HalfedgeHandle _heh) const = 0;
+			Vec3uc color(HalfedgeHandle _heh) const { return color_cast<Vec3uc>(colorA(_heh)); }
+			Vec3f colorf(HalfedgeHandle _heh) const { return color_cast<Vec3f>(colorAf(_heh)); }
 
-			// get face data
-			virtual unsigned int
-				get_vhandles(FaceHandle _fh,
-					std::vector<VertexHandle> &_vhandles) const = 0;
+			// edge properties
+			virtual Vec4uc colorA(EdgeHandle _eh) const = 0;
+			virtual Vec4f colorAf(EdgeHandle _eh) const = 0;
+			virtual StatusInfo status(EdgeHandle _eh) const = 0;
+			Vec3uc color(EdgeHandle _eh) const { return color_cast<Vec3uc>(colorA(_eh)); }
+			Vec3f colorf(EdgeHandle _eh) const { return color_cast<Vec3f>(colorAf(_eh)); }
 
-			///
-			/// \brief getHeh returns the HalfEdgeHandle that belongs to the face
-			///  specified by _fh and has a toVertexHandle that corresponds to _vh.
-			/// \param _fh FaceHandle that is used to search for the half edge handle
-			/// \param _vh to_vertex_handle of the searched heh
-			/// \return HalfEdgeHandle or invalid HalfEdgeHandle if none is found.
-			///
-			virtual HalfedgeHandle getHeh(FaceHandle _fh, VertexHandle _vh) const = 0;
-			virtual unsigned int
-				get_face_texcoords(std::vector<Vec2f> &_hehandles) const = 0;
-			virtual Vec3f  normal(FaceHandle _fh)      const = 0;
-			virtual Vec3uc color(FaceHandle _fh)      const = 0;
-			virtual Vec4uc colorA(FaceHandle _fh)      const = 0;
-			virtual Vec3ui colori(FaceHandle _fh)    const = 0;
-			virtual Vec4ui colorAi(FaceHandle _fh)   const = 0;
-			virtual Vec3f colorf(FaceHandle _fh)    const = 0;
-			virtual Vec4f colorAf(FaceHandle _fh)   const = 0;
-			virtual OpenMesh::Attributes::StatusInfo  status(FaceHandle _fh) const = 0;
+			// face properties
+			virtual Vec3f normal(FaceHandle _fh) const = 0;
+			virtual Vec4uc colorA(FaceHandle _fh) const = 0;
+			virtual Vec4f colorAf(FaceHandle _fh) const = 0;
+			virtual int texindex(FaceHandle _fh) const = 0;
+			virtual StatusInfo status(FaceHandle _fh) const = 0;
+			Vec3uc color(FaceHandle _fh) const { return color_cast<Vec3uc>(colorA(_fh)); }
+			Vec3f colorf(FaceHandle _fh) const { return color_cast<Vec3f>(colorAf(_fh)); }
 
-			// get edge data
-			virtual Vec3uc color(EdgeHandle _eh)    const = 0;
-			virtual Vec4uc colorA(EdgeHandle _eh)   const = 0;
-			virtual Vec3ui colori(EdgeHandle _eh)    const = 0;
-			virtual Vec4ui colorAi(EdgeHandle _eh)   const = 0;
-			virtual Vec3f colorf(EdgeHandle _eh)    const = 0;
-			virtual Vec4f colorAf(EdgeHandle _eh)   const = 0;
-			virtual OpenMesh::Attributes::StatusInfo  status(EdgeHandle _eh) const = 0;
-
-			// get halfedge data
-			virtual int get_halfedge_id(VertexHandle _vh) = 0;
-			virtual int get_halfedge_id(FaceHandle _vh) = 0;
-			virtual int get_next_halfedge_id(HalfedgeHandle _heh) = 0;
-			virtual int get_to_vertex_id(HalfedgeHandle _heh) = 0;
-			virtual int get_face_id(HalfedgeHandle _heh) = 0;
-			virtual OpenMesh::Attributes::StatusInfo  status(HalfedgeHandle _heh) const = 0;
-
+			// connectivity
+			virtual HalfedgeHandle halfedge_handle(FaceHandle _fh) const = 0;
+			virtual HalfedgeHandle halfedge_handle(VertexHandle _vh) const = 0;
+			virtual HalfedgeHandle next_halfedge_handle(HalfedgeHandle _heh) const = 0;
+			virtual HalfedgeHandle opposite_halfedge_handle(HalfedgeHandle _heh) const = 0;
+			virtual VertexHandle to_vertex_handle(HalfedgeHandle _heh) const = 0;
+			virtual FaceHandle face_handle(HalfedgeHandle _heh) const = 0;
+			virtual size_t face_vertex_handles(FaceHandle _fh, std::vector<VertexHandle> &_vhandles) const = 0;
+			virtual size_t face_halfedge_handles(FaceHandle _fh, std::vector<HalfedgeHandle> &_hhandles) const = 0;
+			virtual size_t vertex_halfedge_handles(VertexHandle _vh, std::vector<HalfedgeHandle> &_hhandles) const = 0;
+			
 			// get reference to base kernel
 			virtual const BaseKernel *kernel() { return 0; }
 
-
-			// query number of faces, vertices, normals, texcoords
+			// number of faces, vertices, edges
 			virtual size_t n_vertices()   const = 0;
 			virtual size_t n_faces()      const = 0;
 			virtual size_t n_edges()      const = 0;
 
-
 			// mesh information
 			virtual bool is_triangle_mesh()     const { return false; }
+
 		};
 
 

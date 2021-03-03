@@ -95,282 +95,226 @@ namespace OpenMesh {
 				fileopts_.fattribs &= _mesh.fattribs();
 			}
 
-
-			// get vertex data
-
-			Vec3f  point(VertexHandle _vh)    const override
+			virtual Vec3f point(VertexHandle _vh) const override
 			{
-				return vector_cast<Vec3f>(mesh_.point(_vh));
+				return mesh_.point(_vh);
 			}
 
-			Vec3f  normal(VertexHandle _vh)   const override
+			virtual Vec3f normal(VertexHandle _vh) const override
 			{
-				return (mesh_.has_vertex_normals()
-					? vector_cast<Vec3f>(mesh_.normal(_vh))
-					: Vec3f(0.0f, 0.0f, 0.0f));
+				Vec3f r{0};
+				if (fileopts_.vertex_has_normal()) r = vector_cast<Vec3f>(mesh_.normal(_vh));
+				else if (fileopts_.halfedge_has_normal()) r = vector_cast<Vec3f>(mesh_.normal(mesh_.halfedge_handle(_vh)));
+				return r;
 			}
 
-			Vec3uc color(VertexHandle _vh)    const override
+			virtual Vec4uc colorA(VertexHandle _vh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec3uc>(mesh_.color(_vh))
-					: Vec3uc(0, 0, 0));
+				Vec4uc r{0};
+				if (fileopts_.vertex_has_color()) r = color_cast<Vec4uc>(mesh_.color(_vh));
+				else if (fileopts_.halfedge_has_color()) r = color_cast<Vec4uc>(mesh_.color(mesh_.halfedge_handle(_vh)));
+				return r;
 			}
 
-			Vec4uc colorA(VertexHandle _vh)   const override
+			virtual Vec4f colorAf(VertexHandle _vh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec4uc>(mesh_.color(_vh))
-					: Vec4uc(0, 0, 0, 0));
+				Vec4f r{0};
+				if (fileopts_.vertex_has_color()) r = color_cast<Vec4f>(mesh_.color(_vh));
+				else if (fileopts_.halfedge_has_color()) r = color_cast<Vec4f>(mesh_.color(mesh_.halfedge_handle(_vh)));
+				return r;
 			}
 
-			Vec3ui colori(VertexHandle _vh)    const override
+			virtual Vec2f texcoord2D(VertexHandle _vh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec3ui>(mesh_.color(_vh))
-					: Vec3ui(0, 0, 0));
+				Vec2f r{0};
+				if (fileopts_.vertex_has_texcoord2D()) r = vector_cast<Vec2f>(mesh_.texcoord2D(_vh));
+				else if (fileopts_.halfedge_has_texcoord2D()) r = vector_cast<Vec2f>(mesh_.texcoord2D(mesh_.halfedge_handle(_vh)));
+				return r;
 			}
 
-			Vec4ui colorAi(VertexHandle _vh)   const override
+			virtual Vec3f texcoord3D(VertexHandle _vh) const  override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec4ui>(mesh_.color(_vh))
-					: Vec4ui(0, 0, 0, 0));
+				Vec3f r{0};
+				if (fileopts_.vertex_has_texcoord3D()) r = vector_cast<Vec3f>(mesh_.texcoord3D(_vh));
+				else if (fileopts_.halfedge_has_texcoord3D()) r = vector_cast<Vec3f>(mesh_.texcoord3D(mesh_.halfedge_handle(_vh)));
+				return r;
 			}
 
-			Vec3f colorf(VertexHandle _vh)    const override
+			virtual StatusInfo status(VertexHandle _vh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec3f>(mesh_.color(_vh))
-					: Vec3f(0, 0, 0));
+				StatusInfo r{};
+				if (fileopts_.vertex_has_status()) r = mesh_.status(_vh);
+				return r;
 			}
 
-			Vec4f colorAf(VertexHandle _vh)   const override
+			virtual Vec3f normal(HalfedgeHandle _heh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec4f>(mesh_.color(_vh))
-					: Vec4f(0, 0, 0, 0));
+				Vec3f r{0};
+				if (fileopts_.halfedge_has_normal()) r = vector_cast<Vec3f>(mesh_.normal(_heh));
+				else if (fileopts_.vertex_has_normal()) r = vector_cast<Vec3f>(mesh_.normal(mesh_.to_vertex_handle(_heh)));
+				return r;
 			}
 
-			Vec2f  texcoord(VertexHandle _vh) const override
+			virtual Vec4uc colorA(HalfedgeHandle _heh) const override
 			{
-#if defined(OM_CC_GCC) && (OM_CC_VERSION<30000)
-				// Workaround!
-				// gcc 2.95.3 exits with internal compiler error at the
-				// code below!??? **)
-				if (mesh_.has_vertex_texcoords2D())
-					return vector_cast<Vec2f>(mesh_.texcoord2D(_vh));
-				return Vec2f(0.0f, 0.0f);
-#else // **)
-				return (mesh_.has_vertex_texcoords2D()
-					? vector_cast<Vec2f>(mesh_.texcoord2D(_vh))
-					: Vec2f(0.0f, 0.0f));
-#endif
+				Vec4uc r{0};
+				if (fileopts_.halfedge_has_color()) r = color_cast<Vec4uc>(mesh_.color(_heh));
+				else if (fileopts_.vertex_has_color()) r = color_cast<Vec4uc>(mesh_.color(mesh_.to_vertex_handle(_heh)));
+				return r;
 			}
 
-			Vec2f  texcoord(HalfedgeHandle _heh) const override
+			virtual Vec4f colorAf(HalfedgeHandle _heh) const override
 			{
-				return (mesh_.has_halfedge_texcoords2D()
-					? vector_cast<Vec2f>(mesh_.texcoord2D(_heh))
-					: Vec2f(0.0f, 0.0f));
+				Vec4f r{0};
+				if (fileopts_.halfedge_has_color()) r = color_cast<Vec4f>(mesh_.color(_heh));
+				else if (fileopts_.vertex_has_color()) r = color_cast<Vec4f>(mesh_.color(mesh_.to_vertex_handle(_heh)));
+				return r;
 			}
 
-			OpenMesh::Attributes::StatusInfo  status(VertexHandle _vh) const override
+			virtual Vec2f texcoord2D(HalfedgeHandle _heh) const override
 			{
-				if (mesh_.has_vertex_status())
-					return mesh_.status(_vh);
-				return OpenMesh::Attributes::StatusInfo();
+				Vec2f r{0};
+				if (fileopts_.halfedge_has_texcoord2D()) r = vector_cast<Vec2f>(mesh_.texcoord2D(_heh));
+				else if (fileopts_.vertex_has_texcoord2D()) r = vector_cast<Vec2f>(mesh_.texcoord2D(mesh_.to_vertex_handle(_heh)));
+				return r;
 			}
 
-			// get edge data
-
-			Vec3uc color(EdgeHandle _eh)    const override
+			virtual Vec3f texcoord3D(HalfedgeHandle _heh) const override
 			{
-				return (mesh_.has_edge_colors()
-					? color_cast<Vec3uc>(mesh_.color(_eh))
-					: Vec3uc(0, 0, 0));
+				Vec3f r{0};
+				if (fileopts_.halfedge_has_texcoord3D()) r = vector_cast<Vec3f>(mesh_.texcoord3D(_heh));
+				else if (fileopts_.vertex_has_texcoord3D()) r = vector_cast<Vec3f>(mesh_.texcoord3D(mesh_.to_vertex_handle(_heh)));
+				return r;
 			}
 
-			Vec4uc colorA(EdgeHandle _eh)   const override
+			virtual StatusInfo status(HalfedgeHandle _heh) const override
 			{
-				return (mesh_.has_edge_colors()
-					? color_cast<Vec4uc>(mesh_.color(_eh))
-					: Vec4uc(0, 0, 0, 0));
+				StatusInfo r{};
+				if (fileopts_.halfedge_has_status()) r = mesh_.status(_heh);
+				return r;
 			}
 
-			Vec3ui colori(EdgeHandle _eh)    const override
+			virtual Vec4uc colorA(EdgeHandle _eh) const override
 			{
-				return (mesh_.has_edge_colors()
-					? color_cast<Vec3ui>(mesh_.color(_eh))
-					: Vec3ui(0, 0, 0));
+				Vec4uc r{0};
+				if (fileopts_.edge_has_color()) r = color_cast<Vec4uc>(mesh_.color(_eh));
+				return r;
 			}
 
-			Vec4ui colorAi(EdgeHandle _eh)   const override
+			virtual Vec4f colorAf(EdgeHandle _eh) const override
 			{
-				return (mesh_.has_edge_colors()
-					? color_cast<Vec4ui>(mesh_.color(_eh))
-					: Vec4ui(0, 0, 0, 0));
+				Vec4f r{0};
+				if (fileopts_.edge_has_color()) r = color_cast<Vec4f>(mesh_.color(_eh));
+				return r;
 			}
 
-			Vec3f colorf(EdgeHandle _eh)    const override
+			virtual StatusInfo status(EdgeHandle _eh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec3f>(mesh_.color(_eh))
-					: Vec3f(0, 0, 0));
+				StatusInfo r{};
+				if (fileopts_.edge_has_status()) r = mesh_.status(_eh);
+				return r;
 			}
 
-			Vec4f colorAf(EdgeHandle _eh)   const override
+			virtual Vec3f normal(FaceHandle _fh) const override
 			{
-				return (mesh_.has_vertex_colors()
-					? color_cast<Vec4f>(mesh_.color(_eh))
-					: Vec4f(0, 0, 0, 0));
+				Vec3f r{0};
+				if (fileopts_.face_has_normal()) r = vector_cast<Vec3f>(mesh_.normal(_fh));
+				return r;
 			}
 
-			OpenMesh::Attributes::StatusInfo  status(EdgeHandle _eh) const override
+			virtual Vec4uc colorA(FaceHandle _fh) const override
 			{
-				if (mesh_.has_edge_status())
-					return mesh_.status(_eh);
-				return OpenMesh::Attributes::StatusInfo();
+				Vec4uc r{0};
+				if (fileopts_.face_has_color()) r = color_cast<Vec4uc>(mesh_.color(_fh));
+				return r;
 			}
 
-			// get halfedge data
-
-			int get_halfedge_id(VertexHandle _vh) override
+			virtual Vec4f colorAf(FaceHandle _fh) const override
 			{
-				return mesh_.halfedge_handle(_vh).idx();
+				Vec4f r{0};
+				if (fileopts_.face_has_color()) r = color_cast<Vec4f>(mesh_.color(_fh));
+				return r;
 			}
 
-			int get_halfedge_id(FaceHandle _fh) override
+			virtual int texindex(FaceHandle _fh) const override
 			{
-				return mesh_.halfedge_handle(_fh).idx();
+				int r = 0;
+				if (fileopts_.face_has_texindex()) r = mesh_.texture_index(_fh);
+				return r;
 			}
 
-			int get_next_halfedge_id(HalfedgeHandle _heh) override
+			virtual StatusInfo status(FaceHandle _fh) const override
 			{
-				return mesh_.next_halfedge_handle(_heh).idx();
+				StatusInfo r{};
+				if (fileopts_.face_has_status()) r = mesh_.status(_fh);
+				return r;
 			}
 
-			int get_to_vertex_id(HalfedgeHandle _heh) override
+			virtual HalfedgeHandle halfedge_handle(FaceHandle _fh) const override
 			{
-				return mesh_.to_vertex_handle(_heh).idx();
+				return mesh_.halfedge_handle(_fh);
 			}
 
-			int get_face_id(HalfedgeHandle _heh) override
+			virtual HalfedgeHandle halfedge_handle(VertexHandle _vh) const override
 			{
-				return mesh_.face_handle(_heh).idx();
+				// note: outgoing
+				return mesh_.halfedge_handle(_vh);
 			}
 
-			OpenMesh::Attributes::StatusInfo  status(HalfedgeHandle _heh) const override
+			virtual HalfedgeHandle next_halfedge_handle(HalfedgeHandle _heh) const override
 			{
-				if (mesh_.has_halfedge_status())
-					return mesh_.status(_heh);
-				return OpenMesh::Attributes::StatusInfo();
+				return mesh_.next_halfedge_handle(_heh);
 			}
 
-			// get face data
-
-			unsigned int get_vhandles(FaceHandle _fh,
-				std::vector<VertexHandle> &_vhandles) const override
+			virtual HalfedgeHandle opposite_halfedge_handle(HalfedgeHandle _heh) const override
 			{
-				unsigned int count(0);
+				return mesh_.opposite_halfedge_handle(_heh);
+			}
+
+			virtual VertexHandle to_vertex_handle(HalfedgeHandle _heh) const override
+			{
+				return mesh_.to_vertex_handle(_heh);
+			}
+
+			virtual FaceHandle face_handle(HalfedgeHandle _heh) const override
+			{
+				return mesh_.face_handle(_heh);
+			}
+
+			virtual size_t face_vertex_handles(FaceHandle _fh, std::vector<VertexHandle> &_vhandles) const override
+			{
 				_vhandles.clear();
-				for (typename Mesh::CFVIter fv_it = mesh_.cfv_iter(_fh); fv_it.is_valid(); ++fv_it)
-				{
-					_vhandles.push_back(*fv_it);
-					++count;
+				for (auto it = mesh_.cfv_begin(_fh); it.is_valid(); ++it) {
+					_vhandles.push_back(*it);
 				}
-				return count;
+				return _vhandles.size();
 			}
 
-			unsigned int get_face_texcoords(std::vector<Vec2f> &_hehandles) const override
+			virtual size_t face_halfedge_handles(FaceHandle _fh, std::vector<HalfedgeHandle> &_hhandles) const override
 			{
-				unsigned int count(0);
-				_hehandles.clear();
-				for (typename Mesh::CHIter he_it = mesh_.halfedges_begin();
-					he_it != mesh_.halfedges_end(); ++he_it)
-				{
-					_hehandles.push_back(vector_cast<Vec2f>(mesh_.texcoord2D(*he_it)));
-					++count;
+				_hhandles.clear();
+				for (auto it = mesh_.cfh_begin(_fh); it.is_valid(); ++it) {
+					_hhandles.push_back(*it);
 				}
-
-				return count;
+				return _hhandles.size();
 			}
 
-			HalfedgeHandle getHeh(FaceHandle _fh, VertexHandle _vh) const override
+			virtual size_t vertex_halfedge_handles(VertexHandle _vh, std::vector<HalfedgeHandle> &_hhandles) const override
 			{
-				typename Mesh::ConstFaceHalfedgeIter fh_it;
-				for (fh_it = mesh_.cfh_iter(_fh); fh_it.is_valid(); ++fh_it)
-				{
-					if (mesh_.to_vertex_handle(*fh_it) == _vh)
-						return *fh_it;
+				// note: outgoing
+				_hhandles.clear();
+				for (auto it = mesh_.cvoh_begin(_vh); it.is_valid(); ++it) {
+					_hhandles.push_back(*it);
 				}
-				return *fh_it;
-			}
-
-			Vec3f  normal(FaceHandle _fh)   const override
-			{
-				return (mesh_.has_face_normals()
-					? vector_cast<Vec3f>(mesh_.normal(_fh))
-					: Vec3f(0.0f, 0.0f, 0.0f));
-			}
-
-			Vec3uc  color(FaceHandle _fh)   const override
-			{
-				return (mesh_.has_face_colors()
-					? color_cast<Vec3uc>(mesh_.color(_fh))
-					: Vec3uc(0, 0, 0));
-			}
-
-			Vec4uc  colorA(FaceHandle _fh)   const override
-			{
-				return (mesh_.has_face_colors()
-					? color_cast<Vec4uc>(mesh_.color(_fh))
-					: Vec4uc(0, 0, 0, 0));
-			}
-
-			Vec3ui  colori(FaceHandle _fh)   const override
-			{
-				return (mesh_.has_face_colors()
-					? color_cast<Vec3ui>(mesh_.color(_fh))
-					: Vec3ui(0, 0, 0));
-			}
-
-			Vec4ui  colorAi(FaceHandle _fh)   const override
-			{
-				return (mesh_.has_face_colors()
-					? color_cast<Vec4ui>(mesh_.color(_fh))
-					: Vec4ui(0, 0, 0, 0));
-			}
-
-			Vec3f colorf(FaceHandle _fh)    const override
-			{
-				return (mesh_.has_face_colors()
-					? color_cast<Vec3f>(mesh_.color(_fh))
-					: Vec3f(0, 0, 0));
-			}
-
-			Vec4f colorAf(FaceHandle _fh)   const override
-			{
-				return (mesh_.has_face_colors()
-					? color_cast<Vec4f>(mesh_.color(_fh))
-					: Vec4f(0, 0, 0, 0));
-			}
-
-			OpenMesh::Attributes::StatusInfo  status(FaceHandle _fh) const override
-			{
-				if (mesh_.has_face_status())
-					return mesh_.status(_fh);
-				return OpenMesh::Attributes::StatusInfo();
+				return _hhandles.size();
 			}
 
 			virtual const BaseKernel *kernel() override { return &mesh_; }
 
-
-			// query number of faces, vertices, normals, texcoords
+			// number of faces, vertices, edges
 			size_t n_vertices()  const override { return mesh_.n_vertices(); }
 			size_t n_faces()     const override { return mesh_.n_faces(); }
 			size_t n_edges()     const override { return mesh_.n_edges(); }
-
 
 			// mesh information
 			bool is_triangle_mesh() const override

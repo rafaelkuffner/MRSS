@@ -61,7 +61,7 @@ bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be) const
     size_t polygon_table_size = 0;
     size_t nf = _be.n_faces();
     for (size_t i = 0; i < nf; ++i) {
-        polygon_table_size += _be.get_vhandles(FaceHandle(int(i)), vhandles);
+        polygon_table_size += _be.face_vertex_handles(FaceHandle(int(i)), vhandles);
     }
     polygon_table_size += nf;
 
@@ -82,7 +82,7 @@ bool _VTKWriter_::write(std::ostream& _out, BaseExporter& _be) const
     // faces
     _out << "POLYGONS " << nf << ' ' << polygon_table_size << '\n';
     for (size_t i = 0; i < nf; ++i) {
-        _be.get_vhandles(FaceHandle(int(i)), vhandles);
+        _be.face_vertex_handles(FaceHandle(int(i)), vhandles);
 
         _out << vhandles.size() << ' ';
         for (size_t j = 0; j < vhandles.size(); ++j) {

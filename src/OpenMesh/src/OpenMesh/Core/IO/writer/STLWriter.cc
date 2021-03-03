@@ -163,7 +163,7 @@ bool _STLWriter_::write_stla(const std::filesystem::path& _filename, BaseExporte
   for (i=0; i<nF; ++i)
   {
     fh = FaceHandle(i);
-    const int nV = _be.get_vhandles(fh, vhandles);
+    const int nV = _be.face_vertex_handles(fh, vhandles);
 
     if (nV == 3)
     {
@@ -215,7 +215,7 @@ bool _STLWriter_::write_stla(std::ostream& _out, BaseExporter& _be) const
   for (i=0; i<nF; ++i)
   {
     fh = FaceHandle(i);
-    const int nV = _be.get_vhandles(fh, vhandles);
+    const int nV = _be.face_vertex_handles(fh, vhandles);
 
     if (nV == 3)
     {
@@ -285,7 +285,7 @@ bool _STLWriter_::write_stlb(const std::filesystem::path& _filename, BaseExporte
   for (i=0; i<nF; ++i)
   {
     fh = FaceHandle(i);
-    const int nV = _be.get_vhandles(fh, vhandles);
+    const int nV = _be.face_vertex_handles(fh, vhandles);
 
     if (nV == 3)
     {
@@ -355,7 +355,7 @@ bool _STLWriter_::write_stlb(std::ostream& _out, BaseExporter& _be) const
   for (i=0; i<nF; ++i)
   {
     fh = FaceHandle(i);
-    const int nV = _be.get_vhandles(fh, vhandles);
+    const int nV = _be.face_vertex_handles(fh, vhandles);
 
     if (nV == 3)
     {
@@ -412,7 +412,7 @@ size_t _STLWriter_::binary_size(BaseExporter& _be) const
   std::vector<VertexHandle> vhandles;
 
   for (i=0; i<nF; ++i)
-    if (_be.get_vhandles(FaceHandle(i), vhandles) == 3)
+    if (_be.face_vertex_handles(FaceHandle(i), vhandles) == 3)
       bytes += _12floats + sizeof(short);
     else
       OMLOG_WARNING << "skipped non-triangle data!";

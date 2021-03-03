@@ -248,7 +248,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be) const
   // ---------- write vertex texture coords
   if (_be.n_vertices() && _be.file_options().vertex_has_texcoord2D()) {
 
-    t = _be.texcoord(VertexHandle(0));
+    t = _be.texcoord2D(VertexHandle(0));
 
     chunk_header.name_ = false;
     chunk_header.entity_ = OMFormat::Chunk::Entity_Vertex;
@@ -262,7 +262,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be) const
     bytes += store(_os, chunk_header, swap);
 
     for (i = 0, nV = header.n_vertices_; i < nV; ++i)
-      bytes += vector_store(_os, _be.texcoord(VertexHandle(i)), swap);
+      bytes += vector_store(_os, _be.texcoord2D(VertexHandle(i)), swap);
 
   }
 
@@ -282,9 +282,9 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be) const
     auto nE=header.n_edges_*2;
     for (i=0; i<nE; ++i)
     {
-      auto next_id      = _be.get_next_halfedge_id(HalfedgeHandle(static_cast<int>(i)));
-      auto to_vertex_id = _be.get_to_vertex_id(HalfedgeHandle(static_cast<int>(i)));
-      auto face_id      = _be.get_face_id(HalfedgeHandle(static_cast<int>(i)));
+      auto next_id      = _be.next_halfedge_handle(HalfedgeHandle(static_cast<int>(i))).idx();
+      auto to_vertex_id = _be.to_vertex_handle(HalfedgeHandle(static_cast<int>(i))).idx();
+      auto face_id      = _be.face_handle(HalfedgeHandle(static_cast<int>(i))).idx();
 
       bytes += store( _os, next_id,      OMFormat::Chunk::Integer_Size(chunk_header.bits_), swap );
       bytes += store( _os, to_vertex_id, OMFormat::Chunk::Integer_Size(chunk_header.bits_), swap );
@@ -306,7 +306,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be) const
 
     bytes += store( _os, chunk_header, swap );
     for (i=0, nV=header.n_vertices_; i<nV; ++i)
-      bytes += store( _os, _be.get_halfedge_id(VertexHandle(i)), OMFormat::Chunk::Integer_Size(chunk_header.bits_), swap );
+      bytes += store( _os, _be.halfedge_handle(VertexHandle(i)).idx(), OMFormat::Chunk::Integer_Size(chunk_header.bits_), swap );
   }
 
 
@@ -327,7 +327,7 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be) const
     for (i=0, nF=header.n_faces_; i<nF; ++i)
     {
       auto size = OMFormat::Chunk::Integer_Size(chunk_header.bits_);
-      bytes += store( _os, _be.get_halfedge_id(FaceHandle(i)), size, swap);
+      bytes += store( _os, _be.halfedge_handle(FaceHandle(i)).idx(), size, swap);
     }
   }
 

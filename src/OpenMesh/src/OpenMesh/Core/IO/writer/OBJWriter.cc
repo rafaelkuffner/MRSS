@@ -210,6 +210,7 @@ namespace OpenMesh {
 			Vec2f t;
 			VertexHandle vh;
 			std::vector<VertexHandle> vhandles;
+			std::vector<HalfedgeHandle> hhandles;
 			bool useMatrial = false;
 			OpenMesh::Vec3f c;
 			OpenMesh::Vec4f cA;
@@ -265,26 +266,27 @@ namespace OpenMesh {
 				_out << "mtllib " << objName_ << ".mat" << '\n';
 
 			// TODO export 3d texcoords?
+			// TODO this is terrible
 			std::map<Vec2f, int> texMap;
 			//collect Texturevertices from halfedges
 			if (_be.file_options().halfedge_has_texcoord2D())
 			{
-				std::vector<Vec2f> texCoords;
 				//add all texCoords to map
-				unsigned int num = _be.get_face_texcoords(texCoords);
-				for (unsigned int i = 0; i < num; ++i)
+				for (int i = 0; i < _be.n_edges() * 2; ++i)
 				{
-					texMap[texCoords[i]] = i;
+					Vec2f tc = _be.texcoord2D(HalfedgeHandle(i));
+					texMap[tc] = i;
 				}
 			}
 
 			//collect Texture coordinates from vertices
+			// FIXME HE coords should take precedence
 			if (_be.file_options().vertex_has_texcoord2D())
 			{
 				for (size_t i = 0, nV = _be.n_vertices(); i < nV; ++i)
 				{
 					vh = VertexHandle(static_cast<int>(i));
-					t = _be.texcoord(vh);
+					t = _be.texcoord2D(vh);
 					texMap[t] = static_cast<int>(i);
 				}
 			}
@@ -307,7 +309,7 @@ namespace OpenMesh {
 				vh = VertexHandle(int(i));
 				v = _be.point(vh);
 				n = _be.normal(vh);
-				t = _be.texcoord(vh);
+				t = _be.texcoord2D(vh);
 
 				_out << "v " << v[0] << " " << v[1] << " " << v[2] << '\n';
 
@@ -349,7 +351,8 @@ namespace OpenMesh {
 
 				_out << "f";
 
-				_be.get_vhandles(FaceHandle(int(i)), vhandles);
+				_be.face_vertex_handles(FaceHandle(int(i)), vhandles);
+				_be.face_halfedge_handles(FaceHandle(int(i)), hhandles);
 
 				for (j = 0; j < vhandles.size(); ++j)
 				{
@@ -365,14 +368,14 @@ namespace OpenMesh {
 						//write texCoords index from halfedge
 						if (_be.file_options().halfedge_has_texcoord())
 						{
-							_out << texMap[_be.texcoord(_be.getHeh(FaceHandle(int(i)), vhandles[j]))];
+							_out << texMap[_be.texcoord2D(hhandles[j])];
 						}
 
 						else
 						{
 							// write vertex texture coordinate index
 							if (_be.file_options().vertex_has_texcoord())
-								_out << texMap[_be.texcoord(vhandles[j])];
+								_out << texMap[_be.texcoord2D(vhandles[j])];
 						}
 
 						// FIXME export halfedge normals
