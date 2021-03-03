@@ -204,16 +204,7 @@ namespace OpenMesh {
 
 		bool _OBJWriter_::write(std::ostream &_out, BaseExporter &_be) const
 		{
-			unsigned int idx;
-			size_t i, j, nV, nF;
-			Vec3f v, n;
-			Vec2f t;
-			VertexHandle vh;
-			std::vector<VertexHandle> vhandles;
-			std::vector<HalfedgeHandle> hhandles;
-			bool useMatrial = false;
-			OpenMesh::Vec3f c;
-			OpenMesh::Vec4f cA;
+			// TODO face color to material needs a re-write
 
 			OMLOG_INFO << "write file";
 
@@ -227,34 +218,20 @@ namespace OpenMesh {
 			// check for unsupported writer features
 			if (_be.file_options().face_has_normal()) {
 				OMLOG_WARNING << "FaceNormal not supported by OBJ Writer";
-				//_opt.fattribs &= ~AttributeBits::Normal;
 			}
 
-			// check for unsupported writer features
-			if (_be.file_options().vertex_has_color()) {
-				// TODO implement OBJ vertex color export
-				OMLOG_WARNING << "VertexColor not supported by OBJ Writer";
-				//_opt.vattribs &= ~AttributeBits::Color;
+			// cant export halfedge and vertex for eg normal
+			if (auto attribs = _be.file_options().vattribs & _be.file_options().hattribs; !!attribs) {
+				OMLOG_WARNING << "Prioritizing halfedge over vertex for attribs " << to_string(attribs);
 			}
 
-			//create material file if needed
-			if (_be.file_options().face_has_color()) {
+			bool do_texcoord2D = _be.file_options().halfedge_has_texcoord2D() || _be.file_options().vertex_has_texcoord2D();
+			bool do_texcoord3D = _be.file_options().halfedge_has_texcoord3D() || _be.file_options().vertex_has_texcoord3D();
+			bool do_normal = _be.file_options().halfedge_has_normal() || _be.file_options().vertex_has_normal();
 
-				auto matFile = path_ / objName_;
-				matFile.replace_extension(".mat");
-				// shouldnt it be .mtl ? - ben
-
-				std::fstream matStream(matFile, std::ios_base::out);
-
-				if (!matStream)
-				{
-					OMLOG_ERROR << "[OBJWriter] : cannot write material file " << matFile.u8string();
-
-				} else {
-					useMatrial = writeMaterial(matStream, _be);
-
-					matStream.close();
-				}
+			if (do_texcoord2D && do_texcoord3D) {
+				OMLOG_WARNING << "Cannot export both 2D and 3D texture coords, prioritizing 2D";
+				do_texcoord3D = false;
 			}
 
 			// header
@@ -262,130 +239,122 @@ namespace OpenMesh {
 			_out << _be.n_faces() << " faces" << '\n';
 
 			// material file
-			if (useMatrial && _be.file_options().face_has_color())
-				_out << "mtllib " << objName_ << ".mat" << '\n';
+			// _out << "mtllib " << objName_ << ".mtl" << '\n';
 
-			// TODO export 3d texcoords?
-			// TODO this is terrible
-			std::map<Vec2f, int> texMap;
-			//collect Texturevertices from halfedges
-			if (_be.file_options().halfedge_has_texcoord2D())
-			{
-				//add all texCoords to map
-				for (int i = 0; i < _be.n_edges() * 2; ++i)
-				{
-					Vec2f tc = _be.texcoord2D(HalfedgeHandle(i));
-					texMap[tc] = i;
+			// compressed halfedge properties
+			std::vector<int> prop_tc_idx, prop_n_idx;
+
+			if (do_texcoord2D && _be.file_options().halfedge_has_texcoord2D()) {
+				// compress and write 2D texcoords
+				OMLOG_DEBUG << "compressing halfedge texcoords2D";
+				_be.compress_halfedge_properties<Vec2f>(
+					prop_tc_idx, 0,
+					[](const BaseExporter &be, HalfedgeHandle hh) {
+						return be.texcoord2D(hh);
+					},
+					[&](int i, Vec2f &&tc) {
+						_out << "vt " << tc[0] << " " << tc[1] << '\n';
+					}
+				);
+			} else if (do_texcoord2D) {
+				// write vertex 2D texcoords
+				for (int i = 0; i < _be.n_vertices(); ++i) {
+					Vec2f tc = _be.texcoord2D(VertexHandle(i));
+					_out << "vt " << tc[0] << " " << tc[1] << '\n';
 				}
 			}
 
-			//collect Texture coordinates from vertices
-			// FIXME HE coords should take precedence
-			if (_be.file_options().vertex_has_texcoord2D())
-			{
-				for (size_t i = 0, nV = _be.n_vertices(); i < nV; ++i)
-				{
-					vh = VertexHandle(static_cast<int>(i));
-					t = _be.texcoord2D(vh);
-					texMap[t] = static_cast<int>(i);
+			if (do_texcoord3D && _be.file_options().halfedge_has_texcoord3D()) {
+				// compress and write 3D texcoords
+				OMLOG_DEBUG << "compressing halfedge texcoords3D";
+				_be.compress_halfedge_properties<Vec3f>(
+					prop_tc_idx, 0,
+					[](const BaseExporter &be, HalfedgeHandle hh) {
+						return be.texcoord3D(hh);
+					},
+					[&](int i, Vec3f &&tc) {
+						_out << "vt " << tc[0] << " " << tc[1] << " " << tc[2] << '\n';
+					}
+				);
+			} else if (do_texcoord3D) {
+				// write vertex 3D texcoords
+				for (int i = 0; i < _be.n_vertices(); ++i) {
+					Vec3f tc = _be.texcoord3D(VertexHandle(i));
+					_out << "vt " << tc[0] << " " << tc[1] << " " << tc[2] << '\n';
 				}
 			}
 
-			// assign each texcoord in the map its id
-			// and write the vt entries
-			if (_be.file_options().vertex_has_texcoord2D() || _be.file_options().halfedge_has_texcoord2D())
-			{
-				int texCount = 0;
-				for (std::map<Vec2f, int>::iterator it = texMap.begin(); it != texMap.end(); ++it)
-				{
-					_out << "vt " << it->first[0] << " " << it->first[1] << '\n';
-					it->second = ++texCount;
-				}
-			}
-
-			// vertex data (point, normals, texcoords)
-			for (i = 0, nV = _be.n_vertices(); i < nV; ++i)
-			{
-				vh = VertexHandle(int(i));
-				v = _be.point(vh);
-				n = _be.normal(vh);
-				t = _be.texcoord2D(vh);
-
-				_out << "v " << v[0] << " " << v[1] << " " << v[2] << '\n';
-
-				if (_be.file_options().vertex_has_normal())
+			if (_be.file_options().halfedge_has_normal()) {
+				// compress and write normals
+				OMLOG_DEBUG << "compressing halfedge normals";
+				_be.compress_halfedge_properties<Vec3f>(
+					prop_n_idx, 0,
+					[](const BaseExporter &be, HalfedgeHandle hh) {
+						return be.normal(hh);
+					},
+					[&](int i, Vec3f &&n) {
+						_out << "vn " << n[0] << " " << n[1] << " " << n[2] << '\n';
+					}
+				);
+			} else if (_be.file_options().vertex_has_normal()) {
+				// write vertex normals
+				for (int i = 0; i < _be.n_vertices(); ++i) {
+					Vec3f n = _be.normal(VertexHandle(i));
 					_out << "vn " << n[0] << " " << n[1] << " " << n[2] << '\n';
+				}
+			}
+
+			// vertex points
+			for (int i = 0; i < _be.n_vertices(); ++i) {
+				Vec3f p = _be.point(VertexHandle(i));
+				_out << "v " << p[0] << " " << p[1] << " " << p[2] << '\n';
 			}
 
 			size_t lastMat = std::numeric_limits<std::size_t>::max();
 
 			// we do not want to write seperators if we only write vertex indices
-			bool onlyVertices = !_be.file_options().vertex_has_normal()
-				&& !_be.file_options().vertex_has_texcoord()
-				&& !_be.file_options().halfedge_has_normal()
-				&& !_be.file_options().halfedge_has_texcoord();
+			bool onlyVertices = !do_normal && !do_texcoord2D && !do_texcoord3D;
+
+			std::vector<VertexHandle> vhandles;
+			std::vector<HalfedgeHandle> hhandles;
 
 			// faces (indices starting at 1 not 0)
-			for (i = 0, nF = _be.n_faces(); i < nF; ++i)
-			{
-
-				if (useMatrial && _be.file_options().face_has_color()) {
-					size_t material = std::numeric_limits<std::size_t>::max();
-
-					//color with alpha
-					if (_be.file_options().color_has_alpha()) {
-						cA = color_cast<OpenMesh::Vec4f> (_be.colorA(FaceHandle(int(i))));
-						material = getMaterial(cA);
-					} else {
-						//and without alpha
-						c = color_cast<OpenMesh::Vec3f> (_be.color(FaceHandle(int(i))));
-						material = getMaterial(c);
-					}
-
-					// if we are ina a new material block, specify in the file which material to use
-					if (lastMat != material) {
-						_out << "usemtl mat" << material << '\n';
-						lastMat = material;
-					}
-				}
+			for (int i = 0; i < _be.n_faces(); ++i) {
 
 				_out << "f";
 
 				_be.face_vertex_handles(FaceHandle(int(i)), vhandles);
 				_be.face_halfedge_handles(FaceHandle(int(i)), hhandles);
 
-				for (j = 0; j < vhandles.size(); ++j)
-				{
+				for (int j = 0; j < vhandles.size(); ++j) {
+
+					VertexHandle vh = vhandles[j];
+					HalfedgeHandle hh = hhandles[j];
 
 					// Write vertex index
-					idx = vhandles[j].idx() + 1;
-					_out << " " << idx;
+					_out << " " << (vh.idx() + 1);
 
 					if (!onlyVertices) {
-						// write separator
 						_out << "/";
 
-						//write texCoords index from halfedge
-						if (_be.file_options().halfedge_has_texcoord())
-						{
-							_out << texMap[_be.texcoord2D(hhandles[j])];
+						if (_be.file_options().halfedge_has_texcoord()) {
+							// write texcoord index from halfedge
+							_out << (prop_tc_idx[hh.idx()] + 1);
+						} else if (_be.file_options().vertex_has_texcoord()) {
+							// write texcoord index from vertex
+							_out << (vh.idx() + 1);
 						}
 
-						else
-						{
-							// write vertex texture coordinate index
-							if (_be.file_options().vertex_has_texcoord())
-								_out << texMap[_be.texcoord2D(vhandles[j])];
-						}
-
-						// FIXME export halfedge normals
-
-						// write vertex normal index
-						if (_be.file_options().vertex_has_normal()) {
-							// write separator
+						if (_be.file_options().halfedge_has_normal()) {
+							// write normal index from halfedge
 							_out << "/";
-							_out << idx;
+							_out << (prop_n_idx[hh.idx()] + 1);
+						} else if (_be.file_options().vertex_has_normal()) {
+							// write normal index from vertex
+							_out << "/";
+							_out << (vh.idx() + 1);
 						}
+
 					}
 				}
 

@@ -160,6 +160,7 @@ namespace OpenMesh {
 
 			// connectivity
 			virtual HalfedgeHandle halfedge_handle(FaceHandle _fh) const = 0;
+			// outgoing
 			virtual HalfedgeHandle halfedge_handle(VertexHandle _vh) const = 0;
 			virtual HalfedgeHandle next_halfedge_handle(HalfedgeHandle _heh) const = 0;
 			virtual HalfedgeHandle opposite_halfedge_handle(HalfedgeHandle _heh) const = 0;
@@ -167,10 +168,11 @@ namespace OpenMesh {
 			virtual FaceHandle face_handle(HalfedgeHandle _heh) const = 0;
 			virtual size_t face_vertex_handles(FaceHandle _fh, std::vector<VertexHandle> &_vhandles) const = 0;
 			virtual size_t face_halfedge_handles(FaceHandle _fh, std::vector<HalfedgeHandle> &_hhandles) const = 0;
+			// outgoing
 			virtual size_t vertex_halfedge_handles(VertexHandle _vh, std::vector<HalfedgeHandle> &_hhandles) const = 0;
 			
 			// get reference to base kernel
-			virtual const BaseKernel *kernel() { return 0; }
+			virtual const BaseKernel * kernel() const { return 0; }
 
 			// number of faces, vertices, edges
 			virtual size_t n_vertices()   const = 0;
@@ -180,6 +182,44 @@ namespace OpenMesh {
 			// mesh information
 			virtual bool is_triangle_mesh()     const { return false; }
 
+			template <
+				typename T,
+				typename PackFn,
+				typename OutFn,
+				typename = std::enable_if_t<std::is_invocable_r_v<T, PackFn, const BaseExporter &, HalfedgeHandle>>,
+				typename = std::enable_if_t<std::is_invocable_v<OutFn, int, T &&>>
+			>
+			void compress_halfedge_properties(std::vector<int> &indices, const int idx0, PackFn &&packfn, OutFn &&outfn) {
+				const BaseKernel &mesh = *kernel();
+				indices.resize(n_edges() * 2);
+				int idx_next = idx0;
+				std::vector<HalfedgeHandle> hhandles;
+				std::vector<T> cache;
+				for (int iv = 0; iv < n_vertices(); ++iv) {
+					// search incoming halfedges at each vertex for duplicate values
+					VertexHandle vh{iv};
+					cache.clear();
+					vertex_halfedge_handles(vh, hhandles);
+					for (auto ohh : hhandles) {
+						auto hh = opposite_halfedge_handle(ohh);
+						T t = packfn(static_cast<const BaseExporter &>(*this), hh);
+						int idx1 = -1;
+						for (int j = 0; j < int(cache.size()); ++j) {
+							if (t == cache[j]) {
+								// use index of existing value
+								idx1 = idx_next - int(cache.size()) + j;
+								break;
+							}
+						}
+						if (idx1 < 0) {
+							// add a new value
+							idx1 = idx_next++;
+							outfn(idx1, std::move(t));
+						}
+						indices[hh.idx()] = idx1;
+					}
+				}
+			}
 		};
 
 

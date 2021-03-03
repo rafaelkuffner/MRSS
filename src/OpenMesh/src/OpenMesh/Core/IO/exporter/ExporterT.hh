@@ -309,7 +309,7 @@ namespace OpenMesh {
 				return _hhandles.size();
 			}
 
-			virtual const BaseKernel *kernel() override { return &mesh_; }
+			virtual const BaseKernel * kernel() const override { return &mesh_; }
 
 			// number of faces, vertices, edges
 			size_t n_vertices()  const override { return mesh_.n_vertices(); }
