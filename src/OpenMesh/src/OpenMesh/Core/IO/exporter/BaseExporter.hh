@@ -214,6 +214,7 @@ namespace OpenMesh {
 						if (idx1 < 0) {
 							// add a new value
 							idx1 = idx_next++;
+							cache.push_back(t);
 							outfn(idx1, std::move(t));
 						}
 						indices[hh.idx()] = idx1;
