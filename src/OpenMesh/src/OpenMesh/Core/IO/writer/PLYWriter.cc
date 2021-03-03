@@ -107,34 +107,43 @@ namespace OpenMesh {
 
 		bool _PLYWriter_::write(std::ostream &_os, BaseExporter &_be) const
 		{
-			// check writer features
-			if (_be.file_options().face_has_normal()) {
-				// Face normals are not supported
-				// Uncheck these options and output message that
-				// they are not written out even though they were requested
-				//_opt.fattribs &= ~AttributeBits::Normal;
-				OMLOG_WARNING << "Face normals are not supported and thus not exported!";
-			}
-
-			options_ = _be.file_options();
-
-
-			if (!_os.good())
-			{
+			if (!_os.good()) {
 				OMLOG_ERROR << "cannot write to stream";
 				return false;
 			}
 
-			// FIXME use non-stupid precision
-			if (!_be.file_options().check(OptionBits::Binary))
-				_os.precision(9);
+			const bool binary = _be.file_options().check(OptionBits::Binary);
+			OMLOG_INFO << "write file " << (binary ? "binary" : "ascii");
+			if (!binary) _os.precision(9);
+			
+			if (_be.file_options().face_has_normal()) {
+				OMLOG_WARNING << "Face normals not supported";
+			}
 
-			// write to file
-			bool result = (_be.file_options().check(OptionBits::Binary) ?
-				write_binary(_os, _be) :
-				write_ascii(_os, _be));
+			// cant export halfedge and vertex normals
+			if (_be.file_options().vertex_has_normal() && _be.file_options().halfedge_has_normal()) {
+				OMLOG_WARNING << "Prioritizing halfedge normals over vertex normals";
+			}
 
-			return result;
+			// cant export halfedge and vertex colors
+			// not supporting proper halfedge color export (unlikely to be needed)
+			if (_be.file_options().halfedge_has_color()) {
+				if (_be.file_options().vertex_has_color()) {
+					OMLOG_WARNING << "Prioritizing vertex colors over halfedge colors";
+				} else {
+					OMLOG_WARNING << "Truncating halfedge colors to vertex colors";
+				}
+			}
+
+			if (_be.file_options().halfedge_has_texcoord3D() || _be.file_options().vertex_has_texcoord3D()) {
+				// TODO is there any ply convention for 3D texcoords?
+				OMLOG_WARNING << "3D texture coords not supported";
+			}
+
+			options_ = _be.file_options();
+
+			return binary ? write_binary(_os, _be) : write_ascii(_os, _be);
+
 		}
 
 		//-----------------------------------------------------------------------------
@@ -271,12 +280,12 @@ namespace OpenMesh {
 				_out << "property float nz" << '\n';
 			}
 
-			if (_be.file_options().vertex_has_texcoord()) {
+			if (_be.file_options().vertex_has_texcoord2D()) {
 				_out << "property float u" << '\n';
 				_out << "property float v" << '\n';
 			}
 
-			if (_be.file_options().vertex_has_color()) {
+			if (_be.file_options().vertex_has_color() || _be.file_options().halfedge_has_color()) {
 				if (_be.file_options().color_is_float()) {
 					_out << "property float red" << '\n';
 					_out << "property float green" << '\n';
@@ -298,6 +307,10 @@ namespace OpenMesh {
 
 			_out << "element face " << _be.n_faces() << '\n';
 			_out << "property list uchar int vertex_indices" << '\n';
+
+			if (_be.file_options().halfedge_has_texcoord2D()) {
+				_out << "property list uchar float texcoord" << "\n";
+			}
 
 			if (_be.file_options().face_has_color()) {
 				if (_be.file_options().color_is_float()) {
@@ -339,6 +352,7 @@ namespace OpenMesh {
 			VertexHandle vh;
 			FaceHandle fh;
 			std::vector<VertexHandle> vhandles;
+			std::vector<HalfedgeHandle> hhandles;
 
 			std::vector<CustomProperty> vProps;
 			std::vector<CustomProperty> fProps;
@@ -374,7 +388,7 @@ namespace OpenMesh {
 				}
 
 				// VertexColor
-				if (_be.file_options().vertex_has_color()) {
+				if (_be.file_options().vertex_has_color() || _be.file_options().halfedge_has_color()) {
 					//with alpha
 					if (_be.file_options().color_has_alpha()) {
 						if (_be.file_options().color_is_float()) {
@@ -414,6 +428,16 @@ namespace OpenMesh {
 				_out << nV;
 				for (size_t j = 0; j < vhandles.size(); ++j)
 					_out << " " << vhandles[j].idx();
+
+				// halfedge texcoords on face
+				if (_be.file_options().halfedge_has_texcoord2D()) {
+					_out << " " << (nV * 2);
+					_be.face_halfedge_handles(fh, hhandles);
+					for (size_t j = 0; j < hhandles.size(); ++j) {
+						Vec2f tc = _be.texcoord2D(hhandles[j]);
+						_out << " " << tc[0] << " " << tc[1];
+					}
+				}
 
 				// FaceColor
 				if (_be.file_options().face_has_color()) {
@@ -594,6 +618,7 @@ namespace OpenMesh {
 			VertexHandle vh;
 			FaceHandle fh;
 			std::vector<VertexHandle> vhandles;
+			std::vector<HalfedgeHandle> hhandles;
 
 			// vProps and fProps will be empty, until custom properties are supported by the binary writer
 			std::vector<CustomProperty> vProps;
@@ -657,11 +682,22 @@ namespace OpenMesh {
 			{
 				fh = FaceHandle(i);
 
-				//face
+				// face
 				nV = _be.face_vertex_handles(fh, vhandles);
 				writeValue(ValueTypeUINT8, _out, nV);
 				for (size_t j = 0; j < vhandles.size(); ++j)
 					writeValue(ValueTypeINT32, _out, vhandles[j].idx());
+
+				// halfedge texcoords on face
+				if (_be.file_options().halfedge_has_texcoord2D()) {
+					writeValue(ValueTypeUINT8, _out, nV * 2);
+					_be.face_halfedge_handles(fh, hhandles);
+					for (size_t j = 0; j < hhandles.size(); ++j) {
+						Vec2f tc = _be.texcoord2D(hhandles[j]);
+						writeValue(ValueTypeFLOAT, _out, tc[0]);
+						writeValue(ValueTypeFLOAT, _out, tc[1]);
+					}
+				}
 
 				// face color
 				if (_be.file_options().face_has_color()) {
