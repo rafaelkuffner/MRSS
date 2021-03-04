@@ -153,7 +153,7 @@ protected:
   bool write_ascii(std::ostream& _out, BaseExporter&) const;
   bool write_binary(std::ostream& _out, BaseExporter&) const;
   /// write header into the stream _out. Returns custom properties (vertex and face) which are written into the header
-  void write_header(std::ostream& _out, BaseExporter& _be, std::vector<CustomProperty>& _ovProps, std::vector<CustomProperty>& _ofProps) const;
+  void write_header(std::ostream& _out, BaseExporter& _be, std::vector<CustomProperty>& _ovProps, std::vector<CustomProperty>& _ofProps, std::streamoff &nvert_offset) const;
 };
 
 

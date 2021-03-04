@@ -45,19 +45,20 @@
  //== INCLUDES =================================================================
 
 #include <fstream>
+#include <iostream>
+#include <tuple>
+#include <utility>
+
 #include <OpenMesh/Core/System/omstream.hh>
 #include <OpenMesh/Core/Utils/Endian.hh>
 #include <OpenMesh/Core/IO/IOManager.hh>
 #include <OpenMesh/Core/IO/BinaryHelper.hh>
 #include <OpenMesh/Core/IO/writer/PLYWriter.hh>
 
-#include <iostream>
-#include <iomanip>
 
 #define OMLOG_SOURCE PLYWriter
 
 //=== NAMESPACES ==============================================================
-
 
 namespace OpenMesh {
 	namespace IO {
@@ -254,7 +255,7 @@ namespace OpenMesh {
 
 
 
-		void _PLYWriter_::write_header(std::ostream &_out, BaseExporter &_be, std::vector<CustomProperty> &_ovProps, std::vector<CustomProperty> &_ofProps) const {
+		void _PLYWriter_::write_header(std::ostream &_out, BaseExporter &_be, std::vector<CustomProperty> &_ovProps, std::vector<CustomProperty> &_ofProps, std::streamoff &nvert_offset) const {
 			//writing header
 			_out << "ply" << '\n';
 
@@ -268,13 +269,16 @@ namespace OpenMesh {
 			} else
 				_out << "format ascii 1.0" << '\n';
 
-			_out << "element vertex " << _be.n_vertices() << '\n';
+			_out << "element vertex ";
+			// hackish: record offset where we need to write the vertex count and leave space for it
+			nvert_offset = _out.tellp();
+			_out << "              \n";
 
 			_out << "property float x" << '\n';
 			_out << "property float y" << '\n';
 			_out << "property float z" << '\n';
 
-			if (_be.file_options().vertex_has_normal()) {
+			if (_be.file_options().vertex_has_normal() || _be.file_options().halfedge_has_normal()) {
 				_out << "property float nx" << '\n';
 				_out << "property float ny" << '\n';
 				_out << "property float nz" << '\n';
@@ -341,49 +345,39 @@ namespace OpenMesh {
 
 		bool _PLYWriter_::write_ascii(std::ostream &_out, BaseExporter &_be) const
 		{
+			// compressed halfedge props: point, normal
+			// pretend that the point is a halfedge property because we may need to split vertices
+			using ch_props_t = std::tuple<VertexHandle, Vec3f, Vec3f>;
 
-			unsigned int i, nV, nF;
-			Vec3f v, n;
-			OpenMesh::Vec3uc c;
-			OpenMesh::Vec4uc cA;
-			OpenMesh::Vec3f cf;
-			OpenMesh::Vec4f cAf;
-			OpenMesh::Vec2f t;
-			VertexHandle vh;
-			FaceHandle fh;
-			std::vector<VertexHandle> vhandles;
-			std::vector<HalfedgeHandle> hhandles;
+			// compressed halfedge index
+			std::vector<int> prop_ch_idx;
 
 			std::vector<CustomProperty> vProps;
 			std::vector<CustomProperty> fProps;
+			std::streamoff nvert_offset = 0;
+			int nvert = 0;
 
-			write_header(_out, _be, vProps, fProps);
+			write_header(_out, _be, vProps, fProps, nvert_offset);
 
-			// should never apply fixed to everything because that would wreck precision for points
-			//if (_opt.color_is_float())
-			//  _out << std::fixed;
+			auto write_vertex = [&](int, ch_props_t &&chprops) {
+				const VertexHandle vh = std::get<0>(chprops);
+				const Vec3f v = std::get<1>(chprops);
+				const Vec3f n = std::get<2>(chprops);
 
-			// sufficient (iirc) to round-trip single-precision float
-			_out << std::setprecision(9);
+				// count emitted vertices
+				nvert++;
 
-			// vertex data (point, normals, colors, texcoords)
-			for (i = 0, nV = int(_be.n_vertices()); i < nV; ++i)
-			{
-				vh = VertexHandle(i);
-				v = _be.point(vh);
-
-				//Vertex
+				// Vertex
 				_out << v[0] << " " << v[1] << " " << v[2];
 
-				// Vertex Normals
-				if (_be.file_options().vertex_has_normal()) {
-					n = _be.normal(vh);
+				// Vertex/halfedge Normals
+				if (_be.file_options().vertex_has_normal() || _be.file_options().halfedge_has_normal()) {
 					_out << " " << n[0] << " " << n[1] << " " << n[2];
 				}
 
 				// Vertex TexCoords
 				if (_be.file_options().vertex_has_texcoord()) {
-					t = _be.texcoord2D(vh);
+					Vec2f t = _be.texcoord2D(vh);
 					_out << " " << t[0] << " " << t[1];
 				}
 
@@ -392,19 +386,19 @@ namespace OpenMesh {
 					//with alpha
 					if (_be.file_options().color_has_alpha()) {
 						if (_be.file_options().color_is_float()) {
-							cAf = _be.colorAf(vh);
+							auto cAf = _be.colorAf(vh);
 							_out << " " << cAf;
 						} else {
-							cA = _be.colorA(vh);
+							auto cA = _be.colorA(vh);
 							_out << " " << cA;
 						}
 					} else {
 						//without alpha
 						if (_be.file_options().color_is_float()) {
-							cf = _be.colorf(vh);
+							auto cf = _be.colorf(vh);
 							_out << " " << cf;
 						} else {
-							c = _be.color(vh);
+							auto c = _be.color(vh);
 							_out << " " << c;
 						}
 					}
@@ -413,26 +407,58 @@ namespace OpenMesh {
 
 				// write custom properties for vertices
 				for (std::vector<CustomProperty>::iterator iter = vProps.begin(); iter < vProps.end(); ++iter)
-					write_customProp<false>(_out, *iter, i);
+					write_customProp<false>(_out, *iter, vh.idx());
 
 				_out << "\n";
+			};
+
+			// vertex data (compressed halfedges)
+			if (_be.file_options().halfedge_has_normal()) {
+				OMLOG_DEBUG << "compressing halfedge properties and splitting vertices";
+				_be.compress_halfedge_properties<ch_props_t>(
+					prop_ch_idx, 0,
+					[](const BaseExporter &be, VertexHandle vh, HalfedgeHandle hh) {
+						return std::make_tuple(vh, be.point(vh), be.normal(hh));
+					},
+					write_vertex
+				);
+			} else {
+				for (int i = 0; i < _be.n_vertices(); ++i) {
+					VertexHandle vh{i};
+					write_vertex(i, std::make_tuple(vh, _be.point(vh), _be.normal(vh)));
+				}
 			}
 
-			// faces (indices starting at 0)
-			for (i = 0, nF = int(_be.n_faces()); i < nF; ++i)
-			{
-				fh = FaceHandle(i);
+			// hackish: seek back in stream and write actual vertex count
+			_out.seekp(nvert_offset, std::ios::beg);
+			_out << nvert;
+			_out.seekp(0, std::ios::end);
 
-				// write vertex indices per face
-				nV = _be.face_vertex_handles(fh, vhandles);
-				_out << nV;
-				for (size_t j = 0; j < vhandles.size(); ++j)
-					_out << " " << vhandles[j].idx();
+			std::vector<VertexHandle> vhandles;
+			std::vector<HalfedgeHandle> hhandles;
+
+			// faces (indices starting at 0)
+			for (int i = 0; i < _be.n_faces(); ++i)
+			{
+				const FaceHandle fh{i};
+				const int nv = _be.face_halfedge_handles(fh, hhandles);
+
+				// write vertex or compressed halfedge indices per face
+				_out << nv;
+				if (prop_ch_idx.size()) {
+					for (size_t j = 0; j < hhandles.size(); ++j) {
+						_out << " " << prop_ch_idx[hhandles[j].idx()];
+					}
+				} else {
+					_be.face_vertex_handles(fh, vhandles);
+					for (size_t j = 0; j < vhandles.size(); ++j) {
+						_out << " " << vhandles[j].idx();
+					}
+				}
 
 				// halfedge texcoords on face
 				if (_be.file_options().halfedge_has_texcoord2D()) {
-					_out << " " << (nV * 2);
-					_be.face_halfedge_handles(fh, hhandles);
+					_out << " " << (nv * 2);
 					for (size_t j = 0; j < hhandles.size(); ++j) {
 						Vec2f tc = _be.texcoord2D(hhandles[j]);
 						_out << " " << tc[0] << " " << tc[1];
@@ -444,19 +470,19 @@ namespace OpenMesh {
 					//with alpha
 					if (_be.file_options().color_has_alpha()) {
 						if (_be.file_options().color_is_float()) {
-							cAf = _be.colorAf(fh);
+							auto cAf = _be.colorAf(fh);
 							_out << " " << cAf;
 						} else {
-							cA = _be.colorA(fh);
+							auto cA = _be.colorA(fh);
 							_out << " " << cA;
 						}
 					} else {
 						//without alpha
 						if (_be.file_options().color_is_float()) {
-							cf = _be.colorf(fh);
+							auto cf = _be.colorf(fh);
 							_out << " " << cf;
 						} else {
-							c = _be.color(fh);
+							auto c = _be.color(fh);
 							_out << " " << c;
 						}
 					}
@@ -609,37 +635,36 @@ namespace OpenMesh {
 
 		bool _PLYWriter_::write_binary(std::ostream &_out, BaseExporter &_be) const
 		{
+			// compressed halfedge props: point, normal
+			// pretend that the point is a halfedge property because we may need to split vertices
+			using ch_props_t = std::tuple<VertexHandle, Vec3f, Vec3f>;
 
-			unsigned int i, nV, nF;
-			Vec3f v, n;
-			Vec2f t;
-			OpenMesh::Vec4uc c;
-			OpenMesh::Vec4f cf;
-			VertexHandle vh;
-			FaceHandle fh;
-			std::vector<VertexHandle> vhandles;
-			std::vector<HalfedgeHandle> hhandles;
+			// compressed halfedge index
+			std::vector<int> prop_ch_idx;
 
 			// vProps and fProps will be empty, until custom properties are supported by the binary writer
 			std::vector<CustomProperty> vProps;
 			std::vector<CustomProperty> fProps;
+			std::streamoff nvert_offset = 0;
+			int nvert = 0;
 
-			write_header(_out, _be, vProps, fProps);
+			write_header(_out, _be, vProps, fProps, nvert_offset);
 
-			// vertex data (point, normals, texcoords)
-			for (i = 0, nV = int(_be.n_vertices()); i < nV; ++i)
-			{
-				vh = VertexHandle(i);
-				v = _be.point(vh);
+			auto write_vertex = [&](int, ch_props_t &&chprops) {
+				const VertexHandle vh = std::get<0>(chprops);
+				const Vec3f v = std::get<1>(chprops);
+				const Vec3f n = std::get<2>(chprops);
+
+				// count emitted vertices
+				nvert++;
 
 				//vertex
 				writeValue(ValueTypeFLOAT, _out, v[0]);
 				writeValue(ValueTypeFLOAT, _out, v[1]);
 				writeValue(ValueTypeFLOAT, _out, v[2]);
 
-				// Vertex Normal
-				if (_be.file_options().vertex_has_normal()) {
-					n = _be.normal(vh);
+				// Vertex/halfedge Normal
+				if (_be.file_options().vertex_has_normal() || _be.file_options().halfedge_has_normal()) {
 					writeValue(ValueTypeFLOAT, _out, n[0]);
 					writeValue(ValueTypeFLOAT, _out, n[1]);
 					writeValue(ValueTypeFLOAT, _out, n[2]);
@@ -647,7 +672,7 @@ namespace OpenMesh {
 
 				// Vertex TexCoords
 				if (_be.file_options().vertex_has_texcoord2D()) {
-					t = _be.texcoord2D(vh);
+					Vec2f t = _be.texcoord2D(vh);
 					writeValue(ValueTypeFLOAT, _out, t[0]);
 					writeValue(ValueTypeFLOAT, _out, t[1]);
 				}
@@ -655,7 +680,7 @@ namespace OpenMesh {
 				// vertex color
 				if (_be.file_options().vertex_has_color()) {
 					if (_be.file_options().color_is_float()) {
-						cf = _be.colorAf(vh);
+						auto cf = _be.colorAf(vh);
 						writeValue(ValueTypeFLOAT, _out, cf[0]);
 						writeValue(ValueTypeFLOAT, _out, cf[1]);
 						writeValue(ValueTypeFLOAT, _out, cf[2]);
@@ -663,7 +688,7 @@ namespace OpenMesh {
 						if (_be.file_options().color_has_alpha())
 							writeValue(ValueTypeFLOAT, _out, cf[3]);
 					} else {
-						c = _be.colorA(vh);
+						auto c = _be.colorA(vh);
 						writeValue(ValueTypeUCHAR, _out, (int) c[0]);
 						writeValue(ValueTypeUCHAR, _out, (int) c[1]);
 						writeValue(ValueTypeUCHAR, _out, (int) c[2]);
@@ -674,24 +699,55 @@ namespace OpenMesh {
 				}
 
 				for (std::vector<CustomProperty>::iterator iter = vProps.begin(); iter < vProps.end(); ++iter)
-					write_customProp<true>(_out, *iter, i);
+					write_customProp<true>(_out, *iter, vh.idx());
+			};
+
+			// vertex data (compressed halfedges)
+			if (_be.file_options().halfedge_has_normal()) {
+				OMLOG_DEBUG << "compressing halfedge properties and splitting vertices";
+				_be.compress_halfedge_properties<ch_props_t>(
+					prop_ch_idx, 0,
+					[](const BaseExporter &be, VertexHandle vh, HalfedgeHandle hh) {
+						return std::make_tuple(vh, be.point(vh), be.normal(hh));
+					},
+					write_vertex
+				);
+			} else {
+				for (int i = 0; i < _be.n_vertices(); ++i) {
+					VertexHandle vh{i};
+					write_vertex(i, std::make_tuple(vh, _be.point(vh), _be.normal(vh)));
+				}
 			}
 
+			// hackish: seek back in stream and write actual vertex count
+			_out.seekp(nvert_offset, std::ios::beg);
+			_out << nvert;
+			_out.seekp(0, std::ios::end);
 
-			for (i = 0, nF = int(_be.n_faces()); i < nF; ++i)
+			std::vector<VertexHandle> vhandles;
+			std::vector<HalfedgeHandle> hhandles;
+
+			for (int i = 0; i < _be.n_faces(); ++i)
 			{
-				fh = FaceHandle(i);
+				const FaceHandle fh{i};
+				const int nv = _be.face_halfedge_handles(fh, hhandles);
 
-				// face
-				nV = _be.face_vertex_handles(fh, vhandles);
-				writeValue(ValueTypeUINT8, _out, nV);
-				for (size_t j = 0; j < vhandles.size(); ++j)
-					writeValue(ValueTypeINT32, _out, vhandles[j].idx());
+				// write vertex or compressed halfedge indices per face
+				writeValue(ValueTypeUINT8, _out, nv);
+				if (prop_ch_idx.size()) {
+					for (size_t j = 0; j < hhandles.size(); ++j) {
+						writeValue(ValueTypeINT32, _out, prop_ch_idx[hhandles[j].idx()]);
+					}
+				} else {
+					_be.face_vertex_handles(fh, vhandles);
+					for (size_t j = 0; j < vhandles.size(); ++j) {
+						writeValue(ValueTypeINT32, _out, vhandles[j].idx());
+					}
+				}
 
 				// halfedge texcoords on face
 				if (_be.file_options().halfedge_has_texcoord2D()) {
-					writeValue(ValueTypeUINT8, _out, nV * 2);
-					_be.face_halfedge_handles(fh, hhandles);
+					writeValue(ValueTypeUINT8, _out, nv * 2);
 					for (size_t j = 0; j < hhandles.size(); ++j) {
 						Vec2f tc = _be.texcoord2D(hhandles[j]);
 						writeValue(ValueTypeFLOAT, _out, tc[0]);
@@ -702,7 +758,7 @@ namespace OpenMesh {
 				// face color
 				if (_be.file_options().face_has_color()) {
 					if (_be.file_options().color_is_float()) {
-						cf = _be.colorAf(fh);
+						auto cf = _be.colorAf(fh);
 						writeValue(ValueTypeFLOAT, _out, cf[0]);
 						writeValue(ValueTypeFLOAT, _out, cf[1]);
 						writeValue(ValueTypeFLOAT, _out, cf[2]);
@@ -710,7 +766,7 @@ namespace OpenMesh {
 						if (_be.file_options().color_has_alpha())
 							writeValue(ValueTypeFLOAT, _out, cf[3]);
 					} else {
-						c = _be.colorA(fh);
+						auto c = _be.colorA(fh);
 						writeValue(ValueTypeUCHAR, _out, (int) c[0]);
 						writeValue(ValueTypeUCHAR, _out, (int) c[1]);
 						writeValue(ValueTypeUCHAR, _out, (int) c[2]);

@@ -186,7 +186,7 @@ namespace OpenMesh {
 				typename T,
 				typename PackFn,
 				typename OutFn,
-				typename = std::enable_if_t<std::is_invocable_r_v<T, PackFn, const BaseExporter &, HalfedgeHandle>>,
+				typename = std::enable_if_t<std::is_invocable_r_v<T, PackFn, const BaseExporter &, VertexHandle, HalfedgeHandle>>,
 				typename = std::enable_if_t<std::is_invocable_v<OutFn, int, T &&>>
 			>
 			void compress_halfedge_properties(std::vector<int> &indices, const int idx0, PackFn &&packfn, OutFn &&outfn) {
@@ -202,7 +202,7 @@ namespace OpenMesh {
 					vertex_halfedge_handles(vh, hhandles);
 					for (auto ohh : hhandles) {
 						auto hh = opposite_halfedge_handle(ohh);
-						T t = packfn(static_cast<const BaseExporter &>(*this), hh);
+						T t = packfn(static_cast<const BaseExporter &>(*this), vh, hh);
 						int idx1 = -1;
 						for (int j = 0; j < int(cache.size()); ++j) {
 							if (t == cache[j]) {
