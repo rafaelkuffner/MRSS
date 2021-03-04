@@ -1173,9 +1173,11 @@ namespace {
 		Model *pmr = &m;
 
 		try {
+			auto time0 = chrono::steady_clock::now();
 			ModelBase base{inpath};
-			// start timing after initial model load
+			// start compute timing after initial model load
 			time_compute_start = chrono::steady_clock::now();
+			cout << "loaded in " << ((time_compute_start - time0) / 1.0s) << "s" << endl;
 			m = Model(move(base));
 		} catch (exception &e) {
 			cout << "failed to load model: " << e.what() << endl;
@@ -1264,7 +1266,8 @@ namespace {
 			colorprop = do_dec ? decprop : do_sal ? "@-1" : "@0";
 		}
 
-		std::cout << "overall computation time: " << ((std::chrono::steady_clock::now() - time_compute_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+		auto time_compute_finish = chrono::steady_clock::now();
+		cout << "overall computation time: " << ((time_compute_finish - time_compute_start) / 1.0s) << "s" << endl;
 
 		if (outfile.size()) {
 			try {
@@ -1279,7 +1282,7 @@ namespace {
 					cout << "couldn't find saliency property '" << colorprop << "' for colorization" << endl;
 				}
 				if (colormode.size()) {
-					std::cout << "trying color mode " << colormode << std::endl;
+					cout << "trying color mode " << colormode << endl;
 					if (colormode == "none") {
 						sparams.color_mode = model_color_mode::none;
 					} else if (colormode == "vcolor") {
@@ -1290,12 +1293,14 @@ namespace {
 						sparams.color_mode = model_color_mode::saliency_comparison;
 						// TODO baseline selection (and consequent doc updates)
 					} else {
-						std::cout << "unknown color mode " << colormode << ", using saliency" << std::endl;
+						cout << "unknown color mode " << colormode << ", using saliency" << endl;
 					}
 				} else {
-					std::cout << "using color mode saliency" << std::endl;
+					cout << "using color mode saliency" << endl;
 				}
-				pmr->save(std::filesystem::u8path(outfile), sparams);
+				pmr->save(filesystem::u8path(outfile), sparams);
+				auto time1 = chrono::steady_clock::now();
+				cout << "saved in " << ((time1 - time_compute_finish) / 1.0s) << "s" << endl;
 			} catch (exception &e) {
 				cout << "failed to save model: " << e.what() << endl;
 				if (!show_gui) exit(1);
