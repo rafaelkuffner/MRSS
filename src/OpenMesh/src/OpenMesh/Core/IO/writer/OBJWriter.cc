@@ -206,32 +206,52 @@ namespace OpenMesh {
 		{
 			// TODO face color to material needs a re-write
 
+			if (!_out.good()) {
+				OMLOG_ERROR << "cannot write to stream";
+				return false;
+			}
+
 			OMLOG_INFO << "write file";
 
 			_out.precision(9);
 
 			// No binary mode for OBJ
 			if (_be.file_options().check(OptionBits::Binary)) {
-				OMLOG_WARNING << "Binary mode not supported by OBJ Writer, falling back to standard";
+				OMLOG_WARNING << "Binary mode not supported, falling back to ascii";
 			}
 
 			// check for unsupported writer features
 			if (_be.file_options().face_has_normal()) {
-				OMLOG_WARNING << "FaceNormal not supported by OBJ Writer";
+				OMLOG_WARNING << "Face normals not supported";
 			}
 
-			// cant export halfedge and vertex for eg normal
-			if (auto attribs = _be.file_options().vattribs & _be.file_options().hattribs; !!attribs) {
-				OMLOG_WARNING << "Prioritizing halfedge over vertex for attribs " << to_string(attribs);
+			// cant export halfedge and vertex normals
+			if (_be.file_options().vertex_has_normal() && _be.file_options().halfedge_has_normal()) {
+				OMLOG_WARNING << "Prioritizing halfedge normals over vertex normals";
+			}
+
+			// cant export halfedge and vertex colors
+			// not supporting proper halfedge color export (unlikely to be needed)
+			if (_be.file_options().halfedge_has_color()) {
+				if (_be.file_options().vertex_has_color()) {
+					OMLOG_WARNING << "Prioritizing vertex colors over halfedge colors";
+				} else {
+					OMLOG_WARNING << "Truncating halfedge colors to vertex colors";
+				}
 			}
 
 			bool do_texcoord2D = _be.file_options().halfedge_has_texcoord2D() || _be.file_options().vertex_has_texcoord2D();
 			bool do_texcoord3D = _be.file_options().halfedge_has_texcoord3D() || _be.file_options().vertex_has_texcoord3D();
 			bool do_normal = _be.file_options().halfedge_has_normal() || _be.file_options().vertex_has_normal();
+			bool do_color = _be.file_options().halfedge_has_color() || _be.file_options().vertex_has_color();
 
 			if (do_texcoord2D && do_texcoord3D) {
 				OMLOG_WARNING << "Cannot export both 2D and 3D texture coords, prioritizing 2D";
 				do_texcoord3D = false;
+			}
+
+			if (do_color && _be.file_options().color_has_alpha()) {
+				OMLOG_WARNING << "Alpha color component not supported";
 			}
 
 			// header
@@ -249,10 +269,10 @@ namespace OpenMesh {
 				OMLOG_DEBUG << "compressing halfedge texcoords2D";
 				_be.compress_halfedge_properties<Vec2f>(
 					prop_tc_idx, 0,
-					[](const BaseExporter &be, HalfedgeHandle hh) {
+					[](const BaseExporter &be, VertexHandle vh, HalfedgeHandle hh) {
 						return be.texcoord2D(hh);
 					},
-					[&](int i, Vec2f &&tc) {
+					[&](int, Vec2f &&tc) {
 						_out << "vt " << tc[0] << " " << tc[1] << '\n';
 					}
 				);
@@ -269,10 +289,10 @@ namespace OpenMesh {
 				OMLOG_DEBUG << "compressing halfedge texcoords3D";
 				_be.compress_halfedge_properties<Vec3f>(
 					prop_tc_idx, 0,
-					[](const BaseExporter &be, HalfedgeHandle hh) {
+					[](const BaseExporter &be, VertexHandle vh, HalfedgeHandle hh) {
 						return be.texcoord3D(hh);
 					},
-					[&](int i, Vec3f &&tc) {
+					[&](int, Vec3f &&tc) {
 						_out << "vt " << tc[0] << " " << tc[1] << " " << tc[2] << '\n';
 					}
 				);
@@ -289,10 +309,10 @@ namespace OpenMesh {
 				OMLOG_DEBUG << "compressing halfedge normals";
 				_be.compress_halfedge_properties<Vec3f>(
 					prop_n_idx, 0,
-					[](const BaseExporter &be, HalfedgeHandle hh) {
+					[](const BaseExporter &be, VertexHandle vh, HalfedgeHandle hh) {
 						return be.normal(hh);
 					},
-					[&](int i, Vec3f &&n) {
+					[&](int, Vec3f &&n) {
 						_out << "vn " << n[0] << " " << n[1] << " " << n[2] << '\n';
 					}
 				);
@@ -306,11 +326,16 @@ namespace OpenMesh {
 
 			// vertex points
 			for (int i = 0; i < _be.n_vertices(); ++i) {
-				Vec3f p = _be.point(VertexHandle(i));
-				_out << "v " << p[0] << " " << p[1] << " " << p[2] << '\n';
+				VertexHandle vh{i};
+				Vec3f p = _be.point(vh);
+				_out << "v " << p[0] << " " << p[1] << " " << p[2];
+				if (_be.file_options().vertex_has_color() || _be.file_options().halfedge_has_color()) {
+					// alpha not supported, always float
+					auto cf = _be.colorf(vh);
+					_out << " " << cf[0] << " " << cf[1] << " " << cf[2];
+				}
+				_out << '\n';
 			}
-
-			size_t lastMat = std::numeric_limits<std::size_t>::max();
 
 			// we do not want to write seperators if we only write vertex indices
 			bool onlyVertices = !do_normal && !do_texcoord2D && !do_texcoord3D;
