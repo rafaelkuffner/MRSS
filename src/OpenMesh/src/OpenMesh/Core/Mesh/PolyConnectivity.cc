@@ -759,13 +759,8 @@ void PolyConnectivity::collapse_edge(HalfedgeHandle _hh)
 
 
   // halfedge -> vertex
-  for (VertexIHalfedgeIter vih_it(vih_iter(vo)); vih_it.is_valid(); ++vih_it) {
+  for (VertexIHalfedgeIter vih_it(vih_iter(vo)); vih_it.is_valid(); ++vih_it)
     set_vertex_handle(*vih_it, vh);
-    // preserve halfedge properties at the kept vertex
-    // this is necessary for proper handling of texcoords and normals when decimating
-    // TODO is this always a good idea? how to tell?
-    copy_all_properties(h, *vih_it, true);
-  }
 
 
   // halfedge -> halfedge
