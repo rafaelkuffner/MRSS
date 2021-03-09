@@ -726,17 +726,24 @@ void PolyConnectivity::collapse(HalfedgeHandle _hh)
 {
   HalfedgeHandle h0 = _hh;
   HalfedgeHandle h1 = next_halfedge_handle(h0);
+  HalfedgeHandle h2 = next_halfedge_handle(h1);
   HalfedgeHandle o0 = opposite_halfedge_handle(h0);
   HalfedgeHandle o1 = next_halfedge_handle(o0);
+  HalfedgeHandle o2 = next_halfedge_handle(o1);
 
   // remove edge
   collapse_edge(h0);
 
   // remove loops
-  if (next_halfedge_handle(next_halfedge_handle(h1)) == h1)
-    collapse_loop(next_halfedge_handle(h1));
-  if (next_halfedge_handle(next_halfedge_handle(o1)) == o1)
+  // and preserve halfedge props on affected faces
+  if (next_halfedge_handle(h2) == h1) {
+    copy_all_properties(opposite_halfedge_handle(h2), h1, true);
+    collapse_loop(h2);
+  }
+  if (next_halfedge_handle(o2) == o1) {
+    copy_all_properties(opposite_halfedge_handle(o1), o2, true);
     collapse_loop(o1);
+  }
 }
 
 //-----------------------------------------------------------------------------

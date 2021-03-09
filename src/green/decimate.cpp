@@ -6,9 +6,11 @@
 *
 */
 
+#include <cstdint>
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <tuple>
 
 #include "OpenMesh/Tools/Decimater/DecimaterT.hh"
 #include "OpenMesh/Tools/Decimater/ModQuadricT.hh"
@@ -19,13 +21,14 @@
 namespace {
 
 	using namespace green;
+	using namespace OpenMesh;
 
 	using sal_prop_t = decltype(decimate_mesh_params::prop_saliency);
 
 	// left bin edges (with trailing upper edge)
-	std::vector<float> saliency_bin_edges(PolyMesh &mesh, sal_prop_t prop, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
+	std::vector<float> saliency_bin_edges(PolyMesh &mesh, sal_prop_t prop, VPropHandleT<int> prop_bin, int nbins) {
 		struct salvert {
-			OpenMesh::VertexHandle v;
+			VertexHandle v;
 			float s = 0;
 			bool operator<(const salvert &rhs) {
 				return s < rhs.s;
@@ -33,7 +36,7 @@ namespace {
 		};
 		std::vector<salvert> saliencies(mesh.n_vertices());
 		for (int i = 0; i < saliencies.size(); i++) {
-			OpenMesh::VertexHandle v(i);
+			VertexHandle v(i);
 			auto &sv = saliencies[i];
 			sv.v = v;
 			sv.s = prop.is_valid() ? mesh.property(prop, v) : 0.f;
@@ -55,7 +58,7 @@ namespace {
 		return sal_bin_edges;
 	}
 
-	std::vector<int> saliency_bin_counts(const PolyMesh &mesh, OpenMesh::VPropHandleT<int> prop_bin, int nbins) {
+	std::vector<int> saliency_bin_counts(const PolyMesh &mesh, VPropHandleT<int> prop_bin, int nbins) {
 		std::vector<int> counts(nbins, 0);
 		for (auto &bin : mesh.property(prop_bin).data_vector()) {
 			counts[bin]++;
@@ -63,8 +66,47 @@ namespace {
 		return counts;
 	}
 
+	template <typename MeshT>
+	auto seam_props(const MeshT &m, VertexHandle vh, HalfedgeHandle hh) {
+		return std::make_tuple(
+			m.has_halfedge_normals() ? m.normal(hh) : Vec3f(0),
+			m.has_halfedge_texcoords2D() ? m.texcoord2D(hh) : Vec2f(0),
+			m.has_halfedge_texcoords3D() ? m.texcoord3D(hh) : Vec3f(0)
+		);
+	}
+
+	template <typename MeshT>
+	bool is_seam(const MeshT &m, HalfedgeHandle hh) {
+		// also check connectivity boundary
+		if (m.is_boundary(hh)) return true;
+		VertexHandle vh = m.to_vertex_handle(hh);
+		HalfedgeHandle hb = m.prev_halfedge_handle(m.opposite_halfedge_handle(hh));
+		auto p0 = seam_props(m, vh, hh);
+		auto pb = seam_props(m, vh, hb);
+		return pb != p0;
+	}
+	
+	template <typename MeshT>
+	void compute_seams(MeshT &mesh, EPropHandleT<uint8_t> prop_seam, VPropHandleT<uint8_t> prop_seamarity) {
+		// edge seam prop is effectively boolean (defended against std::vector<bool>)
+		// label seam edges
+		for (auto eh : mesh.edges()) {
+			const bool b0 = is_seam(mesh, mesh.halfedge_handle(eh, 0));
+			const bool b1 = is_seam(mesh, mesh.halfedge_handle(eh, 1));
+			mesh.property(prop_seam, eh) = bool(b0 || b1);
+		}
+		for (auto vh : mesh.vertices()) {
+			int boundarity = 0;
+			// search incoming halfedges at each vertex for seam edges
+			for (auto it = mesh.cvih_begin(vh); it.is_valid(); ++it) {
+				boundarity += bool(mesh.property(prop_seam, mesh.edge_handle(*it)));
+			}
+			mesh.property(prop_seamarity, vh) = uint8_t(std::min<int>(255, boundarity));
+		}
+	}
+
 	template <class MeshT>
-	class ModVertexWeightingT : public OpenMesh::Decimater::ModBaseT<MeshT>
+	class ModVertexWeightingT : public Decimater::ModBaseT<MeshT>
 	{
 	public:
 
@@ -93,16 +135,78 @@ namespace {
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
+			// note: v0 gets removed
+			auto &mesh = _ci.mesh;
 			if (cancel) return Base::ILLEGAL_COLLAPSE;
-			if (!prop_bin.is_valid()) return Base::LEGAL_COLLAPSE;
-			//float s0 = _ci.mesh.property(prop_sal, _ci.v0);
-			//float s1 = _ci.mesh.property(prop_sal, _ci.v1);
-			// supposedly v0 gets removed
-			int bin = _ci.mesh.property(prop_bin, _ci.v0);
-			return bin == current_bin ? Base::LEGAL_COLLAPSE : Base::ILLEGAL_COLLAPSE;
+			if (prop_seam.is_valid() && prop_seamarity.is_valid()) {
+				const auto sa0 = mesh.property(prop_seamarity, _ci.v0);
+				const auto sa1 = mesh.property(prop_seamarity, _ci.v1);
+				// dont remove anything with boundarity 1 (terminus)
+				if (sa0 == 1) return Base::ILLEGAL_COLLAPSE;
+				// dont remove anything with boundarity > 2 (patch junction)
+				if (sa0 > 2) return Base::ILLEGAL_COLLAPSE;
+				// dont collapse edge into non-boundary
+				if (sa0 == 2 && sa1 == 0) return Base::ILLEGAL_COLLAPSE;
+				// 2 vertices on boundary edges may be connected by a non-boundary edge
+				if (sa0 > 1 && sa1 > 1 && !mesh.property(prop_seam, mesh.edge_handle(_ci.v0v1))) return Base::ILLEGAL_COLLAPSE;
+			}
+			if (prop_bin.is_valid()) {
+				const auto bin = mesh.property(prop_bin, _ci.v0);
+				// only allow collapse within current bin
+				if (bin != current_bin) return Base::ILLEGAL_COLLAPSE;
+			}
+			return Base::LEGAL_COLLAPSE;
 		}
 
-		virtual void postprocess_collapse(const CollapseInfo& _ci) {
+		virtual void preprocess_collapse(const CollapseInfo &_ci) override {
+			fix_properties(_ci);
+		}
+
+		virtual void postprocess_collapse(const CollapseInfo &_ci) override {
+			update_progress();
+			// TODO turn off check when sure of correctness
+			check_boundaries(_ci);
+		}
+
+		void check_boundaries(const CollapseInfo &_ci) {
+			auto &mesh = _ci.mesh;
+			for (auto it = mesh.cvih_begin(_ci.v1); it.is_valid(); ++it) {
+				if (is_seam(mesh, *it) && !mesh.property(prop_seam, mesh.edge_handle(*it))) {
+					std::cout << "BOUNDARY INCONSISTENCY" << std::endl;
+				}
+			}
+		}
+
+		// fix halfedge properties wrt seams so the result of collapsing is correct
+		void fix_properties(const CollapseInfo &_ci) {
+			if (!prop_seam.is_valid()) return;
+			auto &mesh = _ci.mesh;
+			const HalfedgeHandle h0 = _ci.v0v1;
+			const HalfedgeHandle h1 = mesh.next_halfedge_handle(h0);
+			const HalfedgeHandle h2 = mesh.next_halfedge_handle(h1);
+			const HalfedgeHandle o0 = _ci.v1v0;
+			const HalfedgeHandle o1 = mesh.next_halfedge_handle(o0);
+			const HalfedgeHandle o2 = mesh.next_halfedge_handle(o1);
+
+			// copy properties to other incoming halfedges at v0
+			HalfedgeHandle hs = h0;
+			for (HalfedgeHandle h = mesh.prev_halfedge_handle(h0); h != o0; h = mesh.prev_halfedge_handle(mesh.opposite_halfedge_handle(h))) {
+				mesh.copy_all_properties(hs, h, true);
+				// switch source halfedge when crossing seam
+				// this relies on v0 having boundarity <= 2
+				if (mesh.property(prop_seam, mesh.edge_handle(h))) hs = mesh.prev_halfedge_handle(o0);
+			}
+
+			// preserve seam flags of edges merged by loop collapse (of 2-gons)
+			if (mesh.next_halfedge_handle(h2) == h0 && mesh.property(prop_seam, mesh.edge_handle(h2))) {
+				mesh.property(prop_seam, mesh.edge_handle(h1)) = true;
+			}
+			if (mesh.next_halfedge_handle(o2) == o0 && mesh.property(prop_seam, mesh.edge_handle(o1))) {
+				mesh.property(prop_seam, mesh.edge_handle(o2)) = true;
+			}
+		}
+
+		void update_progress() {
 			collapses++;
 			if (collapses - collapses_last_progress > 5000) {
 				collapses_last_progress = collapses;
@@ -114,7 +218,9 @@ namespace {
 		}
 
 	public: // local
-		OpenMesh::VPropHandleT<int> prop_bin;
+		VPropHandleT<int> prop_bin;
+		VPropHandleT<uint8_t> prop_seamarity;
+		EPropHandleT<uint8_t> prop_seam;
 		int current_bin = 0;
 		decimate_progress *progress = nullptr;
 		int collapses = 0;
@@ -151,9 +257,19 @@ namespace green {
 
 		if (targetverts >= mparams.mesh->n_vertices()) return true;
 
+		// seam flags based on differences in halfedge properties
+		// (normal, texcoord2d, texcoord3d)
+		OpenMesh::EPropHandleT<uint8_t> prop_seam;
+		mparams.mesh->add_property(prop_seam);
+		// number of seam edges
+		OpenMesh::VPropHandleT<uint8_t> prop_seamarity;
+		mparams.mesh->add_property(prop_seamarity);
+		compute_seams(*mparams.mesh, prop_seam, prop_seamarity);
+
 		// explicit bin tags to deal with cases where there are large numbers
 		// of vertices with the same saliency values preventing bin discrimination
 		// TODO ensure this property is removed when eg cancelled
+		// TODO smaller data type?
 		OpenMesh::VPropHandleT<int> prop_bin;
 		mparams.mesh->add_property(prop_bin);
 
@@ -208,6 +324,8 @@ namespace green {
 		decimater.module(hModWeighting).progress = &progress;
 		decimater.module(hModWeighting).time_start = time_start;
 		decimater.module(hModWeighting).show_progress = uparams.show_progress;
+		decimater.module(hModWeighting).prop_seam = prop_seam;
+		decimater.module(hModWeighting).prop_seamarity = prop_seamarity;
 		
 		if (uparams.use_saliency) {
 			decimater.module(hModWeighting).prop_bin = prop_bin;
@@ -235,6 +353,8 @@ namespace green {
 		const auto fin_bin_counts = saliency_bin_counts(*mparams.mesh, prop_bin, nbins);
 
 		mparams.mesh->remove_property(prop_bin);
+		mparams.mesh->remove_property(prop_seam);
+		mparams.mesh->remove_property(prop_seamarity);
 
 		for (int i = 0; i < nbins; i++) {
 			int k = fin_bin_counts[i];
