@@ -110,7 +110,7 @@ namespace {
 		cgu::gl_rendertarget_params{GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, GL_RG32I, GL_RG_INTEGER, GL_INT}
 	};
 
-	std::vector<std::unique_ptr<Entity>> entities;
+	std::vector<std::unique_ptr<Entity>> entities, new_entities;
 	ModelEntity *select_model = nullptr;
 	ModelEntity *hover_model = nullptr;
 
@@ -375,6 +375,7 @@ namespace {
 		if (Begin("Decimation", &decimation_window_open)) {
 			// contents drawn by model entities
 		}
+		End();
 	}
 
 	void render_early_ui() {
@@ -721,6 +722,9 @@ namespace {
 				++it;
 			}
 		}
+		// add spawned entities to scene after iteration
+		entities.insert(entities.end(), make_move_iterator(new_entities.begin()), make_move_iterator(new_entities.end()));
+		new_entities.clear();
 
 		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 		glDisable(GL_CULL_FACE);
@@ -1328,7 +1332,7 @@ namespace {
 namespace green {
 
 	void spawn_entity(std::unique_ptr<Entity> e) {
-		entities.push_back(std::move(e));
+		new_entities.push_back(std::move(e));
 	}
 
 	entity_selection & ui_selection() {
