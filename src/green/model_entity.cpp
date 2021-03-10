@@ -35,6 +35,7 @@ namespace {
 			"Saliency\0"
 			"Saliency Comparison\0"
 			"Curvature (DoN)\0"
+			"Surface Normal\0"
 			"UVs\0"
 			"Checkerboard\0";
 		int x = int(mode);
@@ -839,6 +840,7 @@ namespace green {
 				if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
 				if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
 				if (m_disp_color_mode == model_color_mode::doncurv) color_map = 3;
+				if (m_disp_color_mode == model_color_mode::normal) color_map = 7;
 				if (m_disp_color_mode == model_color_mode::uv && m_model->has_texcoords2d()) color_map = 5;
 				if (m_disp_color_mode == model_color_mode::checkerboard && m_model->has_texcoords2d()) {
 					color_map = 6;

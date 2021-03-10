@@ -30,6 +30,7 @@ namespace green {
 		saliency,
 		saliency_comparison, 
 		doncurv,
+		normal,
 		uv,
 		checkerboard
 	};

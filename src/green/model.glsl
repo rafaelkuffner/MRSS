@@ -83,6 +83,9 @@ vec4 map_color(vec4 c) {
 	case 6:
 		// texture (implemented in frag shader)
 		return vec4(0);
+	case 7:
+		// surface normal (renormalized in frag shader)
+		return vec4(fetch_norm_m(), 0);
 	default:
 		return c;
 	}
@@ -170,8 +173,14 @@ void main() {
 	vec3 color = v_in.color.rgb;
 	// texture
 	if (u_color_map == 6) color = texture(u_sampler_col, v_in.uv).rgb;
-	// note: allowing -ve norm_v.z, such faces may still be visible
-	f_color = vec4(color * max(norm_v.z * u_shading + 1.0 - u_shading, 0.0), 1);
+	if (u_color_map == 7) {
+		// normal -> color (no extra shading)
+		// squaring looks better than abs
+		f_color = vec4(pow(normalize(color), vec3(2)), 1);
+	} else {
+		// note: allowing -ve norm_v.z, such faces may still be visible
+		f_color = vec4(color * max(norm_v.z * u_shading + 1.0 - u_shading, 0.0), 1);
+	}
 	gl_FragDepth = frag_depth() + u_depth_bias;
 	f_id.x = u_entity_id;
 	f_id.y = v_in.id;
