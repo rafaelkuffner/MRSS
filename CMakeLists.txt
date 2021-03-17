@@ -62,6 +62,9 @@ set_property(TARGET zlibstatic PROPERTY FOLDER "ext")
 # allow including headers from src tree with <>
 include_directories("src")
 
+# io lib
+add_subdirectory("src/iobuffer")
+
 # OpenMesh (modified)
 add_subdirectory("src/OpenMesh")
 include_directories("src/OpenMesh/src")
