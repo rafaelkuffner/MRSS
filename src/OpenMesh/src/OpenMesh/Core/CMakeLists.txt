@@ -50,6 +50,9 @@ endif ()
 # use c++17 (for std::filesystem etc) - ben
 target_compile_features(OpenMeshCore PUBLIC cxx_std_17)
 
+# link my io lib - ben
+target_link_libraries(OpenMeshCore PRIVATE iobuffer)
+
 if(MSVC)
 # parallel build - ben
 target_compile_options(OpenMeshCore PRIVATE /MP)
