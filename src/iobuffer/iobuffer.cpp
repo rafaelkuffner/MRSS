@@ -366,7 +366,7 @@ namespace iob {
 		return r;
 	}
 
-	void text_reader::seek(std::streamsize i, iobuffer::seek_origin origin) {
+	void text_reader::seek(std::streamoff i, iobuffer::seek_origin origin) {
 		assert(m_iobuf);
 		m_iobuf->seek(i, origin);
 	}
@@ -454,12 +454,22 @@ namespace iob {
 	}
 
 	std::string_view text_reader::get_line(char delim, char strip) {
-		auto s = peek_until_any(delim);
-		// s followed by either delim or eof
-		auto r = get(s.size() + 1);
-		if (r.size() && r.back() == delim) r.remove_suffix(1);
-		if (r.size() && r.back() == strip) r.remove_suffix(1);
-		return r;
+		// peek with 1 extra char to include the delim
+		auto s = peek_until([=](std::string_view v, std::string::size_type i) {
+			return v.find(delim, i);
+		}, 0, 1);
+		skip_peeked(s);
+		if (s.size() && s.back() == delim) s.remove_suffix(1);
+		if (s.size() && s.back() == strip) s.remove_suffix(1);
+		return s;
+	}
+
+	void text_reader::skip_line(char delim) {
+		// peek with 1 extra char to include the delim
+		auto s = peek_until([=](std::string_view v, std::string::size_type i) {
+			return v.find(delim, i);
+		}, 0, 1);
+		skip_peeked(s);
 	}
 
 	bool text_reader::has_any(std::string_view tokchars) {

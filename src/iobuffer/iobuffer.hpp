@@ -266,7 +266,7 @@ namespace iob {
 				std::string::size_type, FindDelim, std::string_view, std::string::size_type
 			>>
 		>
-		std::string_view peek_until(FindDelim &&find, std::streamoff base = 0) {
+		std::string_view peek_until(FindDelim &&find, std::streamoff base = 0, std::string::size_type extra = 0) {
 			assert(m_iobuf);
 			size_t z = 256;
 			std::string_view v;
@@ -326,6 +326,9 @@ namespace iob {
 		// read up to `delim` (or eof) and then remove any suffix equal to `strip`.
 		// at most one delimiter is consumed from the input but not returned.
 		std::string_view get_line(char delim = '\n', char strip = '\r');
+
+		// read up to `delim` (or eof) and then consume at most one delimiter.
+		void skip_line(char delim = '\n');
 
 		// check next char
 		bool has_any(std::string_view tokchars);
@@ -399,6 +402,27 @@ namespace iob {
 		}
 
 	};
+
+	constexpr std::string_view rstrip_any(std::string_view s, std::string_view schars = text_reader::whitespace) {
+		auto i = s.find_last_not_of(schars);
+		if (i == std::string::npos) return {};
+		return s.substr(0, i + 1);
+	}
+
+	constexpr std::string_view lstrip_any(std::string_view s, std::string_view schars = text_reader::whitespace) {
+		auto i = s.find_first_not_of(schars);
+		if (i == std::string::npos) return {};
+		return s.substr(i);
+	}
+
+	constexpr std::string_view strip_any(std::string_view s, std::string_view schars = text_reader::whitespace) {
+		return rstrip_any(lstrip_any(s, schars), schars);
+	}
+
+	static_assert(strip_any("") == "", "strip_any");
+	static_assert(strip_any(" a ") == "a", "strip_any");
+	static_assert(rstrip_any(" a ") == " a", "rstrip_any");
+	static_assert(lstrip_any(" a ") == "a ", "lstrip_any");
 
 }
 
