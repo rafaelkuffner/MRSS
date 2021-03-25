@@ -523,12 +523,11 @@ namespace OpenMesh {
 		//-----------------------------------------------------------------------------
 
 
-		bool _OBJReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi)
-		{
+		bool _OBJReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi) {
 			iob::file_buffer fbuf{_filename, iob::file_buffer::read};
 
 			if (!fbuf.is_open()) {
-				OMLOG_ERROR << "cannot not open file " << _filename.u8string();
+				OMLOG_ERROR << "Failed to open file " << _filename.u8string();
 				return false;
 			}
 
@@ -538,8 +537,7 @@ namespace OpenMesh {
 
 		//-----------------------------------------------------------------------------
 
-		bool _OBJReader_::read(std::istream &_in, BaseImporter &_bi)
-		{
+		bool _OBJReader_::read(std::istream &_in, BaseImporter &_bi) {
 			iob::stream_buffer sbuf{_in.rdbuf()};
 			OBJParser p{&sbuf, &_bi, ""};
 			return p.parse();

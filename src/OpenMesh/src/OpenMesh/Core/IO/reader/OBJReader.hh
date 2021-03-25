@@ -87,12 +87,12 @@ namespace OpenMesh {
 
 			virtual ~_OBJReader_() { }
 
-			std::string get_description() const { return "Alias/Wavefront"; }
-			std::string get_extensions()  const { return "obj"; }
+			virtual std::string get_description() const override { return "Alias/Wavefront"; }
+			virtual std::string get_extensions() const override { return "obj"; }
 
-			bool read(const std::filesystem::path &_filename, BaseImporter &_bi);
+			virtual bool read(const std::filesystem::path &_filename, BaseImporter &_bi) override;
 
-			bool read(std::istream &_in, BaseImporter &_bi);
+			virtual bool read(std::istream &_in, BaseImporter &_bi) override;
 
 		};
 
