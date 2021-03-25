@@ -13,8 +13,11 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
+#include <array>
 #include <vector>
 #include <tuple>
+#include <algorithm>
 #include <string_view>
 #include <charconv>
 #include <utility>
@@ -32,6 +35,92 @@
 
 namespace iob {
 
+	enum class endian : unsigned char {
+		little, big
+	};
+
+	endian native_integer_endian();
+	endian native_float_endian();
+
+	namespace detail {
+
+		template <size_t N>
+		struct byteswap_impl {
+			using type = std::array<unsigned char, N>;
+			static void apply(type &x) {
+				std::reverse(x.begin(), x.end());
+			}
+		};
+
+		template <>
+		struct byteswap_impl<1> {
+			using type = unsigned char;
+			static void apply(type &) {}
+		};
+
+#if defined(_MSC_VER)
+		template <>
+		struct byteswap_impl<sizeof(unsigned short)> {
+			using type = unsigned short;
+			static void apply(type &x) {
+				x = _byteswap_ushort(x);
+			}
+		};
+
+		template <>
+		struct byteswap_impl<sizeof(unsigned long)> {
+			using type = unsigned long;
+			static void apply(type &x) {
+				x = _byteswap_ulong(x);
+			}
+		};
+
+		template <>
+		struct byteswap_impl<sizeof(unsigned long long)> {
+			using type = unsigned long long;
+			static void apply(type &x) {
+				x = _byteswap_uint64(x);
+			}
+		};
+#elif defined(__GNUC__)
+		template <>
+		struct byteswap_impl<sizeof(uint16_t)> {
+			using type = uint16_t;
+			static void apply(type &x) {
+				x = __builtin_bswap16(x);
+			}
+		};
+
+		template <>
+		struct byteswap_impl<sizeof(uint32_t)> {
+			using type = uint32_t;
+			static void apply(type &x) {
+				x = __builtin_bswap32(x);
+			}
+		};
+
+		template <>
+		struct byteswap_impl<sizeof(uint64_t)> {
+			using type = uint64_t;
+			static void apply(type &x) {
+				x = __builtin_bswap64(x);
+			}
+		};
+#endif
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		inline T byteswap(T val) {
+			if constexpr (sizeof(T) <= 1) return val;
+			using impl = byteswap_impl<sizeof(T)>;
+			using swap_t = typename impl::type;
+			swap_t x;
+			std::memcpy(&x, &val, sizeof(val));
+			impl::apply(x);
+			std::memcpy(&val, &x, sizeof(val));
+			return val;
+		}
+	}
+
 	class iobuffer {
 		// underlying stream is expected to always be in binary mode.
 		// append modes should work but will need testing.
@@ -48,6 +137,7 @@ namespace iob {
 		std::streamoff m_begin_write = 0, m_cursor = 0, m_end_read = 0;
 		bool m_eof = false, m_bad = false;
 		bool m_reading = false, m_writing = false;
+		bool m_report_eof = false;
 #ifndef _NDEBUG
 		std::streamsize m_put_len = 0;
 #endif
@@ -76,7 +166,9 @@ namespace iob {
 		}
 
 		bool eof() const noexcept {
-			return m_cursor == m_end_read && m_eof;
+			// should only report eof after a get that returned less than requested.
+			// ie a get(1) that returns the last byte should not cause eof status.
+			return m_report_eof;
 		}
 
 		IOB_NOINLINE
@@ -243,6 +335,8 @@ namespace iob {
 		
 		void seek(std::streamoff i, iobuffer::seek_origin origin);
 
+		std::streampos tell() const;
+
 		template <typename T, typename = std::enable_if_t<std::is_unsigned_v<T>>>
 		std::string_view peek(T n, std::streamoff base = 0) {
 			return peek(std::streamoff(n), base);
@@ -277,7 +371,7 @@ namespace iob {
 				if (v.size() > i0) {
 					if (auto i = find(v, i0); i != std::string::npos) {
 						// found delim
-						return peek(i, base);
+						return peek(i + extra, base);
 					}
 				} else {
 					// no size increase => eof
@@ -348,25 +442,43 @@ namespace iob {
 		// maybe get char sequence
 		std::string_view get_seq(std::string_view tok);
 
+		std::string_view peek_until_ws();
+
+		std::string_view peek_while_ws();
+
 		std::string_view get_until_ws();
 
 		std::string_view get_while_ws();
 
-		template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+		void skip_ws();
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 		IOB_NOINLINE
 		std::errc get_int(T &val, int base = 10) {
-			auto s = peek(32);
-			auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), val, base);
-			get(end - s.data());
-			return ec;
+			if constexpr (std::is_integral_v<T>) {
+				auto s = peek(32);
+				auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), val, base);
+				get(end - s.data());
+				// TODO return io_error on eof?
+				return ec;
+			} else {
+				// allow get of integer value as float type
+				intmax_t x = 0;
+				auto ec = get_int(x, base);
+				if (ec != std::errc{}) return ec;
+				val = T(x);
+				return {};
+			}
 		}
 
 		template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
 		IOB_NOINLINE
 		std::errc get_float(T &val, std::chars_format fmt = std::chars_format::general) {
+			static_assert(std::is_floating_point_v<T>, "must get float as float");
 			auto s = peek(32);
 			auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), val, fmt);
 			get(end - s.data());
+			// TODO return io_error on eof?
 			return ec;
 		}
 
@@ -399,6 +511,148 @@ namespace iob {
 			int r = 0;
 			(... && (get_while_any(delimchars), (ec = get_float(std::get<Is>(vals), fmt)), r += int(ec == std::errc{}), ec == std::errc{}));
 			return {ec, r};
+		}
+
+	};
+
+	class binary_reader {
+	private:
+		iobuffer *m_iobuf = nullptr;
+		iob::endian m_endian = endian::little;
+		iob::endian m_native_integer_endian = native_integer_endian();
+		iob::endian m_native_float_endian = native_float_endian();
+
+	public:
+		using uchar = iobuffer::uchar;
+		using uchar_view = iobuffer::uchar_view;
+
+		binary_reader() = default;
+
+		explicit binary_reader(iobuffer *iobuf_) : m_iobuf(iobuf_) {}
+
+		iobuffer * iobuf() const noexcept {
+			return m_iobuf;
+		}
+
+		explicit operator bool() const noexcept {
+			return m_iobuf && *m_iobuf;
+		}
+
+		bool good() const noexcept {
+			return m_iobuf && m_iobuf->good();
+		}
+
+		bool bad() const noexcept {
+			return !m_iobuf || m_iobuf->bad();
+		}
+
+		bool eof() const noexcept {
+			return m_iobuf && m_iobuf->eof();
+		}
+
+		iob::endian endian() const noexcept {
+			return m_endian;
+		}
+
+		void endian(iob::endian e) noexcept {
+			m_endian = e;
+		}
+
+		void seek(std::streamoff i, iobuffer::seek_origin origin);
+
+		std::streampos tell() const;
+
+		template <typename T, typename = std::enable_if_t<std::is_unsigned_v<T>>>
+		uchar_view peek(T n, std::streamoff base = 0) {
+			return peek(std::streamoff(n), base);
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_unsigned_v<T>>>
+		uchar_view get(T n) {
+			return get(std::streamoff(n));
+		}
+
+		uchar_view peek(std::streamsize n, std::streamoff base = 0);
+
+		uchar_view get(std::streamsize n);
+
+		void skip_peeked(uchar_view s);
+
+		std::string_view get_str(std::streamsize n);
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		T get_val() {
+			T val{0};
+			const auto nr = m_iobuf->get(reinterpret_cast<uchar *>(&val), sizeof(val));
+			if constexpr (std::is_integral_v<T>) {
+				if (m_native_integer_endian != m_endian) val = detail::byteswap(val);
+			} else if constexpr (std::is_floating_point_v<T>) {
+				if (m_native_float_endian != m_endian) val = detail::byteswap(val);
+			} else {
+				static_assert(false, "bad type for get_val");
+			}
+			return nr < sizeof(val) ? T{0} : val;
+		}
+
+		template <typename ...Ts, typename = std::enable_if_t<(... && std::is_arithmetic_v<Ts>)>>
+		IOB_FORCEINLINE
+		bool get_vals(Ts &...vals) {
+			(void)(..., (vals = get_val<Ts>()));
+			return !eof();
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		std::errc get_var_uint(T &val, size_t n) {
+			using get_t = uintmax_t;
+			assert(n <= sizeof(get_t));
+			get_t x{0};
+			const auto nr = m_iobuf->get(reinterpret_cast<uchar *>(&x), std::streamsize(n));
+			if (nr < std::streamsize(n)) return std::errc::io_error;
+			if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
+			const size_t shift = CHAR_BIT * (sizeof(get_t) - n);
+			if (m_endian == endian::big) x >>= shift;
+			if (std::is_integral_v<T> && x > get_t(std::numeric_limits<T>::max())) return std::errc::result_out_of_range;
+			val = T(x);
+			return std::errc{};
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		std::errc get_var_sint(T &val, size_t n) {
+			using get_t = intmax_t;
+			assert(n <= sizeof(get_t));
+			get_t x{0};
+			const auto nr = m_iobuf->get(reinterpret_cast<uchar *>(&x), std::streamsize(n));
+			if (nr < std::streamsize(n)) return std::errc::io_error;
+			if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
+			const size_t shift = CHAR_BIT * (sizeof(get_t) - n);
+			if (m_endian == endian::little) x <<= shift;
+			static_assert((-1 >> 1) == -1, "need arithmetic right shift");
+			x >>= shift;
+			if (std::is_integral_v<T> && x < get_t(std::numeric_limits<T>::lowest())) return std::errc::result_out_of_range;
+			if (std::is_integral_v<T> && x > get_t(std::numeric_limits<T>::max())) return std::errc::result_out_of_range;
+			val = T(x);
+			return std::errc{};
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+		std::errc get_var_float(T &val, size_t n) {
+			static_assert(std::is_floating_point_v<T>, "must get float as float");
+			if (n == sizeof(float)) {
+				using get_t = float;
+				auto x = get_val<get_t>();
+				if (eof()) return std::errc::io_error;
+				val = T(x);
+				return std::errc{};
+			} else if (n == sizeof(double)) {
+				using get_t = double;
+				auto x = get_val<get_t>();
+				if (eof()) return std::errc::io_error;
+				val = T(x);
+				return std::errc{};
+			} else {
+				assert(false && "bad float size");
+				return std::errc::invalid_argument;
+			}
 		}
 
 	};

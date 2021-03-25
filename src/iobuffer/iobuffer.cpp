@@ -28,6 +28,19 @@ namespace {
 
 namespace iob {
 
+	endian native_integer_endian() {
+		constexpr auto test = uintptr_t(endian::little) | (uintptr_t(endian::big) << (CHAR_BIT * (sizeof(uintptr_t) - 1)));
+		endian x{*reinterpret_cast<const uchar *>(&test)};
+		assert(x == endian::little || x == endian::big);
+		return x;
+	}
+
+	endian native_float_endian() {
+		constexpr auto test = -1.f;
+		uchar c = *reinterpret_cast<const uchar *>(&test);
+		return c ? endian::big : endian::little;
+	}
+
 	std::streampos iobuffer::tell() {
 		if (m_writing) {
 			return tell_impl() + m_cursor - m_begin_write;
@@ -43,6 +56,7 @@ namespace iob {
 		m_cursor = 0;
 		m_end_read = 0;
 		m_eof = false;
+		m_report_eof = false;
 		// seek can be used to switch to either read or write
 		// ie. user calls seek() then either get or put
 		m_reading = false;
@@ -85,27 +99,39 @@ namespace iob {
 		auto r = peek(n);
 		m_cursor += std::streamsize(r.size());
 		m_begin_write = m_cursor;
+		m_report_eof = std::streamsize(r.size()) < n;
 		return r;
 	}
 
 	std::streamsize iobuffer::get(uchar *buf, std::streamsize n) {
 		assert(buf);
-		assert(m_begin_write == m_cursor);
+		if (n < 0) return 0;
 		read_mode();
+		assert(m_begin_write == m_cursor);
 		const auto n0 = std::min(gavail(), n);
 		const auto n1 = n - n0;
+		assert(n1 >= 0);
 		std::memcpy(buf, m_buf.data() + m_cursor, size_t(n0));
 		m_cursor += n0;
 		m_begin_write = m_cursor;
-		if (n1 > 0) {
+		if (n1 == 0) {
+			return n0;
+		} else if (m_eof) {
+			m_report_eof = true;
+			return n0;
+		} else if (n1 >= capacity()) {
 			const auto n1r = get_impl(buf + n0, n1);
 			if (n1r < n1) {
 				m_eof = true;
+				m_report_eof = true;
 				m_bad = error_impl();
 			}
 			return n0 + n1r;
 		} else {
-			return n0;
+			compact();
+			assert(m_cursor == 0);
+			fill();
+			return n0 + get(buf + n0, n1);
 		}
 	}
 
@@ -371,6 +397,11 @@ namespace iob {
 		m_iobuf->seek(i, origin);
 	}
 
+	std::streampos text_reader::tell() const {
+		assert(m_iobuf);
+		return m_iobuf->tell();
+	}
+
 	std::string_view text_reader::peek(std::streamsize n, std::streamoff base) {
 		assert(m_iobuf);
 		auto v = m_iobuf->peek(n, base);
@@ -512,6 +543,14 @@ namespace iob {
 		return s;
 	}
 
+	std::string_view text_reader::peek_until_ws() {
+		return peek_until_any(whitespace);
+	}
+
+	std::string_view text_reader::peek_while_ws() {
+		return peek_while_any(whitespace);
+	}
+
 	std::string_view text_reader::get_until_ws() {
 		return get_until_any(whitespace);
 	}
@@ -519,5 +558,40 @@ namespace iob {
 	std::string_view text_reader::get_while_ws() {
 		return get_while_any(whitespace);
 	}
+
+	void text_reader::skip_ws() {
+		get_while_ws();
+	}
+
+	void binary_reader::seek(std::streamoff i, iobuffer::seek_origin origin) {
+		assert(m_iobuf);
+		m_iobuf->seek(i, origin);
+	}
+
+	std::streampos binary_reader::tell() const {
+		assert(m_iobuf);
+		return m_iobuf->tell();
+	}
+
+	uchar_view binary_reader::peek(std::streamsize n, std::streamoff base) {
+		assert(m_iobuf);
+		return m_iobuf->peek(n, base);
+	}
+
+	uchar_view binary_reader::get(std::streamsize n) {
+		assert(m_iobuf);
+		return m_iobuf->get(n);
+	}
+
+	void binary_reader::skip_peeked(uchar_view s) {
+		assert(m_iobuf);
+		m_iobuf->skip_peeked(s);
+	}
+
+	std::string_view binary_reader::get_str(std::streamsize n) {
+		return string_view_cast(get(n));
+	}
+
+	
 
 }
