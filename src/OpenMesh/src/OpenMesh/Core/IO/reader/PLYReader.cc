@@ -43,6 +43,8 @@
 
  //== INCLUDES =================================================================
 
+#include <iobuffer/iobuffer.hpp>
+
  // OpenMesh
 #include <OpenMesh/Core/System/config.h>
 #include <OpenMesh/Core/System/omstream.hh>
@@ -78,81 +80,6 @@ namespace OpenMesh {
 
 		//=== IMPLEMENTATION ==========================================================
 
-
-		_PLYReader_::_PLYReader_() {
-			IOManager().register_module(this);
-
-			// Store sizes in byte of each property type
-			scalar_size_[ValueTypeINT8] = 1;
-			scalar_size_[ValueTypeUINT8] = 1;
-			scalar_size_[ValueTypeINT16] = 2;
-			scalar_size_[ValueTypeUINT16] = 2;
-			scalar_size_[ValueTypeINT32] = 4;
-			scalar_size_[ValueTypeUINT32] = 4;
-			scalar_size_[ValueTypeFLOAT32] = 4;
-			scalar_size_[ValueTypeFLOAT64] = 8;
-
-			scalar_size_[ValueTypeCHAR] = 1;
-			scalar_size_[ValueTypeUCHAR] = 1;
-			scalar_size_[ValueTypeSHORT] = 2;
-			scalar_size_[ValueTypeUSHORT] = 2;
-			scalar_size_[ValueTypeINT] = 4;
-			scalar_size_[ValueTypeUINT] = 4;
-			scalar_size_[ValueTypeFLOAT] = 4;
-			scalar_size_[ValueTypeDOUBLE] = 8;
-		}
-
-		//-----------------------------------------------------------------------------
-
-
-		bool _PLYReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi) {
-
-			std::fstream in(_filename, (std::ios_base::binary | std::ios_base::in));
-
-			if (!in.is_open() || !in.good()) {
-				OMLOG_ERROR << "cannot not open file " << _filename.u8string();
-				return false;
-			}
-
-			bool result = read(in, _bi);
-
-			in.close();
-			return result;
-		}
-
-		//-----------------------------------------------------------------------------
-
-
-		bool _PLYReader_::read(std::istream &_in, BaseImporter &_bi) {
-
-			if (!_in.good()) {
-				OMLOG_ERROR << "cannot not use stream";
-				return false;
-			}
-
-			// Reparse the header
-			if (!can_u_read(_in)) {
-				OMLOG_ERROR << "unable to parse header";
-				return false;
-			}
-
-			// filter relevant options for reading
-			// byte swap option not used anymore?
-			bool swap = _bi.user_options().check(OptionBits::Swap);
-
-			_bi.request_vattribs(options_.vattribs);
-			_bi.request_hattribs(options_.hattribs);
-			_bi.request_fattribs(options_.fattribs);
-			_bi.set_file_options(options_.flags);
-
-			//    //force user-choice for the alpha value when reading binary
-			//    if ( options_.is_binary() && userOptions_.color_has_alpha() )
-			//      options_ += Options::ColorAlpha;
-
-			return (options_.is_binary() ? read_binary(_in, _bi, swap) : read_ascii(_in, _bi));
-
-		}
-
 		template<typename T, typename Handle>
 		struct Handle2Prop;
 
@@ -168,1291 +95,900 @@ namespace OpenMesh {
 			typedef OpenMesh::FPropHandleT<T> PropT;
 		};
 
-		//read and assign custom properties with the given type. Also creates property, if not exist
-		template<bool binary, typename T, typename Handle>
-		void _PLYReader_::readCreateCustomProperty(std::istream &_in, BaseImporter &_bi, Handle _h, const std::string &_propName, const _PLYReader_::ValueType _valueType, const _PLYReader_::ValueType _listType) const
-		{
-			if (_listType == Unsupported) //no list type defined -> property is not a list
+		class PLYParser {
+		public:
+			// TODO use cstdint types instead of assuming sizes of language types
+			enum ValueType {
+				Unsupported,
+				ValueTypeINT8, ValueTypeCHAR,
+				ValueTypeUINT8, ValueTypeUCHAR,
+				ValueTypeINT16, ValueTypeSHORT,
+				ValueTypeUINT16, ValueTypeUSHORT,
+				ValueTypeINT32, ValueTypeINT,
+				ValueTypeUINT32, ValueTypeUINT,
+				ValueTypeFLOAT32, ValueTypeFLOAT,
+				ValueTypeFLOAT64, ValueTypeDOUBLE
+			};
+
+			enum Property {
+				XCOORD, YCOORD, ZCOORD,
+				TEXX, TEXY,
+				COLORRED, COLORGREEN, COLORBLUE, COLORALPHA,
+				XNORM, YNORM, ZNORM, CUSTOM_PROP, VERTEX_INDICES, TEXCOORDS,
+				UNSUPPORTED
+			};
+
+			enum Element {
+				VERTEX,
+				FACE,
+				UNKNOWN
+			};
+
+			struct PropertyInfo
 			{
-				//get/add property
+				Property       property;
+				ValueType      value;
+				ValueType      listIndexType; //if type is unsupported, the poerty is not a list. otherwise, it the index type
+				BaseHandle     handle; // for custom properties
+				std::string    name; //for custom properties
+				
+				PropertyInfo() :property(UNSUPPORTED), value(Unsupported), name(""), listIndexType(Unsupported) {}
+				PropertyInfo(Property _p, ValueType _v) :property(_p), value(_v), name(""), listIndexType(Unsupported) {}
+				PropertyInfo(Property _p, ValueType _v, std::string_view _n) :property(_p), value(_v), name(_n), listIndexType(Unsupported) {}
+			};
+
+			struct ElementInfo
+			{
+				Element element_;
+				std::string name_;
+				int count_;
+				std::vector<PropertyInfo> properties_;
+			};
+
+		private:
+			iob::iobuffer *m_buf = nullptr;
+			BaseImporter *m_bi = nullptr;
+			Options options_;
+			std::vector<ElementInfo> elements_;
+			int vertexDimension_ = 0;
+			int vertexCount_ = 0;
+			int faceCount_ = 0;
+
+		public:
+			PLYParser() = default;
+
+			PLYParser(iob::iobuffer *_buf, BaseImporter *_bi) : m_buf{_buf}, m_bi{_bi} {}
+
+			bool parse_header();
+
+			bool parse();
+
+		private:
+			ValueType value_type(std::string_view s) const {
+				if (s == "float32") return ValueTypeFLOAT32;
+				else if (s == "float64") return ValueTypeFLOAT64;
+				else if (s == "float") return ValueTypeFLOAT;
+				else if (s == "double") return ValueTypeDOUBLE;
+				else if (s == "int8") return ValueTypeINT8;
+				else if (s == "uint8") return ValueTypeUINT8;
+				else if (s == "char") return ValueTypeCHAR;
+				else if (s == "uchar") return ValueTypeUCHAR;
+				else if (s == "int32") return ValueTypeINT32;
+				else if (s == "uint32") return ValueTypeUINT32;
+				else if (s == "int") return ValueTypeINT;
+				else if (s == "uint") return ValueTypeUINT;
+				else if (s == "int16") return ValueTypeINT16;
+				else if (s == "uint16") return ValueTypeUINT16;
+				else if (s == "short") return ValueTypeSHORT;
+				else if (s == "ushort") return ValueTypeUSHORT;
+				return Unsupported;
+			}
+
+			std::string_view property_typename(std::string_view s1, std::string_view s2) const {
+				ValueType t1 = value_type(s1);
+				if (t1 != Unsupported) return s1;
+				// if the first field is not a valid type, try the second in case they are switched
+				// if they're both type names, assume the second field is the property name
+				return s2;
+			}
+
+			std::string_view property_name(std::string_view s1, std::string_view s2) const {
+				ValueType t1 = value_type(s1);
+				if (t1 != Unsupported) return s2;
+				// if the first field is not a valid type, try the second in case they are switched
+				ValueType t2 = value_type(s2);
+				if (t2 != Unsupported) return s1;
+				// if neither is a valid type, give up
+				return {};
+			}
+
+			template <typename T>
+			void get(ValueType _type, iob::binary_reader &_in, T &_value) {
+				std::errc ec{};
+				if (is_float_[_type]) {
+					if constexpr (std::is_floating_point_v<T>) {
+						ec = _in.get_var_float(_value, scalar_size_[_type]);
+					} else {
+						OMLOG_ERROR << "Cannot read float value as non-float type";
+						throw std::errc::invalid_argument;
+					}
+				} else if (is_sint_[_type]) {
+					ec = _in.get_var_sint(_value, scalar_size_[_type]);
+				} else if (is_uint_[_type]) {
+					ec = _in.get_var_uint(_value, scalar_size_[_type]);
+				} else {
+					assert(false);
+				}
+				if (ec != std::errc{}) throw ec;
+			}
+
+			template <typename T>
+			void get(ValueType _type, iob::text_reader &_in, T &_value) {
+				_in.skip_ws();
+				std::errc ec{};
+				if (is_float_[_type]) {
+					if constexpr (std::is_floating_point_v<T>) {
+						ec = _in.get_float(_value);
+					} else {
+						OMLOG_ERROR << "Cannot read float value as non-float type";
+						throw std::errc::invalid_argument;
+					}
+				} else if (is_sint_[_type] || is_uint_[_type]) {
+					ec = _in.get_int(_value);
+				} else {
+					assert(false);
+				}
+				if (ec != std::errc{}) throw ec;
+			}
+
+			template <typename Reader>
+			void get_color(ValueType _type, Reader &_in, float &_value) {
+				if (is_float_[_type]) {
+					get(_type, _in, _value);
+				} else if (is_uint_[_type]) {
+					const float maxx = float(std::numeric_limits<uintmax_t>::max() >> (CHAR_BIT * (sizeof(uintmax_t) - scalar_size_[_type])));
+					uintmax_t x = 0;
+					get(_type, _in, x);
+					_value = float(x) / maxx;
+				} else if (is_sint_[_type]) {
+					const float maxx = float(std::numeric_limits<intmax_t>::max() >> (CHAR_BIT * (sizeof(intmax_t) - scalar_size_[_type])));
+					intmax_t x = 0;
+					get(_type, _in, x);
+					_value = float(x) / maxx;
+				} else {
+					assert(false);
+				}
+			}
+
+			void consume_n(ValueType _type, iob::binary_reader &_in, int n) {
+				const auto z = scalar_size_[_type];
+				assert(z);
+				_in.get(z * n);
+				if (_in.eof()) throw std::errc::io_error;
+			}
+
+			void consume_n(ValueType _type, iob::text_reader &_in, int n) {
+				const auto z = scalar_size_[_type];
+				assert(z);
+				for (int i = 0; i < n; i++) {
+					_in.skip_ws();
+					if (_in.get_until_ws().size() == 0) throw std::errc::io_error;
+				}
+			}
+
+			template <typename Reader>
+			void consume_property(Reader &_in, const PropertyInfo &p) {
+				if (p.listIndexType == Unsupported) {
+					// scalar
+					consume_n(p.value, _in, 1);
+				} else {
+					// list
+					int n = 0;
+					get(p.listIndexType, _in, n);
+					consume_n(p.value, _in, n);
+				}
+			}
+
+			bool parse_property(iob::text_reader &in);
+
+			template <typename T, typename Handle>
+			BaseHandle create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listType);
+
+			template <typename Handle>
+			BaseHandle create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listIndexType);
+
+			template <typename T, typename Reader, typename Handle>
+			void get_custom_prop(Reader &_in, Handle _h, BaseHandle _prop, const ValueType _valueType, const ValueType _listType);
+
+			template <typename Reader, typename Handle>
+			void get_custom_prop(Reader &_in, Handle _h, BaseHandle _prop, const ValueType _valueType, const ValueType _listIndexType);
+
+			template <typename Reader>
+			bool parse_impl(Reader &_in);
+
+			template <typename Reader>
+			bool parse_vertices(Reader &_in, const ElementInfo &element);
+
+			template <typename Reader>
+			bool parse_faces(Reader &_in, const ElementInfo &element);
+
+			static constexpr auto scalar_size_ = [] {
+				std::array<unsigned char, 17> x{};
+				// Store sizes in byte of each property type
+				x[ValueTypeINT8] = 1;
+				x[ValueTypeUINT8] = 1;
+				x[ValueTypeINT16] = 2;
+				x[ValueTypeUINT16] = 2;
+				x[ValueTypeINT32] = 4;
+				x[ValueTypeUINT32] = 4;
+				x[ValueTypeFLOAT32] = 4;
+				x[ValueTypeFLOAT64] = 8;
+				x[ValueTypeCHAR] = 1;
+				x[ValueTypeUCHAR] = 1;
+				x[ValueTypeSHORT] = 2;
+				x[ValueTypeUSHORT] = 2;
+				x[ValueTypeINT] = 4;
+				x[ValueTypeUINT] = 4;
+				x[ValueTypeFLOAT] = 4;
+				x[ValueTypeDOUBLE] = 8;
+				return x;
+			}();
+			static constexpr auto is_uint_ = [] {
+				std::array<bool, 17> x{};
+				x[ValueTypeUINT8] = true;
+				x[ValueTypeUINT16] = true;
+				x[ValueTypeUINT32] = true;
+				x[ValueTypeUCHAR] = true;
+				x[ValueTypeUSHORT] = true;
+				x[ValueTypeUINT] = true;
+				return x;
+			}();
+			static constexpr auto is_sint_ = [] {
+				std::array<bool, 17> x{};
+				x[ValueTypeINT8] = true;
+				x[ValueTypeINT16] = true;
+				x[ValueTypeINT32] = true;
+				x[ValueTypeCHAR] = true;
+				x[ValueTypeSHORT] = true;
+				x[ValueTypeINT] = true;
+				return x;
+			}();
+			static constexpr auto is_float_ = [] {
+				std::array<bool, 17> x{};
+				x[ValueTypeFLOAT] = true;
+				x[ValueTypeDOUBLE] = true;
+				x[ValueTypeFLOAT32] = true;
+				x[ValueTypeFLOAT64] = true;
+				return x;
+			}();
+		};
+		
+		template <typename T, typename Handle>
+		typename BaseHandle PLYParser::create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listType) {
+			if (_listType == Unsupported) {
+				// no list type defined -> property is not a list
 				typename Handle2Prop<T, Handle>::PropT prop;
-				if (!_bi.kernel()->get_property_handle(prop, _propName))
+				if (!m_bi->kernel()->get_property_handle(prop, _propName))
 				{
-					_bi.kernel()->add_property(prop, _propName);
-					_bi.kernel()->property(prop).set_persistent(true);
+					m_bi->kernel()->add_property(prop, _propName);
+					m_bi->kernel()->property(prop).set_persistent(true);
 				}
-
-				//read and assign
-				T in;
-				read(_valueType, _in, in, OpenMesh::GenProg::Bool2Type<binary>());
-				_bi.kernel()->property(prop, _h) = in;
-			} else
-			{
-				//get/add property
+				return prop;
+			} else {
+				// list property
 				typename Handle2Prop<std::vector<T>, Handle>::PropT prop;
-				if (!_bi.kernel()->get_property_handle(prop, _propName))
+				if (!m_bi->kernel()->get_property_handle(prop, _propName))
 				{
-					_bi.kernel()->add_property(prop, _propName);
-					_bi.kernel()->property(prop).set_persistent(true);
+					m_bi->kernel()->add_property(prop, _propName);
+					m_bi->kernel()->property(prop).set_persistent(true);
 				}
+				return prop;
+			}
+		}
 
+		template <typename Handle>
+		BaseHandle PLYParser::create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listIndexType) {
+			switch (_valueType) {
+			case ValueTypeINT8:
+			case ValueTypeCHAR:
+				return create_custom_prop<signed char, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeUINT8:
+			case ValueTypeUCHAR:
+				return create_custom_prop<unsigned char, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeINT16:
+			case ValueTypeSHORT:
+				return create_custom_prop<short, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeUINT16:
+			case ValueTypeUSHORT:
+				return create_custom_prop<unsigned short, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeINT32:
+			case ValueTypeINT:
+				return create_custom_prop<int, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeUINT32:
+			case ValueTypeUINT:
+				return create_custom_prop<unsigned int, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeFLOAT32:
+			case ValueTypeFLOAT:
+				return create_custom_prop<float, Handle>(_propName, _valueType, _listIndexType);
+			case ValueTypeFLOAT64:
+			case ValueTypeDOUBLE:
+				return create_custom_prop<double, Handle>(_propName, _valueType, _listIndexType);
+			default:
+				OMLOG_ERROR << "Unsupported type for custom property " << _propName;
+				return BaseHandle{};
+			}
+		}
+		
+		template <typename T, typename Reader, typename Handle>
+		void PLYParser::get_custom_prop(Reader &_in, Handle _h, BaseHandle _prop, const ValueType _valueType, const ValueType _listType) {
+			assert(_h.is_valid());
+			assert(_prop.is_valid());
+			if (_listType == Unsupported) {
+				using prop_t = typename Handle2Prop<T, Handle>::PropT;
+				auto prop = static_cast<const prop_t &>(_prop);
+				T val;
+				get(_valueType, _in, val);
+				m_bi->kernel()->property(prop, _h) = val;
+			} else {
+				using prop_t = typename Handle2Prop<std::vector<T>, Handle>::PropT;
+				auto prop = static_cast<const prop_t &>(_prop);
 				//init vector
 				unsigned int numberOfValues;
-				read(_listType, _in, numberOfValues, OpenMesh::GenProg::Bool2Type<binary>());
+				get(_listType, _in, numberOfValues);
 				std::vector<T> vec;
 				vec.reserve(numberOfValues);
 				//read and assign
 				for (unsigned int i = 0; i < numberOfValues; ++i)
 				{
-					T in;
-					read(_valueType, _in, in, OpenMesh::GenProg::Bool2Type<binary>());
-					vec.push_back(in);
+					T val;
+					get(_valueType, _in, val);
+					vec.push_back(val);
 				}
-				_bi.kernel()->property(prop, _h) = vec;
+				m_bi->kernel()->property(prop, _h) = vec;
 			}
 		}
 
-		template<bool binary, typename Handle>
-		void _PLYReader_::readCustomProperty(std::istream &_in, BaseImporter &_bi, Handle _h, const std::string &_propName, const _PLYReader_::ValueType _valueType, const _PLYReader_::ValueType _listIndexType) const
-		{
-			switch (_valueType)
-			{
+		template <typename Reader, typename Handle>
+		void PLYParser::get_custom_prop(Reader &_in, Handle _h, BaseHandle _prop, const ValueType _valueType, const ValueType _listIndexType) {
+			switch (_valueType) {
 			case ValueTypeINT8:
 			case ValueTypeCHAR:
-				readCreateCustomProperty<binary, signed char>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<signed char>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeUINT8:
 			case ValueTypeUCHAR:
-				readCreateCustomProperty<binary, unsigned char>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<unsigned char>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeINT16:
 			case ValueTypeSHORT:
-				readCreateCustomProperty<binary, short>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<short>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeUINT16:
 			case ValueTypeUSHORT:
-				readCreateCustomProperty<binary, unsigned short>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<unsigned short>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeINT32:
 			case ValueTypeINT:
-				readCreateCustomProperty<binary, int>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<int>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeUINT32:
 			case ValueTypeUINT:
-				readCreateCustomProperty<binary, unsigned int>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<unsigned int>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeFLOAT32:
 			case ValueTypeFLOAT:
-				readCreateCustomProperty<binary, float>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<float>(_in, _h, _prop, _valueType, _listIndexType);
 			case ValueTypeFLOAT64:
 			case ValueTypeDOUBLE:
-				readCreateCustomProperty<binary, double>(_in, _bi, _h, _propName, _valueType, _listIndexType);
-				break;
+				return get_custom_prop<double>(_in, _h, _prop, _valueType, _listIndexType);
 			default:
-				std::cerr << "unsupported type" << std::endl;
-				break;
+				assert(false);
 			}
 		}
 
-
-		//-----------------------------------------------------------------------------
-
-		bool _PLYReader_::read_ascii(std::istream &_in, BaseImporter &_bi) const {
-
-			unsigned int i;
-			OpenMesh::Vec3f v, n;
-			std::string trash;
-			OpenMesh::Vec2f t;
-			OpenMesh::Vec4i c;
-			float tmp;
-			BaseImporter::VHandles vhandles;
-			std::vector<Vec2f> texcoords2d;
-			VertexHandle vh;
-
-			_bi.reserve(vertexCount_, 3 * vertexCount_, faceCount_);
-
-			if (vertexDimension_ != 3) {
-				OMLOG_ERROR << "Only vertex dimension 3 is supported";
-				return false;
-			}
-
-			size_t complex_faces = 0;
-
-			for (std::vector<ElementInfo>::iterator e_it = elements_.begin(); e_it != elements_.end(); ++e_it)
-			{
-				if (_in.eof()) {
-					OMLOG_ERROR << "Unexpected end of file while reading";
+		bool PLYParser::parse_property(iob::text_reader &in) {
+			in.skip_ws();
+			if (in.peek_until_ws() == "list") {
+				in.get_until_ws();
+				in.skip_ws();
+				// list property
+				std::string indextypestr, valtypestr, propname;
+				indextypestr = in.get_until_ws();
+				in.skip_ws();
+				valtypestr = in.get_until_ws();
+				in.skip_ws();
+				propname = in.get_until_ws();
+				ValueType indextype = value_type(indextypestr);
+				ValueType valtype = value_type(valtypestr);
+				if (indextype == Unsupported) {
+					OMLOG_ERROR << "Unsupported index type " << indextypestr << " for list property " << propname;
 					return false;
 				}
-
-				if (e_it->element_ == VERTEX)
-				{
-					// read vertices:
-					for (i = 0; i < e_it->count_ && !_in.eof(); ++i) {
-						vh = _bi.add_vertex();
-
-						v[0] = 0.0;
-						v[1] = 0.0;
-						v[2] = 0.0;
-
-						n[0] = 0.0;
-						n[1] = 0.0;
-						n[2] = 0.0;
-
-						t[0] = 0.0;
-						t[1] = 0.0;
-
-						c[0] = 0;
-						c[1] = 0;
-						c[2] = 0;
-						c[3] = 255;
-
-						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex) {
-							PropertyInfo prop = e_it->properties_[propertyIndex];
-							switch (prop.property) {
-							case XCOORD:
-								_in >> v[0];
-								break;
-							case YCOORD:
-								_in >> v[1];
-								break;
-							case ZCOORD:
-								_in >> v[2];
-								break;
-							case XNORM:
-								_in >> n[0];
-								break;
-							case YNORM:
-								_in >> n[1];
-								break;
-							case ZNORM:
-								_in >> n[2];
-								break;
-							case TEXX:
-								_in >> t[0];
-								break;
-							case TEXY:
-								_in >> t[1];
-								break;
-							case COLORRED:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[0] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[0];
-								break;
-							case COLORGREEN:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[1] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[1];
-								break;
-							case COLORBLUE:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[2] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[2];
-								break;
-							case COLORALPHA:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[3] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[3];
-								break;
-							case CUSTOM_PROP:
-								if (_bi.file_options().check(OptionBits::Custom))
-									readCustomProperty<false>(_in, _bi, vh, prop.name, prop.value, prop.listIndexType);
-								else
-									_in >> trash;
-								break;
-							default:
-								_in >> trash;
-								break;
-							}
-						}
-
-						_bi.set_point(vh, v);
-						_bi.set_normal(vh, n);
-						_bi.set_color(vh, Vec4uc(c));
-						_bi.set_texcoord(vh, t);
-					}
-				} else if (e_it->element_ == FACE)
-				{
-					// faces
-					for (i = 0; i < faceCount_ && !_in.eof(); ++i) {
-						FaceHandle fh;
-						unsigned nv;
-
-						c[0] = 0;
-						c[1] = 0;
-						c[2] = 0;
-						c[3] = 255;
-
-						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex) {
-							PropertyInfo prop = e_it->properties_[propertyIndex];
-							switch (prop.property) {
-
-							case VERTEX_INDICES:
-							{
-								// number of vertices for this face
-								nv = 0;
-								_in >> nv;
-								vhandles.resize(nv);
-								for (unsigned j = 0; j < nv; ++j) {
-									int idx;
-									_in >> idx;
-									vhandles[j] = VertexHandle(idx);
-								}
-
-								fh = _bi.add_face(vhandles);
-								if (!fh.is_valid())
-									++complex_faces;
-								break;
-							}
-								
-							case TEXCOORDS:
-							{
-								unsigned n;
-								_in >> n;
-								if (n == nv * 2) {
-									// 2D
-									texcoords2d.resize(nv);
-									for (unsigned j = 0; j < nv; ++j) {
-										float u, v;
-										_in >> u >> v;
-										texcoords2d[j] = {u, v};
-									}
-									if (nv && fh.is_valid()) _bi.add_face_texcoords(fh, vhandles[0], texcoords2d);
-								} else {
-									// TODO bad number of texcoord components
-								}
-								break;
-							}
-
-							case COLORRED:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[0] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[0];
-								break;
-
-							case COLORGREEN:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[1] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[1];
-								break;
-
-							case COLORBLUE:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[2] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[2];
-								break;
-
-							case COLORALPHA:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									_in >> tmp;
-									c[3] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									_in >> c[3];
-								break;
-
-							case CUSTOM_PROP:
-								if (_bi.file_options().check(OptionBits::Custom) && fh.is_valid())
-									readCustomProperty<false>(_in, _bi, fh, prop.name, prop.value, prop.listIndexType);
-								else
-									_in >> trash;
-								break;
-
-							default:
-								_in >> trash;
-								break;
-							}
-						}
-						_bi.set_color(fh, Vec4uc(c));
-					}
-				} else
-				{
-					// other elements
-					for (i = 0; i < e_it->count_ && !_in.eof(); ++i) {
-						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex)
-						{
-							// just skip the values
-							_in >> trash;
-						}
-					}
+				if (valtype == Unsupported) {
+					OMLOG_ERROR << "Unsupported value type " << valtypestr << " for list property " << propname;
+					return false;
 				}
-
-				if (e_it->element_ == FACE)
-					// stop reading after the faces since additional elements are not preserved anyway
-					break;
-			}
-
-			if (complex_faces)
-				OMLOG_ERROR << "The reader encountered " << complex_faces << " invalid faces, that could not be added";
-
-			// File was successfully parsed.
-			return true;
-		}
-
-		//-----------------------------------------------------------------------------
-
-		bool _PLYReader_::read_binary(std::istream &_in, BaseImporter &_bi, bool /*_swap*/) const {
-
-			OpenMesh::Vec3f        v, n;  // Vertex
-			OpenMesh::Vec2f        t;  // TexCoords
-			BaseImporter::VHandles vhandles;
-			std::vector<Vec2f> texcoords2d;
-			VertexHandle           vh;
-			OpenMesh::Vec4i        c;  // Color
-			float                  tmp;
-
-			_bi.reserve(vertexCount_, 3 * vertexCount_, faceCount_);
-
-			size_t complex_faces = 0;
-
-			for (std::vector<ElementInfo>::iterator e_it = elements_.begin(); e_it != elements_.end(); ++e_it)
-			{
-				if (e_it->element_ == VERTEX)
-				{
-					// read vertices:
-					for (unsigned int i = 0; i < e_it->count_ && !_in.eof(); ++i) {
-						vh = _bi.add_vertex();
-
-						v[0] = 0.0;
-						v[1] = 0.0;
-						v[2] = 0.0;
-
-						n[0] = 0.0;
-						n[1] = 0.0;
-						n[2] = 0.0;
-
-						t[0] = 0.0;
-						t[1] = 0.0;
-
-						c[0] = 0;
-						c[1] = 0;
-						c[2] = 0;
-						c[3] = 255;
-
-						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex) {
-							PropertyInfo prop = e_it->properties_[propertyIndex];
-							switch (prop.property) {
-							case XCOORD:
-								readValue(prop.value, _in, v[0]);
-								break;
-							case YCOORD:
-								readValue(prop.value, _in, v[1]);
-								break;
-							case ZCOORD:
-								readValue(prop.value, _in, v[2]);
-								break;
-							case XNORM:
-								readValue(prop.value, _in, n[0]);
-								break;
-							case YNORM:
-								readValue(prop.value, _in, n[1]);
-								break;
-							case ZNORM:
-								readValue(prop.value, _in, n[2]);
-								break;
-							case TEXX:
-								readValue(prop.value, _in, t[0]);
-								break;
-							case TEXY:
-								readValue(prop.value, _in, t[1]);
-								break;
-							case COLORRED:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-
-									c[0] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[0]);
-
-								break;
-							case COLORGREEN:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[1] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[1]);
-
-								break;
-							case COLORBLUE:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[2] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[2]);
-
-								break;
-							case COLORALPHA:
-								if (prop.value == ValueTypeFLOAT32 || prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[3] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[3]);
-
-								break;
-							case CUSTOM_PROP:
-								if (_bi.file_options().check(OptionBits::Custom))
-									readCustomProperty<true>(_in, _bi, vh, prop.name, prop.value, prop.listIndexType);
-								else
-									consume_input(_in, scalar_size_[prop.value]);
-								break;
-							default:
-								// Read unsupported property
-								consume_input(_in, scalar_size_[prop.value]);
-								break;
-							}
-
+				PropertyInfo property(CUSTOM_PROP, valtype, propname);
+				property.listIndexType = indextype;
+				if (elements_.empty()) {
+					OMLOG_ERROR << "No element for property " << propname;
+					return false;
+				}
+				ElementInfo &element = elements_.back();
+				if (element.name_ == "face") {
+					if (propname == "vertex_index" || propname == "vertex_indices") {
+						// special case for vertex indices
+						property.property = VERTEX_INDICES;
+						if (!element.properties_.empty()) {
+							OMLOG_WARNING << "Other face properties defined before 'vertex_indices'; they will be ignored";
+							// dont clear the properties! we still have to parse them
 						}
-
-						_bi.set_point(vh, v);
-						_bi.set_normal(vh, n);
-						_bi.set_color(vh, Vec4uc(c));
-						_bi.set_texcoord(vh, t);
+					} else if (propname == "texcoord") {
+						// special case for texture coords (-> halfedge texcoords)
+						// assume these are always 2d
+						property.property = TEXCOORDS;
+						options_.hattribs |= AttributeBits::TexCoord2D;
+					} else {
+						options_ += OptionBits::Custom;
 					}
-				} else if (e_it->element_ == FACE) {
-					for (unsigned i = 0; i < e_it->count_ && !_in.eof(); ++i) {
-						FaceHandle fh;
-						unsigned int nv;
-
-						c[0] = 0;
-						c[1] = 0;
-						c[2] = 0;
-						c[3] = 255;
-
-						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex)
-						{
-							PropertyInfo prop = e_it->properties_[propertyIndex];
-							switch (prop.property) {
-
-							case VERTEX_INDICES:
-							{
-								// number of vertices for this face
-								nv = 0;
-								readInteger(prop.listIndexType, _in, nv);
-								vhandles.resize(nv);
-								for (unsigned j = 0; j < nv; ++j) {
-									unsigned int idx;
-									readInteger(prop.value, _in, idx);
-									vhandles[j] = VertexHandle(idx);
-								}
-
-								fh = _bi.add_face(vhandles);
-								if (!fh.is_valid())
-									++complex_faces;
-								break;
-							}
-
-							case TEXCOORDS:
-							{
-								unsigned n;
-								readInteger(prop.listIndexType, _in, n);
-								if (n == nv * 2) {
-									// 2D
-									texcoords2d.resize(nv);
-									for (unsigned j = 0; j < nv; ++j) {
-										float u, v;
-										readValue(prop.value, _in, u);
-										readValue(prop.value, _in, v);
-										texcoords2d[j] = {u, v};
-									}
-									if (nv && fh.is_valid()) _bi.add_face_texcoords(fh, vhandles[0], texcoords2d);
-								} else {
-									// TODO bad number of texcoord components
-								}
-								break;
-							}
-
-							case COLORRED:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[0] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[0]);
-								break;
-							case COLORGREEN:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[1] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[1]);
-								break;
-							case COLORBLUE:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[2] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[2]);
-								break;
-							case COLORALPHA:
-								if (prop.value == ValueTypeFLOAT32 ||
-									prop.value == ValueTypeFLOAT) {
-									readValue(prop.value, _in, tmp);
-									c[3] = static_cast<OpenMesh::Vec4i::value_type> (tmp * 255.0f);
-								} else
-									readInteger(prop.value, _in, c[3]);
-								break;
-							case CUSTOM_PROP:
-								if (_bi.file_options().check(OptionBits::Custom) && fh.is_valid())
-									readCustomProperty<true>(_in, _bi, fh, prop.name, prop.value, prop.listIndexType);
-								else
-									consume_input(_in, scalar_size_[prop.value]);
-								break;
-
-							default:
-								consume_input(_in, scalar_size_[prop.value]);
-								break;
-							}
-						}
-						_bi.set_color(fh, Vec4uc(c));
+					if (m_bi && property.property == CUSTOM_PROP) {
+						property.handle = create_custom_prop<FaceHandle>(propname, valtype, indextype);
 					}
 				} else {
-					for (unsigned int i = 0; i < e_it->count_ && !_in.eof(); ++i)
-					{
-						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex)
-						{
-							PropertyInfo prop = e_it->properties_[propertyIndex];
-							// skip element values
-							consume_input(_in, scalar_size_[prop.value]);
-						}
-					}
+					OMLOG_WARNING << "List property " << propname << " belongs to unsupported element " << element.name_;
 				}
-
-				if (_in.eof()) {
-					OMLOG_ERROR << "Unexpected end of file while reading";
+				element.properties_.push_back(property);
+			} else {
+				// scalar property
+				std::string ps1, ps2;
+				in.skip_ws();
+				ps1 = in.get_until_ws();
+				in.skip_ws();
+				ps2 = in.get_until_ws();
+				// Extract name and type of property
+				// As the order seems to be different in some files, autodetect it.
+				auto valtypestr = property_typename(ps1, ps2);
+				ValueType valtype = value_type(valtypestr);
+				std::string propname{property_name(ps1, ps2)};
+				if (valtype == Unsupported) {
+					OMLOG_ERROR << "Unsupported value type " << valtypestr << " for property " << propname;
 					return false;
 				}
-
-				if (e_it->element_ == FACE)
-					// stop reading after the faces since additional elements are not preserved anyway
-					break;
+				if (elements_.empty()) {
+					OMLOG_ERROR << "No element for property " << propname;
+					return false;
+				}
+				ElementInfo &element = elements_.back();
+				PropertyInfo entry;
+				// special treatment for some vertex properties.
+				if (element.name_ == "vertex") {
+					if (propname == "x") {
+						entry = PropertyInfo(XCOORD, valtype);
+						vertexDimension_++;
+					} else if (propname == "y") {
+						entry = PropertyInfo(YCOORD, valtype);
+						vertexDimension_++;
+					} else if (propname == "z") {
+						entry = PropertyInfo(ZCOORD, valtype);
+						vertexDimension_++;
+					} else if (propname == "nx") {
+						entry = PropertyInfo(XNORM, valtype);
+						options_.vattribs |= AttributeBits::Normal;
+					} else if (propname == "ny") {
+						entry = PropertyInfo(YNORM, valtype);
+						options_.vattribs |= AttributeBits::Normal;
+					} else if (propname == "nz") {
+						entry = PropertyInfo(ZNORM, valtype);
+						options_.vattribs |= AttributeBits::Normal;
+					} else if (propname == "u" || propname == "s") {
+						entry = PropertyInfo(TEXX, valtype);
+						options_.vattribs |= AttributeBits::TexCoord2D;
+					} else if (propname == "v" || propname == "t") {
+						entry = PropertyInfo(TEXY, valtype);
+						options_.vattribs |= AttributeBits::TexCoord2D;
+					} else if (propname == "red") {
+						entry = PropertyInfo(COLORRED, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "green") {
+						entry = PropertyInfo(COLORGREEN, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "blue") {
+						entry = PropertyInfo(COLORBLUE, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "diffuse_red") {
+						entry = PropertyInfo(COLORRED, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "diffuse_green") {
+						entry = PropertyInfo(COLORGREEN, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "diffuse_blue") {
+						entry = PropertyInfo(COLORBLUE, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "alpha") {
+						entry = PropertyInfo(COLORALPHA, valtype);
+						options_.vattribs |= AttributeBits::Color;
+						options_ += OptionBits::ColorAlpha;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					}
+					if (m_bi && entry.property == CUSTOM_PROP) {
+						entry.handle = create_custom_prop<VertexHandle>(propname, valtype, Unsupported);
+					}
+				} else if (element.name_ == "face") {
+					if (propname == "red") {
+						entry = PropertyInfo(COLORRED, valtype);
+						options_.fattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "green") {
+						entry = PropertyInfo(COLORGREEN, valtype);
+						options_.fattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "blue") {
+						entry = PropertyInfo(COLORBLUE, valtype);
+						options_.fattribs |= AttributeBits::Color;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					} else if (propname == "alpha") {
+						entry = PropertyInfo(COLORALPHA, valtype);
+						options_.fattribs |= AttributeBits::Color;
+						options_ += OptionBits::ColorAlpha;
+						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
+							options_ += OptionBits::ColorFloat;
+					}
+					if (m_bi && entry.property == CUSTOM_PROP) {
+						entry.handle = create_custom_prop<FaceHandle>(propname, valtype, Unsupported);
+					}
+				}
+				// not a special property, load as custom
+				if (entry.value == Unsupported) {
+					options_ += OptionBits::Custom;
+					entry = PropertyInfo(CUSTOM_PROP, valtype, propname);
+				}
+				if (entry.property != UNSUPPORTED) {
+					element.properties_.push_back(entry);
+				}
 			}
-			if (complex_faces)
-				OMLOG_ERROR << "The reader encountered " << complex_faces << " invalid faces, that could not be added";
-
-
 			return true;
 		}
 
-
-		//-----------------------------------------------------------------------------
-
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, float &_value) const {
-
-			switch (_type) {
-			case ValueTypeFLOAT32:
-			case ValueTypeFLOAT:
-				float32_t tmp;
-				restore(_in, tmp, options_.check(OptionBits::MSB));
-				_value = tmp;
-				break;
-			default:
-				_value = 0.0;
-				std::cerr << "unsupported conversion type to float: " << _type << std::endl;
-				break;
-			}
-		}
-
-
-		//-----------------------------------------------------------------------------
-
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, double &_value) const {
-
-			switch (_type) {
-
-			case ValueTypeFLOAT64:
-
-			case ValueTypeDOUBLE:
-
-				float64_t tmp;
-				restore(_in, tmp, options_.check(OptionBits::MSB));
-				_value = tmp;
-
-				break;
-
-			default:
-
-				_value = 0.0;
-				std::cerr << "unsupported conversion type to double: " << _type << std::endl;
-
-				break;
-			}
-		}
-
-
-		//-----------------------------------------------------------------------------
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, unsigned char &_value) const {
-			unsigned int tmp;
-			readValue(_type, _in, tmp);
-			_value = tmp;
-		}
-
-		//-----------------------------------------------------------------------------
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, unsigned short &_value) const {
-			unsigned int tmp;
-			readValue(_type, _in, tmp);
-			_value = tmp;
-		}
-
-		//-----------------------------------------------------------------------------
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, signed char &_value) const {
-			int tmp;
-			readValue(_type, _in, tmp);
-			_value = tmp;
-		}
-
-		//-----------------------------------------------------------------------------
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, short &_value) const {
-			int tmp;
-			readValue(_type, _in, tmp);
-			_value = tmp;
-		}
-
-
-		//-----------------------------------------------------------------------------
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, unsigned int &_value) const {
-
-			uint32_t tmp_uint32_t;
-			uint16_t tmp_uint16_t;
-			uint8_t tmp_uchar;
-
-			switch (_type) {
-
-			case ValueTypeUINT:
-
-			case ValueTypeUINT32:
-
-				restore(_in, tmp_uint32_t, options_.check(OptionBits::MSB));
-				_value = tmp_uint32_t;
-
-				break;
-
-			case ValueTypeUSHORT:
-
-			case ValueTypeUINT16:
-
-				restore(_in, tmp_uint16_t, options_.check(OptionBits::MSB));
-				_value = tmp_uint16_t;
-
-				break;
-
-			case ValueTypeUCHAR:
-
-			case ValueTypeUINT8:
-
-				restore(_in, tmp_uchar, options_.check(OptionBits::MSB));
-				_value = tmp_uchar;
-
-				break;
-
-			default:
-
-				_value = 0;
-				std::cerr << "unsupported conversion type to unsigned int: " << _type << std::endl;
-
-				break;
-			}
-		}
-
-
-		//-----------------------------------------------------------------------------
-
-
-		void _PLYReader_::readValue(ValueType _type, std::istream &_in, int &_value) const {
-
-			int32_t tmp_int32_t;
-			int16_t tmp_int16_t;
-			int8_t tmp_char;
-
-			switch (_type) {
-
-			case ValueTypeINT:
-
-			case ValueTypeINT32:
-
-				restore(_in, tmp_int32_t, options_.check(OptionBits::MSB));
-				_value = tmp_int32_t;
-
-				break;
-
-			case ValueTypeSHORT:
-
-			case ValueTypeINT16:
-
-				restore(_in, tmp_int16_t, options_.check(OptionBits::MSB));
-				_value = tmp_int16_t;
-
-				break;
-
-			case ValueTypeCHAR:
-
-			case ValueTypeINT8:
-
-				restore(_in, tmp_char, options_.check(OptionBits::MSB));
-				_value = tmp_char;
-
-				break;
-
-			default:
-
-				_value = 0;
-				std::cerr << "unsupported conversion type to int: " << _type << std::endl;
-
-				break;
-			}
-		}
-
-
-		//-----------------------------------------------------------------------------
-
-
-		void _PLYReader_::readInteger(ValueType _type, std::istream &_in, int &_value) const {
-
-			int32_t tmp_int32_t;
-			uint32_t tmp_uint32_t;
-			int8_t tmp_char;
-			uint8_t tmp_uchar;
-
-			switch (_type) {
-
-			case ValueTypeINT:
-
-			case ValueTypeINT32:
-
-				restore(_in, tmp_int32_t, options_.check(OptionBits::MSB));
-				_value = tmp_int32_t;
-
-				break;
-
-			case ValueTypeUINT:
-
-			case ValueTypeUINT32:
-
-				restore(_in, tmp_uint32_t, options_.check(OptionBits::MSB));
-				_value = tmp_uint32_t;
-
-				break;
-
-			case ValueTypeCHAR:
-
-			case ValueTypeINT8:
-
-				restore(_in, tmp_char, options_.check(OptionBits::MSB));
-				_value = tmp_char;
-
-				break;
-
-			case ValueTypeUCHAR:
-
-			case ValueTypeUINT8:
-
-				restore(_in, tmp_uchar, options_.check(OptionBits::MSB));
-				_value = tmp_uchar;
-
-				break;
-
-			default:
-
-				_value = 0;
-				std::cerr << "unsupported conversion type to int: " << _type << std::endl;
-
-				break;
-			}
-		}
-
-
-		//-----------------------------------------------------------------------------
-
-
-		void _PLYReader_::readInteger(ValueType _type, std::istream &_in, unsigned int &_value) const {
-
-			int32_t tmp_int32_t;
-			uint32_t tmp_uint32_t;
-			int8_t tmp_char;
-			uint8_t tmp_uchar;
-
-			switch (_type) {
-
-			case ValueTypeUINT:
-
-			case ValueTypeUINT32:
-
-				restore(_in, tmp_uint32_t, options_.check(OptionBits::MSB));
-				_value = tmp_uint32_t;
-
-				break;
-
-			case ValueTypeINT:
-
-			case ValueTypeINT32:
-
-				restore(_in, tmp_int32_t, options_.check(OptionBits::MSB));
-				_value = tmp_int32_t;
-
-				break;
-
-			case ValueTypeUCHAR:
-
-			case ValueTypeUINT8:
-
-				restore(_in, tmp_uchar, options_.check(OptionBits::MSB));
-				_value = tmp_uchar;
-
-				break;
-
-			case ValueTypeCHAR:
-
-			case ValueTypeINT8:
-
-				restore(_in, tmp_char, options_.check(OptionBits::MSB));
-				_value = tmp_char;
-
-				break;
-
-			default:
-
-				_value = 0;
-				std::cerr << "unsupported conversion type to unsigned int: " << _type << std::endl;
-
-				break;
-			}
-		}
-
-
-		//------------------------------------------------------------------------------
-
-
-		bool _PLYReader_::can_u_read(const std::filesystem::path &_filename) const {
-
-			// !!! Assuming BaseReader::can_u_parse( std::string& )
-			// does not call BaseReader::read_magic()!!!
-
-			if (BaseReader::can_u_read(_filename)) {
-				std::ifstream ifs(_filename);
-				if (ifs.is_open() && can_u_read(ifs)) {
-					ifs.close();
-					return true;
-				}
-			}
-			return false;
-		}
-
-
-
-		//-----------------------------------------------------------------------------
-
-		std::string get_property_name(std::string _string1, std::string _string2) {
-
-			if (_string1 == "float32" || _string1 == "float64" || _string1 == "float" || _string1 == "double" ||
-				_string1 == "int8" || _string1 == "uint8" || _string1 == "char" || _string1 == "uchar" ||
-				_string1 == "int32" || _string1 == "uint32" || _string1 == "int" || _string1 == "uint" ||
-				_string1 == "int16" || _string1 == "uint16" || _string1 == "short" || _string1 == "ushort")
-				return _string2;
-
-			if (_string2 == "float32" || _string2 == "float64" || _string2 == "float" || _string2 == "double" ||
-				_string2 == "int8" || _string2 == "uint8" || _string2 == "char" || _string2 == "uchar" ||
-				_string2 == "int32" || _string2 == "uint32" || _string2 == "int" || _string2 == "uint" ||
-				_string2 == "int16" || _string2 == "uint16" || _string2 == "short" || _string2 == "ushort")
-				return _string1;
-
-
-			std::cerr << "Unsupported entry type" << std::endl;
-			return "Unsupported";
-		}
-
-		//-----------------------------------------------------------------------------
-
-		_PLYReader_::ValueType get_property_type(std::string &_string1, std::string &_string2) {
-
-			if (_string1 == "float32" || _string2 == "float32")
-
-				return _PLYReader_::ValueTypeFLOAT32;
-
-			else if (_string1 == "float64" || _string2 == "float64")
-
-				return _PLYReader_::ValueTypeFLOAT64;
-
-			else if (_string1 == "float" || _string2 == "float")
-
-				return _PLYReader_::ValueTypeFLOAT;
-
-			else if (_string1 == "double" || _string2 == "double")
-
-				return _PLYReader_::ValueTypeDOUBLE;
-
-			else if (_string1 == "int8" || _string2 == "int8")
-
-				return _PLYReader_::ValueTypeINT8;
-
-			else if (_string1 == "uint8" || _string2 == "uint8")
-
-				return _PLYReader_::ValueTypeUINT8;
-
-			else if (_string1 == "char" || _string2 == "char")
-
-				return _PLYReader_::ValueTypeCHAR;
-
-			else if (_string1 == "uchar" || _string2 == "uchar")
-
-				return _PLYReader_::ValueTypeUCHAR;
-
-			else if (_string1 == "int32" || _string2 == "int32")
-
-				return _PLYReader_::ValueTypeINT32;
-
-			else if (_string1 == "uint32" || _string2 == "uint32")
-
-				return _PLYReader_::ValueTypeUINT32;
-
-			else if (_string1 == "int" || _string2 == "int")
-
-				return _PLYReader_::ValueTypeINT;
-
-			else if (_string1 == "uint" || _string2 == "uint")
-
-				return _PLYReader_::ValueTypeUINT;
-
-			else if (_string1 == "int16" || _string2 == "int16")
-
-				return _PLYReader_::ValueTypeINT16;
-
-			else if (_string1 == "uint16" || _string2 == "uint16")
-
-				return _PLYReader_::ValueTypeUINT16;
-
-			else if (_string1 == "short" || _string2 == "short")
-
-				return _PLYReader_::ValueTypeSHORT;
-
-			else if (_string1 == "ushort" || _string2 == "ushort")
-
-				return _PLYReader_::ValueTypeUSHORT;
-
-			return _PLYReader_::Unsupported;
-		}
-
-
-		//-----------------------------------------------------------------------------
-
-		bool _PLYReader_::can_u_read(std::istream &_is) const {
-
-			// Clear per file options
-			options_.cleanup();
-
-			// clear element list
+		bool PLYParser::parse_header() {
+			m_buf->seek(0, iob::iobuffer::seek_origin::set);
+			iob::text_reader in{m_buf};
+			// init
+			options_ = {};
 			elements_.clear();
-
-			// read 1st line
-			std::string line;
-			std::getline(_is, line);
-			trim(line);
-
-			// Handle '\r\n' newlines 
-			const size_t s = line.size();
-			if (s > 0 && line[s - 1] == '\r') line.resize(s - 1);
-
-			//Check if this file is really a ply format
-			if (line != "PLY" && line != "ply")
-				return false;
-
 			vertexCount_ = 0;
 			faceCount_ = 0;
 			vertexDimension_ = 0;
-
-			unsigned int elementCount = 0;
-
-			std::string keyword;
-			std::string fileType;
-			std::string elementName = "";
-			std::string propertyName;
-			std::string listIndexType;
-			std::string listEntryType;
-			float version;
-
-			_is >> keyword;
-			_is >> fileType;
-			_is >> version;
-
-			if (_is.bad()) {
-				OMLOG_ERROR << "Defect PLY header detected";
+			// check magic
+			if (auto magic = in.get_line(); magic != "ply" && magic != "PLY") {
+				OMLOG_ERROR << "Not a PLY file";
 				return false;
 			}
-
-			if (fileType == "ascii") {
-				options_ -= OptionBits::Binary;
-			} else if (fileType == "binary_little_endian") {
-				options_ += OptionBits::Binary;
-				options_ += OptionBits::LSB;
-				//if (Endian::local() == Endian::MSB)
-				//  options_ += Options::Swap;
-			} else if (fileType == "binary_big_endian") {
-				options_ += OptionBits::Binary;
-				options_ += OptionBits::MSB;
-				//if (Endian::local() == Endian::LSB)
-				//  options_ += Options::Swap;
-			} else {
-				OMLOG_ERROR << "Unsupported PLY format: " << fileType;
-				return false;
-			}
-
-			std::streamoff streamPos = _is.tellg();
-			_is >> keyword;
-			while (keyword != "end_header") {
-
-				if (keyword == "comment") {
-					std::getline(_is, line);
+			// parse header contents
+			std::string filetype;
+			while (in.good()) {
+				std::string keyword{in.get_until_ws()};
+				if (keyword == "format") {
+					in.skip_ws();
+					filetype = in.get_until_ws();
+					OMLOG_INFO << "File type " << filetype;
+					in.skip_ws();
+					if (auto ver = in.get_until_ws(); ver != "1.0") {
+						OMLOG_ERROR << "Unsupported version " << ver;
+					}
+					if (filetype == "ascii") {
+						options_ -= OptionBits::Binary;
+					} else if (filetype == "binary_little_endian") {
+						options_ += OptionBits::Binary;
+						options_ += OptionBits::LSB;
+					} else if (filetype == "binary_big_endian") {
+						options_ += OptionBits::Binary;
+						options_ += OptionBits::MSB;
+					} else {
+						OMLOG_ERROR << "Unknown file type " << filetype;
+						return false;
+					}
 				} else if (keyword == "element") {
-					_is >> elementName;
-					_is >> elementCount;
-
+					in.skip_ws();
 					ElementInfo element;
-					element.name_ = elementName;
-					element.count_ = elementCount;
-
-					if (elementName == "vertex") {
-						vertexCount_ = elementCount;
+					element.name_ = in.get_until_ws();
+					in.skip_ws();
+					if (in.get_int(element.count_) != std::errc{}) {
+						OMLOG_ERROR << "Bad element count for " << element.name_;
+						return false;
+					}
+					if (element.name_ == "vertex") {
+						vertexCount_ = element.count_;
 						element.element_ = VERTEX;
-					} else if (elementName == "face") {
-						faceCount_ = elementCount;
+					} else if (element.name_ == "face") {
+						faceCount_ = element.count_;
 						element.element_ = FACE;
 					} else {
-						OMLOG_WARNING << "PLY header unsupported element type: " << elementName;
+						OMLOG_WARNING << "Unknown element " << element.name_;
 						element.element_ = UNKNOWN;
 					}
-
 					elements_.push_back(element);
 				} else if (keyword == "property") {
-					std::string tmp1;
-					std::string tmp2;
-
-					// Read first keyword, as it might be a list
-					_is >> tmp1;
-
-					if (tmp1 == "list") {
-						_is >> listIndexType;
-						_is >> listEntryType;
-						_is >> propertyName;
-
-						ValueType indexType = Unsupported;
-						ValueType entryType = Unsupported;
-
-						if (listIndexType == "uint8") {
-							indexType = ValueTypeUINT8;
-						} else if (listIndexType == "uint16") {
-							indexType = ValueTypeUINT16;
-						} else if (listIndexType == "uchar") {
-							indexType = ValueTypeUCHAR;
-						} else if (listIndexType == "int") {
-							indexType = ValueTypeINT;
-						} else {
-							OMLOG_ERROR << "Unsupported Index type for property list: " << listIndexType;
-							return false;
-						}
-
-						entryType = get_property_type(listEntryType, listEntryType);
-
-						if (entryType == Unsupported) {
-							OMLOG_ERROR << "Unsupported Entry type for property list: " << listEntryType;
-						}
-
-						PropertyInfo property(CUSTOM_PROP, entryType, propertyName);
-						property.listIndexType = indexType;
-
-						if (elementName == "face")
-						{
-							if (propertyName == "vertex_index" || propertyName == "vertex_indices")
-							{
-								// special case for vertex indices
-								property.property = VERTEX_INDICES;
-
-								if (!elements_.back().properties_.empty())
-								{
-									OMLOG_WARNING << "Custom face Properties defined, before 'vertex_indices' property was defined. They will be skipped";
-									elements_.back().properties_.clear();
-								}
-							} else if (propertyName == "texcoord") {
-								// special case for texture coords (-> halfedge texcoords)
-								// assume these are always 2d
-								property.property = TEXCOORDS;
-								options_.hattribs |= AttributeBits::TexCoord2D;
-							} else {
-								options_ += OptionBits::Custom;
-							}
-
-						} else
-							OMLOG_WARNING << "property " << propertyName << " belongs to unsupported element " << elementName;
-
-						elements_.back().properties_.push_back(property);
-
-					} else {
-						// as this is not a list property, read second value of property
-						_is >> tmp2;
-
-
-						// Extract name and type of property
-						// As the order seems to be different in some files, autodetect it.
-						ValueType valueType = get_property_type(tmp1, tmp2);
-						propertyName = get_property_name(tmp1, tmp2);
-
-						PropertyInfo entry;
-
-						//special treatment for some vertex properties.
-						if (elementName == "vertex") {
-							if (propertyName == "x") {
-								entry = PropertyInfo(XCOORD, valueType);
-								vertexDimension_++;
-							} else if (propertyName == "y") {
-								entry = PropertyInfo(YCOORD, valueType);
-								vertexDimension_++;
-							} else if (propertyName == "z") {
-								entry = PropertyInfo(ZCOORD, valueType);
-								vertexDimension_++;
-							} else if (propertyName == "nx") {
-								entry = PropertyInfo(XNORM, valueType);
-								options_.vattribs |= AttributeBits::Normal;
-							} else if (propertyName == "ny") {
-								entry = PropertyInfo(YNORM, valueType);
-								options_.vattribs |= AttributeBits::Normal;
-							} else if (propertyName == "nz") {
-								entry = PropertyInfo(ZNORM, valueType);
-								options_.vattribs |= AttributeBits::Normal;
-							} else if (propertyName == "u" || propertyName == "s") {
-								entry = PropertyInfo(TEXX, valueType);
-								options_.vattribs |= AttributeBits::TexCoord2D;
-							} else if (propertyName == "v" || propertyName == "t") {
-								entry = PropertyInfo(TEXY, valueType);
-								options_.vattribs |= AttributeBits::TexCoord2D;
-							} else if (propertyName == "red") {
-								entry = PropertyInfo(COLORRED, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "green") {
-								entry = PropertyInfo(COLORGREEN, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "blue") {
-								entry = PropertyInfo(COLORBLUE, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "diffuse_red") {
-								entry = PropertyInfo(COLORRED, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "diffuse_green") {
-								entry = PropertyInfo(COLORGREEN, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "diffuse_blue") {
-								entry = PropertyInfo(COLORBLUE, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "alpha") {
-								entry = PropertyInfo(COLORALPHA, valueType);
-								options_.vattribs |= AttributeBits::Color;
-								options_ += OptionBits::ColorAlpha;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							}
-						} else if (elementName == "face") {
-							if (propertyName == "red") {
-								entry = PropertyInfo(COLORRED, valueType);
-								options_.fattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "green") {
-								entry = PropertyInfo(COLORGREEN, valueType);
-								options_.fattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "blue") {
-								entry = PropertyInfo(COLORBLUE, valueType);
-								options_.fattribs |= AttributeBits::Color;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							} else if (propertyName == "alpha") {
-								entry = PropertyInfo(COLORALPHA, valueType);
-								options_.fattribs |= AttributeBits::Color;
-								options_ += OptionBits::ColorAlpha;
-								if (valueType == ValueTypeFLOAT || valueType == ValueTypeFLOAT32)
-									options_ += OptionBits::ColorFloat;
-							}
-						}
-
-						//not a special property, load as custom
-						if (entry.value == Unsupported) {
-							Property prop = CUSTOM_PROP;
-							options_ += OptionBits::Custom;
-							entry = PropertyInfo(prop, valueType, propertyName);
-						}
-
-						if (entry.property != UNSUPPORTED)
-						{
-							elements_.back().properties_.push_back(entry);
-						}
-					}
-
+					parse_property(in);
+				} else if (keyword == "end_header") {
+					in.skip_line();
+					break;
+				} else if (keyword == "comment") {
+					// just a comment
 				} else {
-					OMLOG_WARNING << "Unsupported keyword : " << keyword;
+					OMLOG_WARNING << "Unknown header keyword" << keyword;
 				}
+				in.skip_line();
+			}
+			if (in.eof()) {
+				OMLOG_ERROR << "Unexpected EOF";
+				return false;
+			}
+			return true;
+		}
 
-				streamPos = _is.tellg();
-				_is >> keyword;
-				if (_is.bad()) {
-					OMLOG_ERROR << "Error while reading PLY file header";
-					return false;
-				}
+		bool PLYParser::parse() {
+
+			if (!parse_header()) return false;
+
+			m_bi->reserve(vertexCount_, 3 * vertexCount_, faceCount_);
+
+			if (vertexDimension_ != 3) {
+				OMLOG_ERROR << "Vertex dimension " << vertexDimension_ << " not supported";
+				return false;
 			}
 
-			// As the binary data is directy after the end_header keyword
-			// and the stream removes too many bytes, seek back to the right position
+			m_bi->request_vattribs(options_.vattribs);
+			m_bi->request_hattribs(options_.hattribs);
+			m_bi->request_fattribs(options_.fattribs);
+			m_bi->set_file_options(options_.flags);
+
 			if (options_.is_binary()) {
-				_is.seekg(streamPos);
+				iob::binary_reader in{m_buf};
+				in.endian(options_.check(OptionBits::MSB) ? iob::endian::big : iob::endian::little);
+				return parse_impl(in);
+			} else {
+				iob::text_reader in{m_buf};
+				return parse_impl(in);
+			}
+		}
 
-				char c1 = 0;
-				char c2 = 0;
-				_is.get(c1);
-				_is.get(c2);
+		template <typename Reader>
+		bool PLYParser::parse_impl(Reader &_in) {
+			m_bi->reserve(vertexCount_, 3 * vertexCount_, faceCount_);
 
-				if (c1 == 0x0D && c2 == 0x0A) {
-					_is.seekg(streamPos + 14);
+			for (auto e_it = elements_.begin(); e_it != elements_.end() && !_in.eof(); ++e_it) {
+				if (e_it->element_ == VERTEX) {
+					if (!parse_vertices(_in, *e_it)) return false;
+				} else if (e_it->element_ == FACE) {
+					if (!parse_faces(_in, *e_it)) return false;
 				} else {
-					_is.seekg(streamPos + 12);
+					for (int i = 0; i < e_it->count_ && !_in.eof(); ++i) {
+						for (size_t propertyIndex = 0; propertyIndex < e_it->properties_.size(); ++propertyIndex) {
+							const auto &prop = e_it->properties_[propertyIndex];
+							// skip element values
+							try {
+								consume_property(_in, prop);
+							} catch (std::errc ec) {
+								OMLOG_ERROR << "Error reading " << e_it->name_ << " data: " << std::make_error_condition(ec).message();
+								return false;
+							}
+						}
+					}
 				}
+
+				if (_in.eof()) {
+					OMLOG_ERROR << "Unexpected EOF";
+					return false;
+				}
+
+				// stop reading after the faces since additional elements are not preserved anyway
+				if (e_it->element_ == FACE) break;
+					
 			}
 
 			return true;
 		}
+
+		template <typename Reader>
+		bool PLYParser::parse_vertices(Reader &_in, const ElementInfo &element) {
+			for (int i = 0; i < element.count_ && !_in.eof(); ++i) {
+				const VertexHandle vh = m_bi->add_vertex();
+				Vec3f v{0};
+				Vec3f n{0};
+				Vec2f t{0};
+				Vec4f c{0, 0, 0, 1};
+
+				for (size_t propertyIndex = 0; propertyIndex < element.properties_.size(); ++propertyIndex) {
+					try {
+						PropertyInfo prop = element.properties_[propertyIndex];
+						switch (prop.property) {
+						case XCOORD:
+							get(prop.value, _in, v[0]);
+							break;
+						case YCOORD:
+							get(prop.value, _in, v[1]);
+							break;
+						case ZCOORD:
+							get(prop.value, _in, v[2]);
+							break;
+						case XNORM:
+							get(prop.value, _in, n[0]);
+							break;
+						case YNORM:
+							get(prop.value, _in, n[1]);
+							break;
+						case ZNORM:
+							get(prop.value, _in, n[2]);
+							break;
+						case TEXX:
+							get(prop.value, _in, t[0]);
+							break;
+						case TEXY:
+							get(prop.value, _in, t[1]);
+							break;
+						case COLORRED:
+							get_color(prop.value, _in, c[0]);
+							break;
+						case COLORGREEN:
+							get_color(prop.value, _in, c[1]);
+							break;
+						case COLORBLUE:
+							get_color(prop.value, _in, c[2]);
+							break;
+						case COLORALPHA:
+							get_color(prop.value, _in, c[3]);
+							break;
+						case CUSTOM_PROP:
+							if (m_bi->file_options().check(OptionBits::Custom) && prop.handle.is_valid()) {
+								get_custom_prop(_in, vh, prop.handle, prop.value, prop.listIndexType);
+							} else {
+								consume_property(_in, prop);
+							}
+							break;
+						default:
+							// Read unsupported property
+							consume_property(_in, prop);
+							break;
+						}
+					} catch (std::errc ec) {
+						OMLOG_ERROR << "Error reading vertex " << i << ": " << std::make_error_condition(ec).message();
+						return false;
+					}
+				}
+				assert(vh.is_valid());
+				m_bi->set_point(vh, v);
+				m_bi->set_normal(vh, n);
+				m_bi->set_color(vh, c);
+				m_bi->set_texcoord(vh, t);
+			}
+			return true;
+		}
+
+		template <typename Reader>
+		bool PLYParser::parse_faces(Reader &_in, const ElementInfo &element) {
+			BaseImporter::VHandles vhandles;
+			std::vector<Vec2f> texcoords2d;
+			for (int i = 0; i < element.count_ && !_in.eof(); ++i) {
+				FaceHandle fh;
+				int nv = 0;
+				Vec4f c{0, 0, 0, 1};
+
+				for (size_t propertyIndex = 0; propertyIndex < element.properties_.size(); ++propertyIndex) {
+					try {
+						PropertyInfo prop = element.properties_[propertyIndex];
+						switch (prop.property) {
+						case VERTEX_INDICES:
+						{
+							// number of vertices for this face
+							nv = 0;
+							get(prop.listIndexType, _in, nv);
+							vhandles.resize(nv);
+							for (int j = 0; j < nv; ++j) {
+								int idx;
+								get(prop.value, _in, idx);
+								vhandles[j] = VertexHandle(idx);
+							}
+							fh = m_bi->add_face(vhandles);
+							break;
+						}
+						case TEXCOORDS:
+						{
+							int n;
+							get(prop.listIndexType, _in, n);
+							if (n == nv * 2) {
+								// 2D
+								texcoords2d.resize(nv);
+								for (int j = 0; j < nv; ++j) {
+									float u, v;
+									get(prop.value, _in, u);
+									get(prop.value, _in, v);
+									texcoords2d[j] = {u, v};
+								}
+								if (nv && fh.is_valid()) m_bi->add_face_texcoords(fh, vhandles[0], texcoords2d);
+							} else {
+								// bad number of texcoord components
+								OMLOG_WARNING << "Incorrect number of texcoord components";
+								consume_n(prop.value, _in, n);
+							}
+							break;
+						}
+						case COLORRED:
+							get_color(prop.value, _in, c[0]);
+							break;
+						case COLORGREEN:
+							get_color(prop.value, _in, c[1]);
+							break;
+						case COLORBLUE:
+							get_color(prop.value, _in, c[2]);
+							break;
+						case COLORALPHA:
+							get_color(prop.value, _in, c[3]);
+							break;
+						case CUSTOM_PROP:
+							if (m_bi->file_options().check(OptionBits::Custom) && fh.is_valid() && prop.handle.is_valid()) {
+								get_custom_prop(_in, fh, prop.handle, prop.value, prop.listIndexType);
+							} else {
+								consume_property(_in, prop);
+							}
+							break;
+						default:
+							// Read unsupported property
+							consume_property(_in, prop);
+							break;
+						}
+					} catch (std::errc ec) {
+						OMLOG_ERROR << "Error reading face " << i << ": " << std::make_error_condition(ec).message();
+						return false;
+					}
+				}
+				if (fh.is_valid()) {
+					m_bi->set_color(fh, c);
+				}
+			}
+			return true;
+		}
+
+		//-----------------------------------------------------------------------------
+
+
+		_PLYReader_::_PLYReader_() {
+			IOManager().register_module(this);
+		}
+
+		//-----------------------------------------------------------------------------
+
+
+		bool _PLYReader_::read(const std::filesystem::path &_filename, BaseImporter &_bi) {
+			iob::file_buffer fbuf{_filename, iob::file_buffer::read};
+
+			if (!fbuf.is_open()) {
+				OMLOG_ERROR << "Failed to open file " << _filename.u8string();
+				return false;
+			}
+
+			PLYParser p{&fbuf, &_bi};
+			return p.parse();
+		}
+
+		//-----------------------------------------------------------------------------
+
+
+		bool _PLYReader_::read(std::istream &_in, BaseImporter &_bi) {
+			iob::stream_buffer sbuf{_in.rdbuf()};
+			PLYParser p{&sbuf, &_bi};
+			return p.parse();
+		}
+
 
 		//=============================================================================
 	} // namespace IO
