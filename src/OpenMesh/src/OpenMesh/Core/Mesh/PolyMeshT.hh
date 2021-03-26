@@ -61,8 +61,9 @@
 #include <OpenMesh/Core/Mesh/PolyConnectivity.hh>
 #include <OpenMesh/Core/Mesh/FinalMeshItemsT.hh>
 #include <OpenMesh/Core/Mesh/Tags.hh>
-#include <vector>
 
+#include <vector>
+#include <utility>
 
 //== NAMESPACES ===============================================================
 
@@ -183,13 +184,17 @@ public:
 
   // --- constructor/destructor
   PolyMeshT() {}
-  template<typename T>
-  explicit PolyMeshT(const T& t) : Kernel(t) {}
   virtual ~PolyMeshT() {}
+
+  explicit PolyMeshT(Kernel t) : Kernel(std::move(t)) {}
 
   /** Uses default copy and assignment operator.
       Use them to assign two meshes of \b equal type.
       If the mesh types vary, use PolyMeshT::assign() instead. */
+  PolyMeshT(const PolyMeshT &) = default;
+  PolyMeshT(PolyMeshT &&) noexcept = default;
+  PolyMeshT & operator=(const PolyMeshT &) = default;
+  PolyMeshT & operator=(PolyMeshT &&) noexcept = default;
 
   // --- creation ---
 

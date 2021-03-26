@@ -149,6 +149,11 @@ namespace OpenMesh {
 			// BaseKernel's destructor anyway...
 		}
 
+		AttribKernelT(const AttribKernelT &) = default;
+		AttribKernelT(AttribKernelT &&) noexcept = default;
+		AttribKernelT & operator=(const AttribKernelT &) = default;
+		AttribKernelT & operator=(AttribKernelT &&) noexcept = default;
+
 		/** Assignment from another mesh of \em another type.
 			\note All that's copied is connectivity and vertex positions.
 			All other information (like e.g. attributes or additional

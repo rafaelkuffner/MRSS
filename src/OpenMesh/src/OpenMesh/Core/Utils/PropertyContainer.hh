@@ -51,6 +51,8 @@
 
 #include <OpenMesh/Core/Utils/Property.hh>
 
+#include <utility>
+
 //-----------------------------------------------------------------------------
 namespace OpenMesh
 {
@@ -93,7 +95,16 @@ public:
     return *this;
   }
 
+  PropertyContainer(PropertyContainer&& _rhs) noexcept { operator=(std::move(_rhs)); }
 
+  PropertyContainer& operator=(PropertyContainer&& _rhs) noexcept
+  {
+    // The assignment below relies on all previous BaseProperty* elements having been deleted
+    std::for_each(properties_.begin(), properties_.end(), Delete());
+    properties_ = std::move(_rhs.properties_);
+    _rhs.properties_.clear();
+    return *this;
+  }
 
   //--------------------------------------------------------- manage properties
 

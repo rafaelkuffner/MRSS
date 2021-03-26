@@ -106,6 +106,11 @@ public: //-------------------------------------------- constructor / destructor
 	fprops_.clear();
   }
 
+protected:
+  BaseKernel(const BaseKernel &) = default;
+  BaseKernel(BaseKernel &&) noexcept = default;
+  BaseKernel & operator=(const BaseKernel &) = default;
+  BaseKernel & operator=(BaseKernel &&) noexcept = default;
 
 public: //-------------------------------------------------- add new properties
 

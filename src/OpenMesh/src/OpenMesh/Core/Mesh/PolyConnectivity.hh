@@ -383,6 +383,11 @@ public:
   PolyConnectivity()  {}
   virtual ~PolyConnectivity() {}
 
+  PolyConnectivity(const PolyConnectivity &) = default;
+  PolyConnectivity(PolyConnectivity &&) noexcept = default;
+  PolyConnectivity & operator=(const PolyConnectivity &) = default;
+  PolyConnectivity & operator=(PolyConnectivity &&) noexcept = default;
+
   inline static bool is_triangles()
   { return false; }
 

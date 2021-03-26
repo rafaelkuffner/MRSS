@@ -105,6 +105,11 @@ public:
   ArrayKernel();
   virtual ~ArrayKernel();
 
+  ArrayKernel(const ArrayKernel &) = default;
+  ArrayKernel(ArrayKernel &&) noexcept = default;
+  ArrayKernel & operator=(const ArrayKernel &) = default;
+  ArrayKernel & operator=(ArrayKernel &&) noexcept = default;
+
   /** ArrayKernel uses the default copy constructor and assignment operator, which means
       that the connectivity and all properties are copied, including reference
       counters, allocated bit status masks, etc.. In contrast assign_connectivity

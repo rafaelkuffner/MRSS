@@ -59,7 +59,9 @@
 #include <OpenMesh/Core/System/config.h>
 #include <OpenMesh/Core/Mesh/PolyMeshT.hh>
 #include <OpenMesh/Core/Mesh/Tags.hh>
+
 #include <vector>
+#include <utility>
 
 
 //== NAMESPACES ===============================================================
@@ -166,7 +168,13 @@ public:
 
   /// Default constructor
   TriMeshT() : PolyMesh() {}
-  explicit TriMeshT(PolyMesh rhs) : PolyMesh((rhs.triangulate(), rhs))
+
+  TriMeshT(const TriMeshT &) = default;
+  TriMeshT(TriMeshT &&) noexcept = default;
+  TriMeshT & operator=(const TriMeshT &) = default;
+  TriMeshT & operator=(TriMeshT &&) noexcept = default;
+
+  explicit TriMeshT(PolyMesh rhs) : PolyMesh((rhs.triangulate(), std::move(rhs)))
   {
   }
 
