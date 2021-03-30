@@ -51,20 +51,14 @@ namespace green {
 		OMLOG_INFO << "loading " << _filename.u8string();
 		// NOTE assimp appears to support utf8 filenames; see assimp-5.0.1\code\Common\DefaultIOSystem.cpp
 		Assimp::Importer importer;
-		//importer.SetProgressHandler
-		// FIXME halfedge property support
-		// FIXME proper handling of updated openmesh stuff
-		// we need to fuse colocated vertices so the topology works
-		// TODO what is the best way of achieving this?
-		// what is the runtime cost of using assimp's join identical?
-		// remove components that could prevent colocated vertices from being identical for joining purposes
-		// NOTE we want to load vertex colors
-		importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, aiComponent_TEXCOORDS | aiComponent_NORMALS | aiComponent_TANGENTS_AND_BITANGENTS);
+		//importer.SetProgressHandler();
+		// we dont care about tangents atm (openmesh doesnt know about them)
+		importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, aiComponent_TANGENTS_AND_BITANGENTS);
 		// scene is owned by the importer
+		// join identical is slow but necessary, else assimp will create new vertices for each face
 		const aiScene *scene = importer.ReadFile(
 			_filename.u8string(),
 			aiProcess_PreTransformVertices
-			| aiProcess_Triangulate
 			| aiProcess_JoinIdenticalVertices
 			| aiProcess_RemoveComponent
 		);
@@ -73,39 +67,59 @@ namespace green {
 			return false;
 		}
 		OpenMesh::IO::BaseImporter::VHandles vhandles;
+		std::vector<OpenMesh::Vec3f> normals;
+		std::vector<OpenMesh::Vec2f> texcoords2d;
+		std::vector<OpenMesh::Vec3f> texcoords3d;
 		// combine all meshes into one
+		// TODO assign face group properties when supported
 		for (unsigned i = 0; i < scene->mNumMeshes; i++) {
 			const aiMesh *mesh = scene->mMeshes[i];
+			if (mesh->HasNormals()) _bi.request_hattribs(OpenMesh::AttributeBits::Normal);
+			// TODO maybe load other texcoord sets as custom attribs?
+			if (mesh->HasTextureCoords(0) && mesh->mNumUVComponents[0] == 2) _bi.request_hattribs(OpenMesh::AttributeBits::TexCoord2D);
+			if (mesh->HasTextureCoords(0) && mesh->mNumUVComponents[0] == 3) _bi.request_hattribs(OpenMesh::AttributeBits::TexCoord3D);
+			// TODO maybe load other vertex color sets as custom attribs?
+			if (mesh->HasVertexColors(0)) _bi.request_hattribs(OpenMesh::AttributeBits::Color);
+			if (mesh->HasTangentsAndBitangents()) {
+				// openmesh doesnt care
+			}
 			// add vertices for this mesh
 			// TODO individual mesh transforms
 			OpenMesh::VertexHandle vh0;
 			for (unsigned j = 0; j < mesh->mNumVertices; j++) {
 				auto vh = _bi.add_vertex(ai2om(mesh->mVertices[j]));
 				if (j == 0) vh0 = vh;
-				if (mesh->HasNormals() && !!_bi.request_vattribs(OpenMesh::AttributeBits::Normal)) {
-					_bi.set_normal(vh, ai2om(mesh->mNormals[j]));
-				}
-				if (mesh->HasTangentsAndBitangents()) {
-					// openmesh doesnt care?
-				}
-				if (mesh->HasTextureCoords(0) && !!_bi.request_vattribs(OpenMesh::AttributeBits::TexCoord2D)) {
-					_bi.set_texcoord(vh, ai2om(mesh->mTextureCoords[0][j]));
-				}
-				if (mesh->HasVertexColors(0) && !!_bi.request_vattribs(OpenMesh::AttributeBits::Color)) {
+				if (mesh->HasVertexColors(0)) {
 					_bi.set_color(vh, ai2om(mesh->mColors[0][j]));
 				}
 			}
-			// add face indices for this mesh
-			// TODO join same-position vertices (and average their normals or something)
+			// add faces for this mesh and their halfedge properties
 			for (unsigned j = 0; j < mesh->mNumFaces; j++) {
 				vhandles.clear();
+				normals.clear();
+				texcoords2d.clear();
+				texcoords3d.clear();
 				const aiFace &face = mesh->mFaces[j];
 				for (unsigned k = 0; k < face.mNumIndices; k++) {
 					const unsigned uvi = face.mIndices[k];
 					// TODO proper overflow check
 					vhandles.push_back(OpenMesh::VertexHandle{vh0.idx() + int(uvi)});
+					if (mesh->HasNormals()) {
+						normals.push_back(ai2om(mesh->mNormals[uvi]));
+					}
+					if (mesh->HasTextureCoords(0) && mesh->mNumUVComponents[0] == 2) {
+						texcoords2d.push_back(OpenMesh::vector_cast<OpenMesh::Vec2f>(ai2om(mesh->mTextureCoords[0][uvi])));
+					}
+					if (mesh->HasTextureCoords(0) && mesh->mNumUVComponents[0] == 3) {
+						texcoords3d.push_back(ai2om(mesh->mTextureCoords[0][uvi]));
+					}
 				}
-				_bi.add_face(vhandles);
+				OpenMesh::FaceHandle fh = _bi.add_face(vhandles);
+				if (fh.is_valid() && vhandles.size()) {
+					_bi.add_face_normals(fh, vhandles[0], normals);
+					_bi.add_face_texcoords(fh, vhandles[0], texcoords2d);
+					_bi.add_face_texcoords(fh, vhandles[0], texcoords3d);
+				}
 			}
 		}
 		return true;
