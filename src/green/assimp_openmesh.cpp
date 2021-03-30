@@ -79,7 +79,7 @@ namespace green {
 			if (mesh->HasTextureCoords(0) && mesh->mNumUVComponents[0] == 2) _bi.request_hattribs(OpenMesh::AttributeBits::TexCoord2D);
 			if (mesh->HasTextureCoords(0) && mesh->mNumUVComponents[0] == 3) _bi.request_hattribs(OpenMesh::AttributeBits::TexCoord3D);
 			// TODO maybe load other vertex color sets as custom attribs?
-			if (mesh->HasVertexColors(0)) _bi.request_hattribs(OpenMesh::AttributeBits::Color);
+			if (mesh->HasVertexColors(0)) _bi.request_vattribs(OpenMesh::AttributeBits::Color);
 			if (mesh->HasTangentsAndBitangents()) {
 				// openmesh doesnt care
 			}
