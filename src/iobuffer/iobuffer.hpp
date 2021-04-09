@@ -452,26 +452,29 @@ namespace iob {
 
 		void skip_ws();
 
-		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		template <typename T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
 		IOB_NOINLINE
 		std::errc get_int(T &val, int base = 10) {
-			if constexpr (std::is_integral_v<T>) {
-				auto s = peek(32);
-				auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), val, base);
-				get(end - s.data());
-				// TODO return io_error on eof?
-				return ec;
-			} else {
-				// allow get of integer value as float type
-				intmax_t x = 0;
-				auto ec = get_int(x, base);
-				if (ec != std::errc{}) return ec;
-				val = T(x);
-				return {};
-			}
+			static_assert(std::is_integral_v<T>, "must get int as int");
+			auto s = peek(32);
+			auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), val, base);
+			get(end - s.data());
+			// TODO return io_error on eof?
+			return ec;
 		}
 
-		template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+		template <typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
+		IOB_FORCEINLINE
+		std::errc get_int(T &val, int base = 10) {
+			// allow get of integer value as float type
+			intmax_t x = 0;
+			auto ec = get_int(x, base);
+			if (ec != std::errc{}) return ec;
+			val = T(x);
+			return {};
+		}
+
+		template <typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
 		IOB_NOINLINE
 		std::errc get_float(T &val, std::chars_format fmt = std::chars_format::general) {
 			static_assert(std::is_floating_point_v<T>, "must get float as float");
@@ -484,20 +487,20 @@ namespace iob {
 
 		template <typename ...Ts, typename Delim>
 		IOB_FORCEINLINE
-		std::pair<std::errc, int> get_ints(std::tuple<Ts &...> vals, Delim delimchars = whitespace, int base = 10) {
+		std::pair<std::errc, int> get_ints(const std::tuple<Ts &...> &vals, Delim delimchars = whitespace, int base = 10) {
 			return get_ints_impl(vals, std::index_sequence_for<Ts...>(), delimchars, base);
 		}
 
 		template <typename ...Ts, typename Delim>
 		IOB_FORCEINLINE
-		std::pair<std::errc, int> get_floats(std::tuple<Ts &...> vals, Delim delimchars = whitespace, std::chars_format fmt = std::chars_format::general) {
+		std::pair<std::errc, int> get_floats(const std::tuple<Ts &...> &vals, Delim delimchars = whitespace, std::chars_format fmt = std::chars_format::general) {
 			return get_floats_impl(vals, std::index_sequence_for<Ts...>(), delimchars, fmt);
 		}
 
 	private:
 		template <typename ...Ts, size_t ...Is, typename Delim>
 		IOB_FORCEINLINE
-		std::pair<std::errc, int> get_ints_impl(std::tuple<Ts &...> vals, std::index_sequence<Is...>, Delim delimchars, int base = 10) {
+		std::pair<std::errc, int> get_ints_impl(const std::tuple<Ts &...> &vals, std::index_sequence<Is...>, Delim delimchars, int base = 10) {
 			std::errc ec{};
 			int r = 0;
 			(... && (get_while_any(delimchars), (ec = get_int(std::get<Is>(vals), base)), r += int(ec == std::errc{}), ec == std::errc{}));
@@ -506,7 +509,7 @@ namespace iob {
 
 		template <typename ...Ts, size_t ...Is, typename Delim>
 		IOB_FORCEINLINE
-		std::pair<std::errc, int> get_floats_impl(std::tuple<Ts &...> vals, std::index_sequence<Is...>, Delim delimchars, std::chars_format fmt) {
+		std::pair<std::errc, int> get_floats_impl(const std::tuple<Ts &...> &vals, std::index_sequence<Is...>, Delim delimchars, std::chars_format fmt) {
 			std::errc ec{};
 			int r = 0;
 			(... && (get_while_any(delimchars), (ec = get_float(std::get<Is>(vals), fmt)), r += int(ec == std::errc{}), ec == std::errc{}));
@@ -655,6 +658,112 @@ namespace iob {
 			}
 		}
 
+	};
+
+	class text_writer {
+	private:
+		iobuffer *m_iobuf = nullptr;
+
+	public:
+		text_writer() = default;
+
+		explicit text_writer(iobuffer *iobuf_) : m_iobuf(iobuf_) {}
+
+		iobuffer * iobuf() const noexcept {
+			return m_iobuf;
+		}
+
+		explicit operator bool() const noexcept {
+			return m_iobuf && *m_iobuf;
+		}
+
+		bool good() const noexcept {
+			return m_iobuf && m_iobuf->good();
+		}
+
+		bool bad() const noexcept {
+			return !m_iobuf || m_iobuf->bad();
+		}
+
+		void seek(std::streamoff i, iobuffer::seek_origin origin);
+
+		std::streampos tell() const;
+
+		void flush();
+
+		void put(char c);
+
+		void put(std::string_view s);
+
+		char * put_begin(std::streamsize n);
+
+		void put_end(std::streamsize n);
+
+		template <typename T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
+		IOB_NOINLINE
+		std::errc put_int(const T &val, int base = 10) {
+			static_assert(std::is_integral_v<T>, "must put int from int");
+			// TODO return io_error if bad?
+			char *begin = put_begin(32);
+			auto [end, ec] = std::to_chars(begin, begin + 32, val, base);
+			// note: on error, to_chars returns ptr == last
+			std::streamsize n = (ec == std::errc{}) ? (end - begin) : 0;
+			put_end(n);
+			return ec;
+		}
+
+		template <typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
+		IOB_NOINLINE
+		std::errc put_float(const T &val, std::chars_format fmt = std::chars_format::general) {
+			static_assert(std::is_floating_point_v<T>, "must put float from float");
+			// TODO return io_error if bad?
+			char *begin = put_begin(32);
+			auto [end, ec] = std::to_chars(begin, begin + 32, val, fmt);
+			// note: on error, to_chars returns ptr == last
+			std::streamsize n = (ec == std::errc{}) ? (end - begin) : 0;
+			put_end(n);
+			return ec;
+		}
+
+		template <typename T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
+		IOB_FORCEINLINE
+		std::errc put_float(const T &val, std::chars_format fmt = std::chars_format::general) {
+			// allow put of integer type as float representation
+			return put_float(double(val), fmt);
+		}
+
+		template <typename ...Ts, typename Delim>
+		IOB_FORCEINLINE
+		std::pair<std::errc, int> put_ints(const std::tuple<Ts...> &vals, Delim delimseq = ' ', int base = 10) {
+			return put_ints_impl(vals, std::index_sequence_for<Ts...>(), delimseq, base);
+		}
+
+		template <typename ...Ts, typename Delim>
+		IOB_FORCEINLINE
+		std::pair<std::errc, int> put_floats(const std::tuple<Ts...> &vals, Delim delimseq = ' ', std::chars_format fmt = std::chars_format::general) {
+			return put_floats_impl(vals, std::index_sequence_for<Ts...>(), delimseq, fmt);
+		}
+
+	private:
+		template <typename T0, typename ...Ts, size_t I0, size_t ...Is, typename Delim>
+		IOB_FORCEINLINE
+		std::pair<std::errc, int> put_ints_impl(const std::tuple<T0, Ts...> &vals, std::index_sequence<I0, Is...>, Delim delimseq, int base = 10) {
+			std::errc ec = put_int(std::get<I0>(vals), base);
+			if (ec != std::errc{}) return {ec, 0};
+			int r = 1;
+			(... && (put(delimseq), (ec = put_int(std::get<Is>(vals), base)), r += int(ec == std::errc{}), ec == std::errc{}));
+			return {ec, r};
+		}
+
+		template <typename T0, typename ...Ts, size_t I0, size_t ...Is, typename Delim>
+		IOB_FORCEINLINE
+		std::pair<std::errc, int> put_floats_impl(const std::tuple<T0, Ts...> &vals, std::index_sequence<I0, Is...>, Delim delimseq, std::chars_format fmt) {
+			std::errc ec = put_float(std::get<I0>(vals), fmt);
+			if (ec != std::errc{}) return {ec, 0};
+			int r = 1;
+			(... && (put(delimseq), (ec = put_float(std::get<Is>(vals), fmt)), r += int(ec == std::errc{}), ec == std::errc{}));
+			return {ec, r};
+		}
 	};
 
 	constexpr std::string_view rstrip_any(std::string_view s, std::string_view schars = text_reader::whitespace) {

@@ -181,7 +181,7 @@ namespace iob {
 
 	void iobuffer::put_end(std::streamsize n) {
 		assert(m_put_len && "put_begin not in progress");
-		assert(n >= 0 && n < m_put_len && "overflow");
+		assert(n >= 0 && n <= m_put_len && "overflow");
 		assert(!m_bad && m_writing);
 		m_cursor += n;
 		m_end_read = m_cursor;
@@ -592,6 +592,40 @@ namespace iob {
 		return string_view_cast(get(n));
 	}
 
-	
+	void text_writer::seek(std::streamoff i, iobuffer::seek_origin origin) {
+		assert(m_iobuf);
+		m_iobuf->seek(i, origin);
+	}
+
+	std::streampos text_writer::tell() const {
+		assert(m_iobuf);
+		return m_iobuf->tell();
+	}
+
+	void text_writer::flush() {
+		assert(m_iobuf);
+		m_iobuf->flush();
+	}
+
+	void text_writer::put(char c) {
+		char *p = put_begin(1);
+		*p = c;
+		put_end(1);
+	}
+
+	void text_writer::put(std::string_view s) {
+		assert(m_iobuf);
+		m_iobuf->put(uchar_view_cast(s));
+	}
+
+	char * text_writer::put_begin(std::streamsize n) {
+		assert(m_iobuf);
+		return reinterpret_cast<char *>(m_iobuf->put_begin(n));
+	}
+
+	void text_writer::put_end(std::streamsize n) {
+		assert(m_iobuf);
+		m_iobuf->put_end(n);
+	}
 
 }
