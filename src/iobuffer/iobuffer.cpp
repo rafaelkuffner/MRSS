@@ -260,11 +260,13 @@ namespace iob {
 	}
 
 	stream_buffer::stream_buffer(stream_buffer &&other) noexcept :
+		iobuffer(std::move(other)),
 		m_buf{std::exchange(other.m_buf, nullptr)},
 		m_bad{std::exchange(other.m_bad, false)}
 	{}
 
 	stream_buffer & stream_buffer::operator=(stream_buffer &&other) noexcept {
+		iobuffer::operator=(std::move(other));
 		m_buf = std::exchange(other.m_buf, nullptr);
 		m_bad = std::exchange(other.m_bad, false);
 	}
@@ -320,16 +322,17 @@ namespace iob {
 	}
 
 	file_buffer::~file_buffer() {
-		if (m_fp) fclose(m_fp);
-		m_fp = nullptr;
+		close();
 	}
 
 	file_buffer::file_buffer(file_buffer &&other) noexcept :
+		iobuffer(std::move(other)),
 		m_fp{std::exchange(other.m_fp, nullptr)}
 	{}
 
 	file_buffer & file_buffer::operator=(file_buffer &&other) noexcept {
-		if (m_fp) fclose(m_fp);
+		close();
+		iobuffer::operator=(std::move(other));
 		m_fp = std::exchange(other.m_fp, nullptr);
 	}
 
@@ -351,6 +354,15 @@ namespace iob {
 			setvbuf(m_fp, nullptr, _IONBF, 0);
 			init_open();
 		}
+	}
+
+	void file_buffer::close() noexcept {
+		if (!m_fp) return;
+		try {
+			flush();
+		} catch (...) {}
+		std::fclose(m_fp);
+		m_fp = nullptr;
 	}
 
 	bool file_buffer::error_impl() {
@@ -626,6 +638,47 @@ namespace iob {
 	void text_writer::put_end(std::streamsize n) {
 		assert(m_iobuf);
 		m_iobuf->put_end(n);
+	}
+
+	void binary_writer::seek(std::streamoff i, iobuffer::seek_origin origin) {
+		assert(m_iobuf);
+		m_iobuf->seek(i, origin);
+	}
+
+	std::streampos binary_writer::tell() const {
+		assert(m_iobuf);
+		return m_iobuf->tell();
+	}
+
+	void binary_writer::flush() {
+		assert(m_iobuf);
+		m_iobuf->flush();
+	}
+
+	void binary_writer::put(uchar c) {
+		uchar *p = put_begin(1);
+		*p = c;
+		put_end(1);
+	}
+
+	void binary_writer::put(uchar_view s) {
+		assert(m_iobuf);
+		m_iobuf->put(s);
+	}
+
+	uchar * binary_writer::put_begin(std::streamsize n) {
+		assert(m_iobuf);
+		return m_iobuf->put_begin(n);
+	}
+
+	void binary_writer::put_end(std::streamsize n) {
+		assert(m_iobuf);
+		m_iobuf->put_end(n);
+	}
+
+	void binary_writer::put_str(std::string_view s) {
+		assert(m_iobuf);
+		m_iobuf->put(uchar_view_cast(s));
 	}
 
 }

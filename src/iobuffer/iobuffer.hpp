@@ -119,6 +119,50 @@ namespace iob {
 			std::memcpy(&val, &x, sizeof(val));
 			return val;
 		}
+
+		template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+		using intmax_like_t = std::conditional_t<std::is_signed_v<T>, intmax_t, uintmax_t>;
+
+		template <typename T1, typename T2>
+		constexpr bool int_less(T1 t1, T2 t2) {
+			// TODO c++20 safe integer comparisons (std::cmp_less)
+			const intmax_like_t<T1> v1{t1};
+			const intmax_like_t<T2> v2{t2};
+			if constexpr (std::is_signed_v<T1> == std::is_signed_v<T2>) {
+				// both signed or both unsigned
+				return v1 < v2;
+			} else if constexpr (std::is_signed_v<T1>) {
+				// signed < unsigned
+				return v1 < 0 || uintmax_t(v1) < v2;
+			} else if constexpr (std::is_signed_v<T2>) {
+				// unsigned < signed
+				return v2 >= 0 && v1 < uintmax_t(v2);
+			} else {
+				static_assert(false, "statically unreachable");
+			}
+		}
+
+		static_assert(int_less(std::numeric_limits<int>::lowest(), (unsigned) 1), "int_less");
+		static_assert(int_less((unsigned char) 1, std::numeric_limits<int>::max()), "int_less");
+		static_assert(int_less(std::numeric_limits<int>::max(), std::numeric_limits<unsigned>::max()), "int_less");
+
+		template <typename T, typename Lower, typename Upper>
+		constexpr bool in_closed_int_range(T val, Lower lower, Upper upper) {
+			if (int_less(val, lower)) return false;
+			if (int_less(upper, val)) return false;
+			return true;
+		}
+
+		template <typename Target, typename T>
+		constexpr bool in_range_of(T val) {
+			if constexpr (std::is_integral_v<Target>) {
+				// TODO if T is float?
+				return in_closed_int_range(val, std::numeric_limits<Target>::lowest(), std::numeric_limits<Target>::max());
+			} else {
+				// float
+				return true;
+			}
+		}
 	}
 
 	class iobuffer {
@@ -150,9 +194,11 @@ namespace iob {
 		iobuffer(const iobuffer &) = delete;
 		iobuffer & operator=(const iobuffer &) = delete;
 
+	protected:
 		iobuffer(iobuffer &&) = default;
 		iobuffer & operator=(iobuffer &&) = default;
 
+	public:
 		explicit operator bool() const noexcept {
 			return !bad() && m_buf.size();
 		}
@@ -244,6 +290,7 @@ namespace iob {
 
 		stream_buffer() {}
 
+		// TODO test stream_buffer move ops
 		stream_buffer(stream_buffer &&) noexcept;
 		stream_buffer & operator=(stream_buffer &&) noexcept;
 
@@ -285,10 +332,13 @@ namespace iob {
 
 		file_buffer() = default;
 
+		// TODO test file_buffer move ops
 		file_buffer(file_buffer &&) noexcept;
 		file_buffer & operator=(file_buffer &&) noexcept;
 
 		explicit file_buffer(const std::filesystem::path &fpath, openmode mode);
+
+		void close() noexcept;
 
 		bool is_open() const noexcept {
 			return bool(m_fp);
@@ -522,6 +572,7 @@ namespace iob {
 	private:
 		iobuffer *m_iobuf = nullptr;
 		iob::endian m_endian = endian::little;
+		// TODO elsewhere so reader is more lightweight
 		iob::endian m_native_integer_endian = native_integer_endian();
 		iob::endian m_native_float_endian = native_float_endian();
 
@@ -585,6 +636,7 @@ namespace iob {
 
 		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 		T get_val() {
+			assert(m_iobuf);
 			T val{0};
 			const auto nr = m_iobuf->get(reinterpret_cast<uchar *>(&val), sizeof(val));
 			if constexpr (std::is_integral_v<T>) {
@@ -607,6 +659,7 @@ namespace iob {
 		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 		std::errc get_var_uint(T &val, size_t n) {
 			using get_t = uintmax_t;
+			assert(m_iobuf);
 			assert(n <= sizeof(get_t));
 			get_t x{0};
 			const auto nr = m_iobuf->get(reinterpret_cast<uchar *>(&x), std::streamsize(n));
@@ -614,7 +667,7 @@ namespace iob {
 			if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
 			const size_t shift = CHAR_BIT * (sizeof(get_t) - n);
 			if (m_endian == endian::big) x >>= shift;
-			if (std::is_integral_v<T> && x > get_t(std::numeric_limits<T>::max())) return std::errc::result_out_of_range;
+			if (!detail::in_range_of<T>(x)) return std::errc::result_out_of_range;
 			val = T(x);
 			return std::errc{};
 		}
@@ -622,17 +675,17 @@ namespace iob {
 		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 		std::errc get_var_sint(T &val, size_t n) {
 			using get_t = intmax_t;
+			assert(m_iobuf);
 			assert(n <= sizeof(get_t));
 			get_t x{0};
 			const auto nr = m_iobuf->get(reinterpret_cast<uchar *>(&x), std::streamsize(n));
 			if (nr < std::streamsize(n)) return std::errc::io_error;
 			if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
 			const size_t shift = CHAR_BIT * (sizeof(get_t) - n);
-			if (m_endian == endian::little) x <<= shift;
 			static_assert((-1 >> 1) == -1, "need arithmetic right shift");
+			if (m_endian == endian::little) x <<= shift;
 			x >>= shift;
-			if (std::is_integral_v<T> && x < get_t(std::numeric_limits<T>::lowest())) return std::errc::result_out_of_range;
-			if (std::is_integral_v<T> && x > get_t(std::numeric_limits<T>::max())) return std::errc::result_out_of_range;
+			if (!detail::in_range_of<T>(x)) return std::errc::result_out_of_range;
 			val = T(x);
 			return std::errc{};
 		}
@@ -640,6 +693,7 @@ namespace iob {
 		template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
 		std::errc get_var_float(T &val, size_t n) {
 			static_assert(std::is_floating_point_v<T>, "must get float as float");
+			assert(m_iobuf);
 			if (n == sizeof(float)) {
 				using get_t = float;
 				auto x = get_val<get_t>();
@@ -763,6 +817,130 @@ namespace iob {
 			int r = 1;
 			(... && (put(delimseq), (ec = put_float(std::get<Is>(vals), fmt)), r += int(ec == std::errc{}), ec == std::errc{}));
 			return {ec, r};
+		}
+	};
+
+	class binary_writer {
+	private:
+		iobuffer *m_iobuf = nullptr;
+		iob::endian m_endian = endian::little;
+		// TODO elsewhere so writer is more lightweight
+		iob::endian m_native_integer_endian = native_integer_endian();
+		iob::endian m_native_float_endian = native_float_endian();
+
+	public:
+		using uchar = iobuffer::uchar;
+		using uchar_view = iobuffer::uchar_view;
+
+		binary_writer() = default;
+
+		explicit binary_writer(iobuffer *iobuf_) : m_iobuf(iobuf_) {}
+
+		iobuffer * iobuf() const noexcept {
+			return m_iobuf;
+		}
+
+		explicit operator bool() const noexcept {
+			return m_iobuf && *m_iobuf;
+		}
+
+		bool good() const noexcept {
+			return m_iobuf && m_iobuf->good();
+		}
+
+		bool bad() const noexcept {
+			return !m_iobuf || m_iobuf->bad();
+		}
+
+		iob::endian endian() const noexcept {
+			return m_endian;
+		}
+
+		void endian(iob::endian e) noexcept {
+			m_endian = e;
+		}
+
+		void seek(std::streamoff i, iobuffer::seek_origin origin);
+
+		std::streampos tell() const;
+
+		void flush();
+
+		void put(uchar c);
+
+		void put(uchar_view s);
+
+		uchar * put_begin(std::streamsize n);
+
+		void put_end(std::streamsize n);
+
+		void put_str(std::string_view s);
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		void put_val(const T &val) {
+			assert(m_iobuf);
+			T x(val);
+			if constexpr (std::is_integral_v<T>) {
+				if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
+			} else if constexpr (std::is_floating_point_v<T>) {
+				if (m_native_float_endian != m_endian) x = detail::byteswap(x);
+			} else {
+				static_assert(false, "bad type for put_val");
+			}
+			m_iobuf->put({reinterpret_cast<uchar *>(&x), sizeof(T)});
+		}
+
+		template <typename ...Ts, typename = std::enable_if_t<(... && std::is_arithmetic_v<Ts>)>>
+		void put_vals(const Ts &...vals) {
+			(..., put_val(vals));
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+		std::errc put_var_uint(const T &val, std::streamsize n) {
+			static_assert(std::is_integral_v<T>, "must put uint from int");
+			using put_t = uintmax_t;
+			assert(m_iobuf);
+			assert(n <= sizeof(put_t));
+			if (!detail::in_range_of<put_t>(val)) return std::errc::argument_out_of_domain;
+			put_t x(val);
+			const size_t shift = CHAR_BIT * (sizeof(put_t) - n);
+			if ((x << shift) >> shift != x) return std::errc::result_out_of_range;
+			if (m_endian == endian::big) x <<= shift;
+			if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
+			put({reinterpret_cast<const uchar *>(&x), size_t(n)});
+			return m_iobuf->bad() ? std::errc::io_error : std::errc{};
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+		std::errc put_var_sint(const T &val, std::streamsize n) {
+			static_assert(std::is_integral_v<T>, "must put sint from int");
+			using put_t = intmax_t;
+			assert(m_iobuf);
+			assert(n <= sizeof(put_t));
+			if (!detail::in_range_of<put_t>(val)) return std::errc::argument_out_of_domain;
+			put_t x(val);
+			const size_t shift = CHAR_BIT * (sizeof(put_t) - n);
+			static_assert((-1 >> 1) == -1, "need arithmetic right shift");
+			if ((x << shift) >> shift != x) return std::errc::result_out_of_range;
+			if (m_endian == endian::big) x <<= shift;
+			if (m_native_integer_endian != m_endian) x = detail::byteswap(x);
+			put({reinterpret_cast<const uchar *>(&x), size_t(n)});
+			return m_iobuf->bad() ? std::errc::io_error : std::errc{};
+		}
+
+		template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+		std::errc put_var_float(const T &val, std::streamsize n) {
+			assert(m_iobuf);
+			if (n == sizeof(float)) {
+				put_val(float(val));
+				return m_iobuf->bad() ? std::errc::io_error : std::errc{};
+			} else if (n == sizeof(double)) {
+				put_val(double(val));
+				return m_iobuf->bad() ? std::errc::io_error : std::errc{};
+			} else {
+				assert(false && "bad float size");
+				return std::errc::invalid_argument;
+			}
 		}
 	};
 
