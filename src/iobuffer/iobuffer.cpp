@@ -85,6 +85,9 @@ namespace iob {
 		} else if (m_eof) {
 			auto s = uchar_view{m_buf.data() + m_cursor, size_t(gavail())};
 			s.remove_prefix(size_t(base));
+			// report eof when returning nothing with n > 0 and base offset 0
+			assert(base == 0 ? (n > 0) : true);
+			if (base == 0 && s.empty()) m_report_eof = true;
 			return s;
 		} else {
 			compact();

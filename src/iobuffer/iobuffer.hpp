@@ -211,9 +211,11 @@ namespace iob {
 			return m_bad;
 		}
 
+		// get eof status.
+		// eof will be reported after a get that returned less than requested,
+		// or a peek (of > 0 bytes with base offset 0) that returned nothing.
+		// a get(1) that returns the last byte will not cause eof status.
 		bool eof() const noexcept {
-			// should only report eof after a get that returned less than requested.
-			// ie a get(1) that returns the last byte should not cause eof status.
 			return m_report_eof;
 		}
 
