@@ -121,10 +121,9 @@ namespace green {
 			throw std::runtime_error("failed to load model");
 		}
 		
-		// TODO necessary? optional?
+		// TODO avoid triangulating
 		// not triangulating breaks some stuff atm, probably in vertex area
-		// NOTE currently done by assimp too
-		//m_mesh.triangulate();
+		m_mesh.triangulate();
 
 		if (readOptions.halfedge_has_normal() && m_mesh.has_halfedge_normals()) {
 			std::cout << "Found halfedge normals" << std::endl;
