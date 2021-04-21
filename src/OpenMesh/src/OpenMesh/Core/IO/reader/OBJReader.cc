@@ -44,6 +44,7 @@
 
  //== INCLUDES =================================================================
 
+#include <iostream>
 
  // OpenMesh
 #include <OpenMesh/Core/IO/reader/OBJReader.hh>
@@ -412,6 +413,12 @@ namespace OpenMesh {
 							}
 						}
 					}
+					if (ec != std::errc{}) {
+						// check eof in case line was not terminated
+						if (m_in.eof()) break;
+						OMLOG_ERROR << "failed to parse face";
+						return;
+					}
 					m_in.get_while_any(' ');
 					// resolve negative indices and convert from 1-based to 0-based
 					v = v < 0 ? (m_n_v + v) : (v - 1);
@@ -436,7 +443,8 @@ namespace OpenMesh {
 						// (this is why the original OpenMesh parser pessimistically did two passes)
 					}
 				}
-				if (ec == std::errc{} && m_face_vhandles.size() > 2) {
+				assert(ec == std::errc{});
+				if (m_face_vhandles.size() > 2) {
 					// note that add_face can possibly triangulate the faces, which is why we have to
 					// store the current number of faces first
 					size_t n_faces = m_bi->n_faces();
@@ -469,7 +477,7 @@ namespace OpenMesh {
 						}
 					}
 				} else {
-					OMLOG_ERROR << "failed to parse face";
+					OMLOG_ERROR << "face has < 3 vertices, skipping";
 				}
 			}
 
