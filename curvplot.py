@@ -13,16 +13,20 @@ area = data[:,0]
 meancurv = data[:,1]
 doncurv = data[:,2]
 
-figure()
-plot(sqrt(area), abs(meancurv), '.')
-title('Mean Curvature vs Vertex Area')
-xlabel('√ vertex area')
-ylabel('Absolute mean curvature')
+def plot_curv(curv, bins, curvlbl):
+	figure()
+	hist(curv, weights=area, bins=bins)
+	xlabel(curvlbl)
+	ylabel('Area')
+	title('Vertex Area by {}'.format(curvlbl))
+	figure()
+	plot(sqrt(area), curv, '.')
+	xlabel('√ vertex area')
+	ylabel(curvlbl)
+	title('{} vs Vertex Area'.format(curvlbl))
+# }
 
-figure()
-plot(sqrt(area), doncurv, '.')
-title('DoN curvature vs Vertex Area')
-xlabel('√ vertex area')
-ylabel('DoN curvature')
+plot_curv(abs(meancurv), 256, 'Absolute mean curvature')
+plot_curv(doncurv, linspace(0, 1, 257), 'DoN curvature')
 
 show(block=True)
