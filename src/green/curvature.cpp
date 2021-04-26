@@ -475,7 +475,7 @@ namespace green {
 			v1 = *vfIt++;
 			v2 = *vfIt;
 
-			bool nonmanifold = mesh.status(*fIt).fixed_nonmanifold();
+			bool nonmanifold = mesh.has_face_status() && mesh.status(*fIt).fixed_nonmanifold();
 			if (nonmanifold) {
 				int fid = fIt->idx();
 				continue;
