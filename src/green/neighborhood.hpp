@@ -63,6 +63,8 @@ namespace green {
 
 	struct MeshCache {
 
+		static constexpr unsigned ncurvbins = 256;
+
 		// min vertex size (in unsigned alloc units)
 		// vertex data is padded to ensure this
 		// (this is checked on construction, just to be sure)
@@ -246,6 +248,14 @@ namespace green {
 		const MeshCache &mesh,
 		CalculationStats &stats,
 		const std::array<unsigned, simd_traits::simd_size> &rootvdis,
+		float radius,
+		float noise_height
+	);
+
+	float getGeodesicNeighborhoodSaliency(
+		const MeshCache &mesh,
+		CalculationStats &stats,
+		unsigned rootvdi,
 		float radius,
 		float noise_height
 	);

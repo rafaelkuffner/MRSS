@@ -798,7 +798,7 @@ namespace green {
 		using index_t = typename SimdTraits::index_t;
 		using dist_t = typename SimdTraits::dist_t;
 
-		dist_t hist[256]{};
+		dist_t hist[MeshCache::ncurvbins]{};
 		dist_t totarea{0};
 
 		dist_t avg_normal_x{};
@@ -894,6 +894,24 @@ namespace green {
 		return score;
 	}
 
+	template <typename SimdTraits = simd_traits>
+	neighborhood_search<SimdTraits> & thread_local_neighborhood_search() {
+		static thread_local neighborhood_search<SimdTraits> search;
+		return search;
+	}
+
+	float getGeodesicNeighborhoodSaliency(
+		const MeshCache &mesh,
+		CalculationStats &stats,
+		unsigned rootvdi,
+		float radius,
+		float noise_height
+	) {
+		auto &search = thread_local_neighborhood_search<simd1_traits>();
+		std::array<unsigned, 1> rootvdis{rootvdi};
+		return getGeodesicNeighborhoodSaliencyImpl(search, mesh, stats, rootvdis, radius, noise_height)[0];
+	}
+
 	std::array<float, simd_traits::simd_size> getGeodesicNeighborhoodSaliency(
 		const MeshCache &mesh,
 		CalculationStats &stats,
@@ -901,7 +919,7 @@ namespace green {
 		float radius,
 		float noise_height
 	) {
-		static thread_local neighborhood_search<> search;
+		auto &search = thread_local_neighborhood_search<>();
 		return getGeodesicNeighborhoodSaliencyImpl(search, mesh, stats, rootvdis, radius, noise_height);
 	}
 
@@ -914,7 +932,7 @@ namespace green {
 		float distribution_radius,
 		const std::function<void(unsigned vdi, float r, float s)> &distribute_saliency
 	) {
-		static thread_local neighborhood_search<simd1_traits> search;
+		auto &search = thread_local_neighborhood_search<simd1_traits>();
 		const float s = getGeodesicNeighborhoodSaliencyImpl<simd1_traits>(search, mesh, stats, {rootvdi}, radius, noise_height)[0];
 		using mask_t = simd1_traits::mask_t;
 		using dist_t = simd1_traits::dist_t;
@@ -1029,7 +1047,7 @@ namespace green {
 						vdata.areax = encode_area(area);
 						const float curv = std::clamp(mesh.property(curvatureMeasure, PolyMesh::VertexHandle(vi)), 0.f, 1.f);
 						// bin curvature based on 0-1 range
-						vdata.curvbin = unsigned(255.f * curv);
+						vdata.curvbin = unsigned(float(ncurvbins - 1) * curv);
 						vadata.vi = vi;
 						vadata.pos = mesh.point(PolyMesh::VertexHandle(vi));
 						vadata.norm = mesh.normal(PolyMesh::VertexHandle(vi));
