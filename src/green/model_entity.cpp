@@ -918,8 +918,9 @@ namespace green {
 		saliency_mesh_params mparams;
 		mparams.mesh = &m_model->mesh();
 		mparams.prop_vertex_area = m_model->prop_vertex_area();
-		mparams.prop_doncurv_raw = m_model->prop_doncurv_raw();
+		mparams.prop_curv_raw = m_model->prop_doncurv_raw();
 		mparams.prop_edge_length = m_model->prop_edge_length();
+		std::tie(mparams.curv_min, mparams.curv_max) = m_model->doncurv_minmax();
 		// create properties
 		mparams.prop_saliency_levels.resize(uparams.levels);
 		mparams.mesh->add_property(mparams.prop_curvature);

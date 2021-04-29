@@ -1085,7 +1085,9 @@ namespace {
 			(option("--salprop") & value("propname", salprop))
 				.doc(loc[help_sal_salprop].clone()),
 			(option("--colorprop") & value("propname", colorprop))
-				.doc(loc[help_sal_colorprop].clone())
+				.doc(loc[help_sal_colorprop].clone()),
+			(option("--targetentropy") & value("entropy", autocontrast_target_entropy))
+				.doc("INTERNAL USE ONLY")
 		}.doc(loc[help_cli_opts_saliency].clone());
 
 		auto dec_opts = group{
@@ -1220,8 +1222,9 @@ namespace {
 			saliency_mesh_params mparams;
 			mparams.mesh = &m.mesh();
 			mparams.prop_vertex_area = m.prop_vertex_area();
-			mparams.prop_doncurv_raw = m.prop_doncurv_raw();
+			mparams.prop_curv_raw = m.prop_doncurv_raw();
 			mparams.prop_edge_length = m.prop_edge_length();
+			std::tie(mparams.curv_min, mparams.curv_max) = m.doncurv_minmax();
 
 			// create properties
 			mparams.prop_saliency_levels.resize(sal_uparams.levels);

@@ -118,7 +118,9 @@ namespace green {
 			const PolyMesh &mesh,
 			OpenMesh::EPropHandleT<float> edgeLengthProperty,
 			OpenMesh::VPropHandleT<float> vertexAreasProperty,
-			OpenMesh::VPropHandleT<float> curvatureMeasure
+			OpenMesh::VPropHandleT<float> curvatureMeasure,
+			float curvmin,
+			float curvmax
 		);
 
 		unsigned vdi_uid(unsigned vdi) const noexcept {

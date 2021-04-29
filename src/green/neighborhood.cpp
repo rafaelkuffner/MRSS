@@ -963,10 +963,14 @@ namespace green {
 		const PolyMesh & mesh,
 		OpenMesh::EPropHandleT<float> edgeLengthProperty,
 		OpenMesh::VPropHandleT<float> vertexAreasProperty,
-		OpenMesh::VPropHandleT<float> curvatureMeasure
+		OpenMesh::VPropHandleT<float> curvatureMeasure,
+		float curvmin,
+		float curvmax
 	) {
 
 		std::cout << "Preparing mesh data for neighborhood search" << std::endl;
+
+		const float curv_irange = 1.f / (curvmax - curvmin);
 
 		vi2di.resize(mesh.n_vertices());
 		vdis.reserve(mesh.n_vertices());
@@ -1046,8 +1050,7 @@ namespace green {
 						// encode area
 						vdata.areax = encode_area(area);
 						const float curv = std::clamp(mesh.property(curvatureMeasure, PolyMesh::VertexHandle(vi)), 0.f, 1.f);
-						// bin curvature based on 0-1 range
-						vdata.curvbin = unsigned(float(ncurvbins - 1) * curv);
+						vdata.curvbin = unsigned(float(ncurvbins - 1) * std::clamp((curv - curvmin) * curv_irange, 0.f, 1.f));
 						vadata.vi = vi;
 						vadata.pos = mesh.point(PolyMesh::VertexHandle(vi));
 						vadata.norm = mesh.normal(PolyMesh::VertexHandle(vi));

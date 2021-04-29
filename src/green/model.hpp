@@ -24,6 +24,8 @@
 
 namespace green {
 
+	extern float autocontrast_target_entropy;
+
 	enum class model_color_mode : unsigned char {
 		none,
 		vcolor,
@@ -185,6 +187,9 @@ namespace green {
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 		float m_auto_contrast = 1;
+		// for binning; may be [0,1]
+		float m_doncurv_min = 0;
+		float m_doncurv_max = 1;
 
 		// glsl texelFetch only takes int
 		GLint m_vao_nverts = 0, m_vao_nedges = 0, m_vao_ntris = 0, m_vao_nboundaries = 0;
@@ -224,6 +229,10 @@ namespace green {
 
 		OpenMesh::EPropHandleT<float> prop_edge_length() const {
 			return m_prop_edge_length;
+		}
+
+		std::pair<float, float> doncurv_minmax() const {
+			return {m_doncurv_min, m_doncurv_max};
 		}
 
 		saliency_prop_t prop_sal_dec() const {

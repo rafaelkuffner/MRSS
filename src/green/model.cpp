@@ -25,10 +25,23 @@
 #include "imguiex.hpp"
 #include "main.hpp"
 #include "curvature.hpp"
+#include "neighborhood.hpp"
 
 #include "model.glsl.hpp"
 
 namespace {
+
+	template <typename T>
+	std::pair<T, T> property_range(const green::PolyMesh &mesh, OpenMesh::VPropHandleT<T> prop) {
+		T lo = std::numeric_limits<T>::max();
+		T hi = std::numeric_limits<T>::lowest();
+		for (auto v : mesh.vertices()) {
+			auto x = mesh.property(prop, v);
+			lo = std::min(lo, x);
+			hi = std::max(hi, x);
+		}
+		return std::pair(lo, hi);
+	}
 
 	template <size_t NBins>
 	float histogram_entropy(const std::array<float, NBins> &hist) {
@@ -62,29 +75,27 @@ namespace {
 	}
 
 	// by area, normalized
-	template <size_t NBins = 256, typename URNG>
-	inline std::array<float, NBins> maxdon_histogram(
+	template <size_t NBins = 256, typename MonotonicTransform>
+	inline std::array<float, NBins> histogram(
 		const green::PolyMesh &mesh,
-		OpenMesh::VPropHandleT<float> vertexAreasProperty,
-		float normalPower,
+		OpenMesh::VPropHandleT<float> vertex_area_prop,
+		OpenMesh::VPropHandleT<float> value_prop,
+		MonotonicTransform &&func,
+		float minval,
 		float maxval,
-		URNG &&rand,
-		const std::vector<int> &shuffled_samples
+		const std::vector<int> &sample_indices,
+		size_t nsamples
 	) {
 		using namespace green;
-		constexpr size_t maxsamples = 100000;
-		size_t start = 0;
-		if (mesh.n_vertices() > maxsamples) start = std::uniform_int_distribution<size_t>(0, mesh.n_vertices() - maxsamples)(rand);
-		assert(mesh.has_vertex_normals());
-		const float hist_irange = (NBins - 1) / maxval;
+		const float fmin = func(minval);
+		const float hist_irange = 1.f / (func(maxval) - fmin);
 		std::array<float, NBins> hist{};
 		float atot = 0;
-		// note: this sampling is not area-uniform
-		for (size_t i = start; i < std::min(start + maxsamples, mesh.n_vertices()); i++) {
-			PolyMesh::VertexHandle v(shuffled_samples[i]);
-			const float area = mesh.property(vertexAreasProperty, v);
-			const float don = std::min(maxdon(mesh, v, normalPower), maxval);
-			const auto bin = intptr_t(hist_irange * don);
+		for (size_t i = 0; i < std::min(sample_indices.size(), nsamples); i++) {
+			PolyMesh::VertexHandle v(sample_indices[i]);
+			const float area = mesh.property(vertex_area_prop, v);
+			const float val = mesh.property(value_prop, v);
+			const auto bin = intptr_t(float(NBins - 1) * std::clamp(hist_irange * (func(val) - fmin), 0.f, 1.f));
 			hist[bin] += area;
 			atot += area;
 		}
@@ -98,6 +109,8 @@ namespace {
 }
 
 namespace green {
+
+	float autocontrast_target_entropy = log2f(MeshCache::ncurvbins) * 0.45f;
 
 	ModelBase::ModelBase(const std::filesystem::path &fpath) {
 		// face status not really required here
@@ -240,6 +253,7 @@ namespace green {
 
 		std::cout << "Computing vertex areas" << std::endl;
 		m_prop_vertex_area = computeVertexAreas(m_mesh);
+		const float surfarea = surfaceArea(m_mesh);
 
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_mesh);
@@ -248,6 +262,8 @@ namespace green {
 		// TODO what if we didnt want this? (to run and time with a difference curv measure)
 		const auto time_curv_start = std::chrono::steady_clock::now();
 		computeDoNMaxDiffs(m_mesh, m_prop_doncurv_raw, m_prop_vertex_area, 1);
+		// TODO currently using [0,1] binning range (handle this better)
+		//std::tie(m_doncurv_min, m_doncurv_max) = property_range(m_mesh, m_prop_doncurv_raw);
 		const auto time_curv_finish = std::chrono::steady_clock::now();
 		std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 
@@ -256,16 +272,26 @@ namespace green {
 		{
 			// experimental auto contrast
 			// TODO run this after decimation too
-			static constexpr int hist_bits = 8;
 			std::minstd_rand rand{std::random_device{}()};
 			std::vector<int> samples(m_mesh.n_vertices());
 			std::iota(samples.begin(), samples.end(), 0);
-			std::shuffle(samples.begin(), samples.end(), rand);
-			auto eval_entropy = [&](float contrast) {
+			// TODO using all vertice for now
+			const size_t nsamples = 100000000; //samples.size() / 2;
+			if (samples.size() > nsamples) {
+				// sort first part descending by area
+				std::partial_sort(samples.begin(), samples.begin() + nsamples, samples.end(), [&](int ia, int ib) {
+					float aa = m_mesh.property(m_prop_vertex_area, PolyMesh::VertexHandle(ia));
+					float ab = m_mesh.property(m_prop_vertex_area, PolyMesh::VertexHandle(ib));
+					return aa > ab;
+				});
+				// randomize second part
+				//std::shuffle(samples.begin() + nsamples / 3, samples.end(), rand);
+			}
+
+			auto eval_entropy = [&, mindon=m_doncurv_min, maxdon=m_doncurv_max](float contrast) {
 				//std::cout << "computing entropy for contrast=" << contrast << std::endl;
-				// use upper bound of 1 (and saliency now always uses 0-1 binning too)
-				// (determining the upper bound exactly would need a prepass to calculate the range before binning)
-				auto hist = maxdon_histogram<(1 << hist_bits)>(m_mesh, m_prop_vertex_area, contrast, 1.f, rand, samples);
+				auto f = [=](float x) { return pow(x, contrast); };
+				auto hist = histogram<MeshCache::ncurvbins>(m_mesh, m_prop_vertex_area, m_prop_doncurv_raw, f, mindon, maxdon, samples, nsamples);
 				float s = histogram_entropy(hist);
 				//std::cout << "entropy=" << s << std::endl;
 				return s;
@@ -275,11 +301,16 @@ namespace green {
 				float s1 = eval_entropy(contrast + delta);
 				return std::pair{s0, (s1 - s0) / delta};
 			};
-			const float target_entropy = float(hist_bits) * 0.45f;
+			//for (float contrast = 0.1f; contrast < 1.6f; contrast += 0.1f) {
+			//	float s = eval_entropy(contrast);
+			//	std::cout << "Global entropy at contrast " << contrast << ": " << s << std::endl;
+			//}
+			const float target_entropy = autocontrast_target_entropy;
 			float best_contrast = 1;
 			float contrast_delta = 0.1f;
 			for (int i = 0; i < 5; i++) {
 				auto [s, dsdc] = eval_entropy_gradient(best_contrast, contrast_delta);
+				std::cout << "Global entropy step: " << s << std::endl;
 				best_contrast = best_contrast - (s - target_entropy) / dsdc;
 				contrast_delta *= 0.7f;
 			}

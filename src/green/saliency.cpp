@@ -153,8 +153,8 @@ namespace green {
 		float m_surfaceArea = 0;
 		float m_total_vertex_area = 0;
 		float m_real_noise_height = 0;
-		float m_hMin = 0;
-		float m_hMax = 0;
+		float m_curvmin = 0;
+		float m_curvmax = 0;
 		std::vector<CalculationStats> m_thread_stats;
 		std::chrono::steady_clock::time_point m_time_start = std::chrono::steady_clock::now();
 		std::chrono::steady_clock::time_point m_time_last_percent = std::chrono::steady_clock::now();
@@ -175,27 +175,22 @@ namespace green {
 			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
 			m_progress.state = saliency_state::curv;
 			std::cout << "Computing curvature" << std::endl;
-			float curvmax = -9001e19;
-			float curvmin = 9001e19;
+			m_curvmin = std::pow(m_mparams.curv_min, m_uparams.normal_power);
+			m_curvmax = std::pow(m_mparams.curv_max, m_uparams.normal_power);
+			std::cout << "Curv bin min: " << m_curvmin << std::endl;
+			std::cout << "Curv bin max: " << m_curvmax << std::endl;
+
+			float curvmin_real = 9001e19f;
+			float curvmax_real = -9001e19f;
 			for (auto &v : m_mparams.mesh->vertices()) {
-				float c = m_mparams.mesh->property(m_mparams.prop_doncurv_raw, v);
+				float c = m_mparams.mesh->property(m_mparams.prop_curv_raw, v);
 				c = std::pow(c, m_uparams.normal_power);
-				curvmax = std::max(curvmax, c);
-				curvmin = std::min(curvmin, c);
+				curvmin_real = std::min(curvmin_real, c);
+				curvmax_real = std::max(curvmax_real, c);
 				m_mparams.mesh->property(m_mparams.prop_curvature, v) = c;
 			}
-
-			//m_hMin = curvhist.getMin();
-			//m_hMax = curvhist.getMax();
-			// force 0-1 histogram range (for entropy calc)
-			// lower bound is pretty much always very near zero
-			// upper bound is often very near 1 (kinda weird - thats adjacent vertices with anti-parallel normals)
-			// using constant histogram range makes things more predictable
-			// note: range 0-1 currently hardcoded in MeshCache
-			m_hMin = 0;
-			m_hMax = 1;
-			std::cout << "Curv min: " << curvmin << std::endl;
-			std::cout << "Curv max: " << curvmax << std::endl;
+			std::cout << "Curv real min: " << curvmin_real << std::endl;
+			std::cout << "Curv real max: " << curvmax_real << std::endl;
 
 			m_progress.state = saliency_state::area;
 			std::cout << "Computing surface area" << std::endl;
@@ -208,7 +203,7 @@ namespace green {
 
 			m_progress.state = saliency_state::nhprep;
 			const auto time_nhprep_start = std::chrono::steady_clock::now();
-			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature);
+			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature, m_mparams.curv_min, m_mparams.curv_max);
 			const auto time_nhprep_finish = std::chrono::steady_clock::now();
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(time_nhprep_finish - m_time_start);
 			std::cout << "Neighborhood search prep took " << ((time_nhprep_finish - time_nhprep_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
@@ -217,7 +212,15 @@ namespace green {
 			m_progress.state = saliency_state::cand;
 			std::cout << "Preparing subsampling candidates" << std::endl;
 			m_candidates0.reserve(m_meshcache.vdis.size());
-			std::transform(m_meshcache.vdis.begin(), m_meshcache.vdis.end(), std::back_inserter(m_candidates0), [](auto &vdi) { return initial_sample_candidate{vdi}; });
+			std::transform(
+				m_meshcache.vdis.begin(),
+				m_meshcache.vdis.end(),
+				std::back_inserter(m_candidates0),
+				[](unsigned vdi) {
+					initial_sample_candidate c{vdi};
+					return c;
+				}
+			);
 
 			// randomize sample candidates
 			// makes subsampling more stable and less sensitive to parallelization
@@ -331,14 +334,20 @@ namespace green {
 			std::cout << "Normalizing saliency values" << std::endl;
 			float sMin =  FLT_MAX;
 			float sMax = -FLT_MAX;
+			double sAvg = 0;
 			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
 				float s = m_mparams.mesh->property(m_mparams.prop_saliency, *vIt);
 				sMin = std::min(s, sMin);
 				sMax = std::max(s, sMax);
+				float a = m_mparams.mesh->property(m_mparams.prop_vertex_area, *vIt);
+				sAvg += double(s) * double(a);
 			}
-			std::cout << "Raw saliency range: " << sMin << ' ' << sMax << std::endl;
 			float sRange = sMax - sMin;
+			sAvg /= m_surfaceArea;
+			std::cout << "Raw saliency range: " << sMin << " " << sMax << std::endl;
+			std::cout << "Raw saliency midpoint: " << ((sMin + sMax) / 2) << std::endl;
+			std::cout << "Raw saliency mean: " << sAvg << std::endl;
 			for (auto vIt = m_mparams.mesh->vertices_begin(), vEnd = m_mparams.mesh->vertices_end(); vIt != vEnd; ++vIt)
 			{
 				float curvature = m_mparams.mesh->property(m_mparams.prop_curvature, *vIt);
