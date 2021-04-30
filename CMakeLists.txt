@@ -55,9 +55,11 @@ option(ASSIMP_BUILD_ZLIB "Build your own zlib" ON)
 add_subdirectory("ext/assimp-5.0.1")
 set_property(TARGET assimp PROPERTY FOLDER "ext")
 set_property(TARGET IrrXML PROPERTY FOLDER "ext")
-set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ext")
 set_property(TARGET zlib PROPERTY FOLDER "ext")
 set_property(TARGET zlibstatic PROPERTY FOLDER "ext")
+if(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs)
+	set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ext")
+endif()
 
 # allow including headers from src tree with <>
 include_directories("src")

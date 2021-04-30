@@ -15,6 +15,8 @@
 #ifndef GREEN_MESHUTILS_HPP
 #define GREEN_MESHUTILS_HPP
 
+#include <limits>
+
 #include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
 
 #include <glm/glm.hpp>
@@ -107,6 +109,18 @@ namespace green {
 			return acos(q);
 		}
 
+	}
+
+	template <typename T>
+	inline std::pair<T, T> property_range(const green::PolyMesh &mesh, OpenMesh::VPropHandleT<T> prop) {
+		T lo = std::numeric_limits<T>::max();
+		T hi = std::numeric_limits<T>::lowest();
+		for (auto v : mesh.vertices()) {
+			auto x = mesh.property(prop, v);
+			lo = std::min(lo, x);
+			hi = std::max(hi, x);
+		}
+		return std::pair(lo, hi);
 	}
 
 	OpenMesh::EPropHandleT<float> computeEdgeLengths(PolyMesh & mesh);

@@ -26,87 +26,9 @@
 #include "main.hpp"
 #include "curvature.hpp"
 #include "neighborhood.hpp"
+#include "meshutils.hpp"
 
 #include "model.glsl.hpp"
-
-namespace {
-
-	template <typename T>
-	std::pair<T, T> property_range(const green::PolyMesh &mesh, OpenMesh::VPropHandleT<T> prop) {
-		T lo = std::numeric_limits<T>::max();
-		T hi = std::numeric_limits<T>::lowest();
-		for (auto v : mesh.vertices()) {
-			auto x = mesh.property(prop, v);
-			lo = std::min(lo, x);
-			hi = std::max(hi, x);
-		}
-		return std::pair(lo, hi);
-	}
-
-	template <size_t NBins>
-	float histogram_entropy(const std::array<float, NBins> &hist) {
-		float atot = 0;
-		for (auto &a : hist) atot += a;
-		const float iatot = 1.f / atot;
-		float s = 0;
-		const float nilog2 = -1.f / log(2.f);
-		for (auto &a : hist) {
-			// limit of p*log(p) as p tends to 0 is 0
-			// so we can safely discard anything very small
-			const float p = a * iatot;
-			if (!(p > 1e-6f)) continue;
-			s += p * log(p) * nilog2;
-		}
-		return s;
-	}
-
-	template <size_t NBins>
-	void print_histogram(const std::array<float, NBins> &hist) {
-		using namespace std;
-		float atot = 0;
-		for (auto &a : hist) atot += a;
-		const float iatot = 1.f / atot;
-		for (int i = 0; i < NBins; i++) {
-			cout << setw(3) << i << " | ";
-			const string_view maxbar = "================================================================================";
-			int c = maxbar.size() * hist[i] * iatot;
-			cout << maxbar.substr(0, c) << endl;
-		}
-	}
-
-	// by area, normalized
-	template <size_t NBins = 256, typename MonotonicTransform>
-	inline std::array<float, NBins> histogram(
-		const green::PolyMesh &mesh,
-		OpenMesh::VPropHandleT<float> vertex_area_prop,
-		OpenMesh::VPropHandleT<float> value_prop,
-		MonotonicTransform &&func,
-		float minval,
-		float maxval,
-		const std::vector<int> &sample_indices,
-		size_t nsamples
-	) {
-		using namespace green;
-		const float fmin = func(minval);
-		const float hist_irange = 1.f / (func(maxval) - fmin);
-		std::array<float, NBins> hist{};
-		float atot = 0;
-		for (size_t i = 0; i < std::min(sample_indices.size(), nsamples); i++) {
-			PolyMesh::VertexHandle v(sample_indices[i]);
-			const float area = mesh.property(vertex_area_prop, v);
-			const float val = mesh.property(value_prop, v);
-			const auto bin = intptr_t(float(NBins - 1) * std::clamp(hist_irange * (func(val) - fmin), 0.f, 1.f));
-			hist[bin] += area;
-			atot += area;
-		}
-		const float iatot = 1.f / atot;
-		for (auto &a : hist) {
-			a *= iatot;
-		}
-		return hist;
-	}
-
-}
 
 namespace green {
 
@@ -261,62 +183,13 @@ namespace green {
 		std::cout << "Computing raw don curvature" << std::endl;
 		// TODO what if we didnt want this? (to run and time with a difference curv measure)
 		const auto time_curv_start = std::chrono::steady_clock::now();
-		computeDoNMaxDiffs(m_mesh, m_prop_doncurv_raw, m_prop_vertex_area, 1);
-		// TODO currently using [0,1] binning range (handle this better)
-		//std::tie(m_doncurv_min, m_doncurv_max) = property_range(m_mesh, m_prop_doncurv_raw);
+		curvature_measure curv_don(m_mesh);
+		compute_maxdon(m_mesh, 1, curv_don);
 		const auto time_curv_finish = std::chrono::steady_clock::now();
 		std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 
-		// TODO move autocontrast to a function
-		std::cout << "Computing auto contrast for saliency" << std::endl;
-		{
-			// experimental auto contrast
-			// TODO run this after decimation too
-			std::minstd_rand rand{std::random_device{}()};
-			std::vector<int> samples(m_mesh.n_vertices());
-			std::iota(samples.begin(), samples.end(), 0);
-			// TODO using all vertice for now
-			const size_t nsamples = 100000000; //samples.size() / 2;
-			if (samples.size() > nsamples) {
-				// sort first part descending by area
-				std::partial_sort(samples.begin(), samples.begin() + nsamples, samples.end(), [&](int ia, int ib) {
-					float aa = m_mesh.property(m_prop_vertex_area, PolyMesh::VertexHandle(ia));
-					float ab = m_mesh.property(m_prop_vertex_area, PolyMesh::VertexHandle(ib));
-					return aa > ab;
-				});
-				// randomize second part
-				//std::shuffle(samples.begin() + nsamples / 3, samples.end(), rand);
-			}
-
-			auto eval_entropy = [&, mindon=m_doncurv_min, maxdon=m_doncurv_max](float contrast) {
-				//std::cout << "computing entropy for contrast=" << contrast << std::endl;
-				auto f = [=](float x) { return pow(x, contrast); };
-				auto hist = histogram<MeshCache::ncurvbins>(m_mesh, m_prop_vertex_area, m_prop_doncurv_raw, f, mindon, maxdon, samples, nsamples);
-				float s = histogram_entropy(hist);
-				//std::cout << "entropy=" << s << std::endl;
-				return s;
-			};
-			auto eval_entropy_gradient = [&](float contrast, float delta) {
-				float s0 = eval_entropy(contrast);
-				float s1 = eval_entropy(contrast + delta);
-				return std::pair{s0, (s1 - s0) / delta};
-			};
-			//for (float contrast = 0.1f; contrast < 1.6f; contrast += 0.1f) {
-			//	float s = eval_entropy(contrast);
-			//	std::cout << "Global entropy at contrast " << contrast << ": " << s << std::endl;
-			//}
-			const float target_entropy = autocontrast_target_entropy;
-			float best_contrast = 1;
-			float contrast_delta = 0.1f;
-			for (int i = 0; i < 5; i++) {
-				auto [s, dsdc] = eval_entropy_gradient(best_contrast, contrast_delta);
-				std::cout << "Global entropy step: " << s << std::endl;
-				best_contrast = best_contrast - (s - target_entropy) / dsdc;
-				contrast_delta *= 0.7f;
-			}
-			std::cout << "Auto contrast: " << best_contrast << std::endl;
-			m_auto_contrast = best_contrast;
-		}
+		std::cout << "Computing auto contrast for don" << std::endl;
+		m_curv_don = autocontrast(m_mesh, curv_don, m_prop_vertex_area, true);
 	}
 
 	Model::Model(const std::filesystem::path &fpath) : Model(ModelBase(fpath)) {
@@ -340,7 +213,7 @@ namespace green {
 				std::cout << "Colorizing saliency comparison" << std::endl;
 			}
 		} else if (sparams.color_mode == model_color_mode::doncurv) {
-			if (!m_prop_doncurv_raw.is_valid()) {
+			if (!m_curv_don.prop_curv.is_valid()) {
 				sparams.color_mode == model_color_mode::none;
 			} else {
 				std::cout << "Colorizing don curvature" << std::endl;
@@ -379,7 +252,7 @@ namespace green {
 				case model_color_mode::doncurv:
 				{
 					// note: need much lower contrast for display than for saliency
-					const float c = std::pow(m_mesh.property(m_prop_doncurv_raw, *vIt), m_auto_contrast * 0.2f);
+					const float c = std::pow(m_mesh.property(m_curv_don.prop_curv, *vIt), m_curv_don.contrast * 0.2f);
 					mapScalarToColor(v, c, TransferFunction::ZBRUSH);
 					break;
 				}
@@ -711,7 +584,7 @@ namespace green {
 		if (cparams.color_mode == model_color_mode::vcolor && !m_prop_vcolor_original.is_valid()) return false;
 		if (cparams.color_mode == model_color_mode::saliency_comparison && !cparams.prop_saliency.is_valid()) return false;
 		if (cparams.color_mode == model_color_mode::saliency_comparison && !cparams.prop_saliency_baseline.is_valid()) return false;
-		if (cparams.color_mode == model_color_mode::doncurv && !m_prop_doncurv_raw.is_valid()) return false;
+		if (cparams.color_mode == model_color_mode::doncurv && !m_curv_don.prop_curv.is_valid()) return false;
 		if (!m_vbo_col) return false;
 		const auto nverts = vao_nverts();
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
@@ -751,7 +624,7 @@ namespace green {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				// note: need much lower contrast for display than for saliency
-				const float c = std::pow(m_mesh.property(m_prop_doncurv_raw, v), auto_contrast() * 0.2f);
+				const float c = std::pow(m_mesh.property(m_curv_don.prop_curv, v), m_curv_don.contrast * 0.2f);
 				data[i] = glm::vec4(c, 0, 0, 0);
 			}
 		} else {

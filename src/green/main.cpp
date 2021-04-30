@@ -787,15 +787,14 @@ namespace {
 	void dump_curvature(const filesystem::path &outpath, Model &m, float contrast) {
 		std::cout << "dumping per-vertex area,meancurv,doncurv to " << outpath.u8string() << std::endl;
 		std::ofstream out(outpath);
-		lce::Histogram curvhist;
-		OpenMesh::VPropHandleT<float> curvprop, donprop;
-		computeMeanCurvature(m.mesh(), curvprop, curvhist, 1);
-		computeDoNMaxDiffs(m.mesh(), donprop, m.prop_vertex_area(), contrast);
+		curvature_measure curv_mean(m.mesh()), curv_don(m.mesh());
+		compute_mean_curvature(m.mesh(), 1, curv_mean);
+		compute_maxdon(m.mesh(), 1, curv_don);
 		for (auto &v : m.mesh().vertices()) {
 			const float area = m.mesh().property(m.prop_vertex_area(), v);
-			const float curv = m.mesh().property(curvprop, v);
-			const float don = m.mesh().property(donprop, v);
-			out << area << "," << curv << "," << don << "\n";
+			const float cm = m.mesh().property(curv_mean.prop_curv, v);
+			const float cd = m.mesh().property(curv_don.prop_curv, v);
+			out << area << "," << cm << "," << cd << "\n";
 		}
 	}
 
@@ -1190,8 +1189,6 @@ namespace {
 			exit(1);
 		}
 
-		if (sal_uparams.auto_contrast) sal_uparams.normal_power = m.auto_contrast();
-
 		if (!dumpcurvfile.empty()) dump_curvature(dumpcurvfile, m, sal_uparams.normal_power);
 
 		model_saliency_data sd;
@@ -1221,10 +1218,9 @@ namespace {
 
 			saliency_mesh_params mparams;
 			mparams.mesh = &m.mesh();
+			mparams.curv = m.curv_don();
 			mparams.prop_vertex_area = m.prop_vertex_area();
-			mparams.prop_curv_raw = m.prop_doncurv_raw();
 			mparams.prop_edge_length = m.prop_edge_length();
-			std::tie(mparams.curv_min, mparams.curv_max) = m.doncurv_minmax();
 
 			// create properties
 			mparams.prop_saliency_levels.resize(sal_uparams.levels);
@@ -1478,7 +1474,7 @@ namespace ImGui {
 		if (uparams.auto_contrast) {
 			if (model) {
 				SameLine();
-				FmtText("[current: {:.3f}]", model->auto_contrast());
+				FmtText("[current: {:.3f}]", model->curv_don().contrast);
 			}
 		} else {
 			widgets.slider(param_sal_normpower, help_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);

@@ -20,6 +20,8 @@
 
 #include "meshutils.hpp"
 #include "entity.hpp"
+#include "curvature.hpp"
+#include "saliency.hpp"
 #include "decimate.hpp"
 
 namespace green {
@@ -181,15 +183,12 @@ namespace green {
 	class Model : public ModelBase {
 	private:
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
-		OpenMesh::VPropHandleT<float> m_prop_doncurv_raw;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		saliency_prop_t m_prop_sal_dec;
 
+		curvature_autocontrast m_curv_don;
+
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
-		float m_auto_contrast = 1;
-		// for binning; may be [0,1]
-		float m_doncurv_min = 0;
-		float m_doncurv_max = 1;
 
 		// glsl texelFetch only takes int
 		GLint m_vao_nverts = 0, m_vao_nedges = 0, m_vao_ntris = 0, m_vao_nboundaries = 0;
@@ -223,20 +222,16 @@ namespace green {
 			return m_prop_vertex_area;
 		}
 
-		OpenMesh::VPropHandleT<float> prop_doncurv_raw() const {
-			return m_prop_doncurv_raw;
-		}
-
 		OpenMesh::EPropHandleT<float> prop_edge_length() const {
 			return m_prop_edge_length;
 		}
 
-		std::pair<float, float> doncurv_minmax() const {
-			return {m_doncurv_min, m_doncurv_max};
-		}
-
 		saliency_prop_t prop_sal_dec() const {
 			return m_prop_sal_dec;
+		}
+
+		const curvature_autocontrast & curv_don() const {
+			return m_curv_don;
 		}
 
 		glm::vec3 bound_min() const {
@@ -262,10 +257,6 @@ namespace green {
 				xmin = std::min(f, xmin);
 			}
 			return xmin;
-		}
-
-		float auto_contrast() const {
-			return m_auto_contrast;
 		}
 
 		// TODO does this still need exposing?

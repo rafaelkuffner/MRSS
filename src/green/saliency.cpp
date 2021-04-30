@@ -153,8 +153,6 @@ namespace green {
 		float m_surfaceArea = 0;
 		float m_total_vertex_area = 0;
 		float m_real_noise_height = 0;
-		float m_curvmin = 0;
-		float m_curvmax = 0;
 		std::vector<CalculationStats> m_thread_stats;
 		std::chrono::steady_clock::time_point m_time_start = std::chrono::steady_clock::now();
 		std::chrono::steady_clock::time_point m_time_last_percent = std::chrono::steady_clock::now();
@@ -167,30 +165,25 @@ namespace green {
 		{
 			// ensure params are valid
 			m_uparams.sanitize();
-			std::cout << "Contrast: " << m_uparams.normal_power << std::endl;
+			const float normal_power = m_uparams.auto_contrast ? m_mparams.curv.contrast : m_uparams.normal_power;
+			std::cout << "Contrast: " << normal_power << std::endl;
 			
 			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
 
-			// TODO curv selection param
-			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
 			m_progress.state = saliency_state::curv;
 			std::cout << "Computing curvature" << std::endl;
-			m_curvmin = std::pow(m_mparams.curv_min, m_uparams.normal_power);
-			m_curvmax = std::pow(m_mparams.curv_max, m_uparams.normal_power);
-			std::cout << "Curv bin min: " << m_curvmin << std::endl;
-			std::cout << "Curv bin max: " << m_curvmax << std::endl;
+			std::cout << "Curv bin min: " << m_mparams.curv.bin_min << std::endl;
+			std::cout << "Curv bin max: " << m_mparams.curv.bin_max << std::endl;
+			std::cout << "Curv real min: " << m_mparams.curv.curv_min << std::endl;
+			std::cout << "Curv real max: " << m_mparams.curv.curv_min << std::endl;
 
-			float curvmin_real = 9001e19f;
-			float curvmax_real = -9001e19f;
+			// apply curv contrast
+			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
 			for (auto &v : m_mparams.mesh->vertices()) {
-				float c = m_mparams.mesh->property(m_mparams.prop_curv_raw, v);
+				float c = m_mparams.mesh->property(m_mparams.curv.prop_curv, v);
 				c = std::pow(c, m_uparams.normal_power);
-				curvmin_real = std::min(curvmin_real, c);
-				curvmax_real = std::max(curvmax_real, c);
 				m_mparams.mesh->property(m_mparams.prop_curvature, v) = c;
 			}
-			std::cout << "Curv real min: " << curvmin_real << std::endl;
-			std::cout << "Curv real max: " << curvmax_real << std::endl;
 
 			m_progress.state = saliency_state::area;
 			std::cout << "Computing surface area" << std::endl;
@@ -203,7 +196,7 @@ namespace green {
 
 			m_progress.state = saliency_state::nhprep;
 			const auto time_nhprep_start = std::chrono::steady_clock::now();
-			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature, m_mparams.curv_min, m_mparams.curv_max);
+			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature, m_mparams.curv.bin_min, m_mparams.curv.bin_max);
 			const auto time_nhprep_finish = std::chrono::steady_clock::now();
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(time_nhprep_finish - m_time_start);
 			std::cout << "Neighborhood search prep took " << ((time_nhprep_finish - time_nhprep_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;

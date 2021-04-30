@@ -23,7 +23,7 @@
 #include <imgui.h>
 
 #include "meshutils.hpp"
-#include "Histogram.h"
+#include "curvature.hpp"
 
 namespace green {
 
@@ -130,12 +130,9 @@ namespace green {
 		// input
 		OpenMesh::VPropHandleT<float> prop_vertex_area;
 		// input
-		OpenMesh::VPropHandleT<float> prop_curv_raw;
-		// input
 		OpenMesh::EPropHandleT<float> prop_edge_length;
 		// input
-		float curv_min = 0;
-		float curv_max = 1;
+		curvature_autocontrast curv;
 		// output: saliency
 		saliency_prop_t prop_saliency;
 		// output: sample location flags (bool, uchar to avoid vector<bool>)
