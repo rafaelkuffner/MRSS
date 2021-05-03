@@ -17,6 +17,7 @@
 
 #include "meshutils.hpp"
 
+#include <cmath>
 #include <random>
 #include <algorithm>
 #include <limits>
@@ -29,7 +30,7 @@ namespace green {
 		// natural range of values for this type of curvature (eg [0,1] for don)
 		float natural_min = 0;
 		float natural_max = 0;
-		// actual range of values
+		// actual range of values (_without_ contrast)
 		float curv_min = 0;
 		float curv_max = 0;
 
@@ -47,6 +48,11 @@ namespace green {
 			curv_max = std::numeric_limits<float>::lowest();
 		}
 	};
+
+	inline float curvature_contrast(float x, float e) {
+		// ensure we can use negative inputs sensibly
+		return std::copysign(std::pow(std::abs(x), e), x);
+	}
 
 	struct curvature_autocontrast : curvature_measure {
 		float contrast = 1;

@@ -180,16 +180,32 @@ namespace green {
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_mesh);
 
-		std::cout << "Computing raw don curvature" << std::endl;
-		// TODO what if we didnt want this? (to run and time with a difference curv measure)
-		const auto time_curv_start = std::chrono::steady_clock::now();
-		curvature_measure curv_don(m_mesh);
-		compute_maxdon(m_mesh, 1, curv_don);
-		const auto time_curv_finish = std::chrono::steady_clock::now();
-		std::cout << "Curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+		// TODO how should we not compute unwanted curvature measures?
 
-		std::cout << "Computing auto contrast for don" << std::endl;
-		m_curv_don = autocontrast(m_mesh, curv_don, m_prop_vertex_area, true);
+		{
+			std::cout << "Computing raw don curvature" << std::endl;
+			const auto time_curv_start = std::chrono::steady_clock::now();
+			curvature_measure curv(m_mesh);
+			compute_maxdon(m_mesh, 1, curv);
+			const auto time_curv_finish = std::chrono::steady_clock::now();
+			std::cout << "Don curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+			// TODO time autocontrast?
+			std::cout << "Computing auto contrast for don curvature" << std::endl;
+			m_curv_don = autocontrast(m_mesh, curv, m_prop_vertex_area, true);
+		}
+
+		{
+			std::cout << "Computing raw mean curvature" << std::endl;
+			const auto time_curv_start = std::chrono::steady_clock::now();
+			curvature_measure curv(m_mesh);
+			compute_mean_curvature(m_mesh, 1, curv);
+			const auto time_curv_finish = std::chrono::steady_clock::now();
+			std::cout << "Mean curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
+			// TODO time autocontrast?
+			std::cout << "Computing auto contrast for mean curvature" << std::endl;
+			m_curv_mean = autocontrast(m_mesh, curv, m_prop_vertex_area, false);
+		}
+
 	}
 
 	Model::Model(const std::filesystem::path &fpath) : Model(ModelBase(fpath)) {
@@ -371,6 +387,37 @@ namespace green {
 		std::cout << "Computing edge lengths" << std::endl;
 		m_prop_edge_length = computeEdgeLengths(m_mesh);
 		return true;
+	}
+
+	void Model::init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params uparams) {
+		mparams.mesh = &m_mesh;
+		// set input properties
+		mparams.curv = m_curv_don;
+		mparams.prop_vertex_area = m_prop_vertex_area;
+		mparams.prop_edge_length = m_prop_edge_length;
+		// create output properties
+		mparams.mesh->add_property(mparams.prop_saliency);
+		mparams.mesh->add_property(mparams.prop_sampled);
+		// create temp properties
+		mparams.mesh->add_property(mparams.prop_curvature);
+		mparams.prop_saliency_levels.resize(uparams.levels);
+		for (auto &prop : mparams.prop_saliency_levels) {
+			mparams.mesh->add_property(prop);
+		}
+	}
+
+	void Model::cleanup_saliency_params(saliency_mesh_params &mparams, bool success) noexcept {
+		assert(mparams.mesh == &m_mesh);
+		// destroy temp properties
+		mparams.mesh->remove_property(mparams.prop_curvature);
+		for (auto &prop : mparams.prop_saliency_levels) {
+			mparams.mesh->remove_property(prop);
+		}
+		if (!success) {
+			// cancelled, also destroy output properties
+			mparams.mesh->remove_property(mparams.prop_saliency);
+			mparams.mesh->remove_property(mparams.prop_sampled);
+		}
 	}
 
 	void Model::update_vao_verts() {

@@ -915,18 +915,7 @@ namespace green {
 		}
 		saliency_user_params uparams = uparams0;
 		saliency_mesh_params mparams;
-		mparams.mesh = &m_model->mesh();
-		mparams.curv = m_model->curv_don();
-		mparams.prop_vertex_area = m_model->prop_vertex_area();
-		mparams.prop_edge_length = m_model->prop_edge_length();
-		// create properties
-		mparams.prop_saliency_levels.resize(uparams.levels);
-		mparams.mesh->add_property(mparams.prop_curvature);
-		mparams.mesh->add_property(mparams.prop_saliency);
-		mparams.mesh->add_property(mparams.prop_sampled);
-		for (int i = 0; i < uparams.levels; i++) {
-			mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
-		}
+		m_model->init_saliency_params(mparams, uparams);
 		// cleanup will be run when the result is received from the future
 		// can use shared lock for actual computation because only property contents are being used
 		// HACK make_shared is an ugly workaround for std::function needing to be copyable
@@ -937,11 +926,7 @@ namespace green {
 			std::unique_lock lock(m_modelmtx);
 			if (!m_model) return;
 			auto &saliency_outputs = m_model->saliency();
-			// destroy temp properties
-			mparams.mesh->remove_property(mparams.prop_curvature);
-			for (int i = 0; i < uparams.levels; i++) {
-				mparams.mesh->remove_property(mparams.prop_saliency_levels[i]);
-			}
+			m_model->cleanup_saliency_params(mparams, r);
 			if (r) {
 				// if preview, remove any previous preview results
 				saliency_outputs.erase(std::remove_if(saliency_outputs.begin(), saliency_outputs.end(), [](const auto &sd) { return sd.uparams.preview; }), saliency_outputs.end());
@@ -956,10 +941,6 @@ namespace green {
 				// give focus to this result
 				m_saliency_index = saliency_outputs.size() - 1;
 				invalidate_saliency_vbo();
-			} else {
-				// cancelled, destroy saliency property too
-				mparams.mesh->remove_property(mparams.prop_saliency);
-				mparams.mesh->remove_property(mparams.prop_sampled);
 			}
 		};
 		m_sal_future = green::compute_saliency_async(mparams, uparams, m_sal_progress);

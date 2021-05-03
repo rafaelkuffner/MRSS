@@ -174,15 +174,14 @@ namespace green {
 			std::cout << "Computing curvature" << std::endl;
 			std::cout << "Curv bin min: " << m_mparams.curv.bin_min << std::endl;
 			std::cout << "Curv bin max: " << m_mparams.curv.bin_max << std::endl;
-			std::cout << "Curv real min: " << m_mparams.curv.curv_min << std::endl;
-			std::cout << "Curv real max: " << m_mparams.curv.curv_min << std::endl;
+			std::cout << "Curv real min: " << curvature_contrast(m_mparams.curv.curv_min, normal_power) << std::endl;
+			std::cout << "Curv real max: " << curvature_contrast(m_mparams.curv.curv_max, normal_power) << std::endl;
 
 			// apply curv contrast
 			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
 			for (auto &v : m_mparams.mesh->vertices()) {
 				float c = m_mparams.mesh->property(m_mparams.curv.prop_curv, v);
-				c = std::pow(c, normal_power);
-				m_mparams.mesh->property(m_mparams.prop_curvature, v) = c;
+				m_mparams.mesh->property(m_mparams.prop_curvature, v) = curvature_contrast(c, normal_power);
 			}
 
 			m_progress.state = saliency_state::area;

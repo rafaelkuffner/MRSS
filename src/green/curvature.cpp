@@ -514,7 +514,7 @@ namespace green {
 			//std::shuffle(samples.begin() + nsamples / 3, samples.end(), rand);
 		}
 		auto eval_entropy = [&](float contrast) {
-			auto f = [=](float x) { return std::pow(x, contrast); };
+			auto f = [=](float x) { return curvature_contrast(x, contrast); };
 			auto hist = histogram<MeshCache::ncurvbins>(mesh, prop_vert_area, curv.prop_curv, f, bin_min, bin_max, samples, nsamples);
 			float s = histogram_entropy(hist);
 			return s;
@@ -543,8 +543,8 @@ namespace green {
 			best_contrast = 1;
 		}
 		curvac.contrast = best_contrast;
-		curvac.bin_min = std::pow(bin_min, best_contrast);
-		curvac.bin_max = std::pow(bin_max, best_contrast);
+		curvac.bin_min = curvature_contrast(bin_min, best_contrast);
+		curvac.bin_max = curvature_contrast(bin_max, best_contrast);
 		return curvac;
 	}
 

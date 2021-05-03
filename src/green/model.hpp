@@ -187,6 +187,7 @@ namespace green {
 		saliency_prop_t m_prop_sal_dec;
 
 		curvature_autocontrast m_curv_don;
+		curvature_autocontrast m_curv_mean;
 
 		glm::vec3 m_bound_min{9001e19f}, m_bound_max{-9001e19f};
 
@@ -218,6 +219,10 @@ namespace green {
 
 		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
 
+		void init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params uparams);
+
+		void cleanup_saliency_params(saliency_mesh_params &mparams, bool success) noexcept;
+
 		OpenMesh::VPropHandleT<float> prop_vertex_area() const {
 			return m_prop_vertex_area;
 		}
@@ -232,6 +237,10 @@ namespace green {
 
 		const curvature_autocontrast & curv_don() const {
 			return m_curv_don;
+		}
+
+		const curvature_autocontrast & curv_mean() const {
+			return m_curv_mean;
 		}
 
 		glm::vec3 bound_min() const {

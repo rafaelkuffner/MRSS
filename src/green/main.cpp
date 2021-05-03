@@ -1217,19 +1217,7 @@ namespace {
 			}
 
 			saliency_mesh_params mparams;
-			mparams.mesh = &m.mesh();
-			mparams.curv = m.curv_don();
-			mparams.prop_vertex_area = m.prop_vertex_area();
-			mparams.prop_edge_length = m.prop_edge_length();
-
-			// create properties
-			mparams.prop_saliency_levels.resize(sal_uparams.levels);
-			mparams.mesh->add_property(mparams.prop_curvature);
-			mparams.mesh->add_property(mparams.prop_saliency);
-			mparams.mesh->add_property(mparams.prop_sampled);
-			for (int i = 0; i < sal_uparams.levels; i++) {
-				mparams.mesh->add_property(mparams.prop_saliency_levels[i]);
-			}
+			m.init_saliency_params(mparams, sal_uparams);
 
 			// calculate saliency
 			if (!compute_saliency(mparams, sal_uparams, sal_progress)) {
@@ -1237,11 +1225,7 @@ namespace {
 				exit(1);
 			}
 
-			// destroy temp properties
-			mparams.mesh->remove_property(mparams.prop_curvature);
-			for (int i = 0; i < sal_uparams.levels; i++) {
-				mparams.mesh->remove_property(mparams.prop_saliency_levels[i]);
-			}
+			m.cleanup_saliency_params(mparams, true);
 
 			sd.prop_saliency = mparams.prop_saliency;
 			sd.prop_sampled = mparams.prop_sampled;
