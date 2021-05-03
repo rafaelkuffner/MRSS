@@ -1017,6 +1017,7 @@ namespace {
 		const uilocale &loc = uilocale_en();
 
 		string infile, outfile, dumpcurvfile;
+		string curvmode = "don";
 		string decprop = "@0";
 		string salprop;
 		string colorprop;
@@ -1086,7 +1087,9 @@ namespace {
 			(option("--colorprop") & value("propname", colorprop))
 				.doc(loc[help_sal_colorprop].clone()),
 			(option("--targetentropy") & value("entropy", autocontrast_target_entropy))
-				.doc("INTERNAL USE ONLY")
+				.doc("INTERNAL USE ONLY"),
+			(option("--curv") & value("curv", curvmode))
+				.doc(loc[help_sal_curv].clone())
 		}.doc(loc[help_cli_opts_saliency].clone());
 
 		auto dec_opts = group{
@@ -1165,6 +1168,17 @@ namespace {
 		}
 
 		apply_threads(0);
+
+		if (curvmode == "don") {
+			cout << "using don curvature" << endl;
+			sal_uparams.curv_mode = saliency_curvature_mode::don;
+		} else if (curvmode == "mean") {
+			cout << "using mean curvature" << endl;
+			sal_uparams.curv_mode = saliency_curvature_mode::mean;
+		} else {
+			cout << "unknown curvature mode " << curvmode << endl;
+			exit(1);
+		}
 
 		sal_uparams.sanitize();
 		dec_uparams.sanitize();
