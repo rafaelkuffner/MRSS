@@ -181,7 +181,7 @@ namespace green {
 			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
 			for (auto &v : m_mparams.mesh->vertices()) {
 				float c = m_mparams.mesh->property(m_mparams.curv.prop_curv, v);
-				c = std::pow(c, m_uparams.normal_power);
+				c = std::pow(c, normal_power);
 				m_mparams.mesh->property(m_mparams.prop_curvature, v) = c;
 			}
 
