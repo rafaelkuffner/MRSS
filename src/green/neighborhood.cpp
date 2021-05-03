@@ -1049,7 +1049,7 @@ namespace green {
 						const float area = std::max(mesh.property(vertexAreasProperty, PolyMesh::VertexHandle(vi)), 0.f);
 						// encode area
 						vdata.areax = encode_area(area);
-						const float curv = std::clamp(mesh.property(curvatureMeasure, PolyMesh::VertexHandle(vi)), 0.f, 1.f);
+						const float curv = mesh.property(curvatureMeasure, PolyMesh::VertexHandle(vi));
 						vdata.curvbin = unsigned(float(ncurvbins - 1) * std::clamp((curv - curvmin) * curv_irange, 0.f, 1.f));
 						vadata.vi = vi;
 						vadata.pos = mesh.point(PolyMesh::VertexHandle(vi));

@@ -56,9 +56,7 @@ namespace green {
 
 	struct curvature_autocontrast : curvature_measure {
 		float contrast = 1;
-		// how to bin values _after_ applying contrast
-		float bin_min = 0;
-		float bin_max = 0;
+		bool natural_binning = false;
 	};
 
 	void compute_mean_gaussian_curvature(PolyMesh &mesh, curvature_measure &curv_mean, curvature_measure &curv_gauss);

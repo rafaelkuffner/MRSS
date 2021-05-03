@@ -31,6 +31,7 @@ namespace green {
 			// saliency
 			help_cli_opts_saliency,
 			help_sal_go,
+			help_sal_curv,
 			help_sal_area,
 			help_sal_levels,
 			help_sal_normpower,
@@ -42,6 +43,7 @@ namespace green {
 			help_sal_full,
 			help_sal_salprop,
 			help_sal_colorprop,
+			param_sal_curv,
 			param_sal_area,
 			param_sal_levels,
 			param_sal_normpower,
@@ -70,6 +72,9 @@ namespace green {
 			param_dec_weight,
 			param_dec_power,
 			param_dec_bins,
+			// curvature
+			curv_don,
+			curv_mean,
 
 			// ---
 			_count

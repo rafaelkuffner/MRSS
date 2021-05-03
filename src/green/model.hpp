@@ -235,6 +235,18 @@ namespace green {
 			return m_prop_sal_dec;
 		}
 
+		const curvature_autocontrast & curv(saliency_curvature_mode curv_mode) const {
+			if (curv_mode == saliency_curvature_mode::don) {
+				return m_curv_don;
+			} else if (curv_mode == saliency_curvature_mode::mean) {
+				return m_curv_mean;
+			} else {
+				// shouldnt happen
+				std::cout << "Unknown curvature mode" << std::endl;
+				std::abort();
+			}
+		}
+
 		const curvature_autocontrast & curv_don() const {
 			return m_curv_don;
 		}

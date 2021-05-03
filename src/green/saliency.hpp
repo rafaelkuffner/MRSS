@@ -78,6 +78,10 @@ namespace green {
 
 	};
 
+	enum class saliency_curvature_mode {
+		don, mean
+	};
+
 	struct saliency_user_params {
 		int levels = 5;
 		float area = 0.02f;
@@ -89,6 +93,8 @@ namespace green {
 		float samples_per_neighborhood = 100;
 		// used with normalmap filter; relative to sqrt(real_surface_area)
 		float noise_height = 0.002f;
+		// curvature mode
+		saliency_curvature_mode curv_mode = saliency_curvature_mode::don;
 		// filter out normalmappable detail
 		bool normalmap_filter = false;
 		// enable manual subsampling (takes precedence)

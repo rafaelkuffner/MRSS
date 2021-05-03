@@ -10,6 +10,9 @@
 
 #include "uilocale.hpp"
 
+#include <initializer_list>
+#include <algorithm>
+
 namespace ImGui {
 
 	using green::uilocale;
@@ -181,6 +184,38 @@ namespace ImGui {
 			SetNextItemWidth(GetContentRegionAvail().x);
 			bool r = InputInt("", &(realparams->*param), step, step_fast);
 			hovered_tooltip(tooltip);
+			PopID();
+			return r;
+		}
+
+		template <typename E>
+		bool combobox(uistring label, uistring tooltip, E T::*param, std::initializer_list<uistring> elems_) {
+			PushID(label);
+			if (Button("Reset")) realparams->*param = defparams->*param;
+			SameLine();
+			draw_label((*loc)[label].c_str());
+			SetNextItemWidth(GetContentRegionAvail().x);
+			const uistring *elems = elems_.begin();
+			size_t v = size_t(realparams->*param);
+			v = std::clamp(v, size_t(0), elems_.size());
+			const char *preview = (*loc)[elems[v]].c_str();
+			bool r = false;
+			if (BeginCombo("", preview, 0)) {
+				for (size_t i = 0; i < elems_.size(); i++) {
+					PushID(i);
+					const bool selected = i == v;
+					const char *text = (*loc)[elems[i]].c_str();
+					if (Selectable(text, selected)) {
+						r = true;
+						v = i;
+					}
+					PopID();
+				}
+				EndCombo();
+			} else {
+				hovered_tooltip(tooltip);
+			}
+			if (r) realparams->*param = E(v);
 			PopID();
 			return r;
 		}

@@ -543,8 +543,7 @@ namespace green {
 			best_contrast = 1;
 		}
 		curvac.contrast = best_contrast;
-		curvac.bin_min = curvature_contrast(bin_min, best_contrast);
-		curvac.bin_max = curvature_contrast(bin_max, best_contrast);
+		curvac.natural_binning = natural_binning;
 		return curvac;
 	}
 

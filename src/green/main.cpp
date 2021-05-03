@@ -1453,12 +1453,13 @@ namespace ImGui {
 		widgets.slider(param_sal_levels, help_sal_levels, &saliency_user_params::levels, 1, 6);
 		widgets.slider(param_sal_area, help_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
 		widgets.slider(param_sal_curvweight, help_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
+		widgets.combobox(param_sal_curv, help_sal_curv, &saliency_user_params::curv_mode, {curv_don, curv_mean});
 		widgets.checkbox(param_sal_autocontrast, nullstr, &saliency_user_params::auto_contrast);
 		// TODO autocontrast tooltip
 		if (uparams.auto_contrast) {
 			if (model) {
 				SameLine();
-				FmtText("[current: {:.3f}]", model->curv_don().contrast);
+				FmtText("[current: {:.3f}]", model->curv(uparams.curv_mode).contrast);
 			}
 		} else {
 			widgets.slider(param_sal_normpower, help_sal_normpower, &saliency_user_params::normal_power, 0.f, 2.f);

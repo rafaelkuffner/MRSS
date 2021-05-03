@@ -30,6 +30,8 @@ namespace green {
 		// saliency
 		loc[help_cli_opts_saliency] = "Saliency options:";
 		loc[help_sal_go] = "Compute saliency";
+		loc[help_sal_curv] = "Curvature measure to use. Options are:\n"
+			"- don (default)\n- mean (for comparison with previous work)";
 		loc[help_sal_area] = "Size of the largest salient features.\nSpecified as a fraction of the surface area.";
 		loc[help_sal_levels] = "Using more levels allows increasingly local features to become visible.";
 		loc[help_sal_normpower] = "Controls how quickly saliency tends towards extreme values.";
@@ -43,6 +45,7 @@ namespace green {
 			"Will always be placed at the last index (@-1) for subsequent decimation, colorization and saving.";
 		loc[help_sal_colorprop] = "Saliency property to colorize when saving.\n"
 			"Default is the saliency property used for decimation (--decprop), or the computed saliency (@-1), or @0.";
+		loc[param_sal_curv] = "Curvature";
 		loc[param_sal_area] = "Area";
 		loc[param_sal_levels] = "Levels";
 		loc[param_sal_normpower] = "Contrast";
@@ -72,6 +75,9 @@ namespace green {
 		loc[param_dec_weight] = "Weight";
 		loc[param_dec_power] = "Power";
 		loc[param_dec_bins] = "Bins";
+		// curvature
+		loc[curv_don] = "DoN curvature";
+		loc[curv_mean] = "Mean curvature";
 		return loc;
 	}
 

@@ -165,17 +165,21 @@ namespace green {
 		{
 			// ensure params are valid
 			m_uparams.sanitize();
+			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
+
 			const float normal_power = m_uparams.auto_contrast ? m_mparams.curv.contrast : m_uparams.normal_power;
 			std::cout << "Contrast: " << normal_power << std::endl;
 			
-			std::cout << "Using " << omp_get_max_threads() << " threads" << std::endl;
-
+			std::cout << "Applying curvature contrast" << std::endl;
 			m_progress.state = saliency_state::curv;
-			std::cout << "Computing curvature" << std::endl;
-			std::cout << "Curv bin min: " << m_mparams.curv.bin_min << std::endl;
-			std::cout << "Curv bin max: " << m_mparams.curv.bin_max << std::endl;
-			std::cout << "Curv real min: " << curvature_contrast(m_mparams.curv.curv_min, normal_power) << std::endl;
-			std::cout << "Curv real max: " << curvature_contrast(m_mparams.curv.curv_max, normal_power) << std::endl;
+			const float curv_real_min = curvature_contrast(m_mparams.curv.curv_min, normal_power);
+			const float curv_real_max = curvature_contrast(m_mparams.curv.curv_max, normal_power);
+			std::cout << "Curv real range: " << curv_real_min << " " << curv_real_max << std::endl;
+			const float curv_bin_min = m_mparams.curv.natural_binning
+				? curvature_contrast(m_mparams.curv.natural_min, normal_power) : curv_real_min;
+			const float curv_bin_max = m_mparams.curv.natural_binning
+				? curvature_contrast(m_mparams.curv.natural_max, normal_power) : curv_real_max;
+			std::cout << "Curv bin range: " << curv_bin_min << " " << curv_bin_max << std::endl;
 
 			// apply curv contrast
 			// note: we can't cache the (final) curvature because we couldn't adjust the normal power etc
@@ -195,7 +199,7 @@ namespace green {
 
 			m_progress.state = saliency_state::nhprep;
 			const auto time_nhprep_start = std::chrono::steady_clock::now();
-			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature, m_mparams.curv.bin_min, m_mparams.curv.bin_max);
+			m_meshcache = MeshCache(*m_mparams.mesh, m_mparams.prop_edge_length, m_mparams.prop_vertex_area, m_mparams.prop_curvature, curv_bin_min, curv_bin_max);
 			const auto time_nhprep_finish = std::chrono::steady_clock::now();
 			m_progress.elapsed_time = std::chrono::duration_cast<decltype(m_progress.elapsed_time)>(time_nhprep_finish - m_time_start);
 			std::cout << "Neighborhood search prep took " << ((time_nhprep_finish - time_nhprep_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;

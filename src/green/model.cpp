@@ -392,7 +392,7 @@ namespace green {
 	void Model::init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params uparams) {
 		mparams.mesh = &m_mesh;
 		// set input properties
-		mparams.curv = m_curv_don;
+		mparams.curv = curv(uparams.curv_mode);
 		mparams.prop_vertex_area = m_prop_vertex_area;
 		mparams.prop_edge_length = m_prop_edge_length;
 		// create output properties
