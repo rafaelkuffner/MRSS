@@ -222,7 +222,7 @@ namespace green {
 			intersectLines2D(c0, d0, c2, d2,
 				centerPoint2D);
 
-			if (isinf(centerPoint2D[0]) || isinf(centerPoint2D[1])) {
+			if (std::isinf(centerPoint2D[0]) || std::isinf(centerPoint2D[1])) {
 				mesh.property(wedgeVoronoiAreaProperty, halfedge) = 0;
 				halfedge = mesh.next_halfedge_handle(halfedge);
 

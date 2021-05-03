@@ -15,6 +15,10 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(cgu)
 
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+	set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -Wfatal-errors)
+endif()
+
 # output directories
 cgu_maybe_set_output_dirs()
 

@@ -272,6 +272,7 @@ namespace iob {
 		iobuffer::operator=(std::move(other));
 		m_buf = std::exchange(other.m_buf, nullptr);
 		m_bad = std::exchange(other.m_bad, false);
+		return *this;
 	}
 
 	stream_buffer::stream_buffer(std::streambuf *buf_) :
@@ -337,6 +338,7 @@ namespace iob {
 		close();
 		iobuffer::operator=(std::move(other));
 		m_fp = std::exchange(other.m_fp, nullptr);
+		return *this;
 	}
 
 	file_buffer::file_buffer(const std::filesystem::path &fpath, openmode mode) {

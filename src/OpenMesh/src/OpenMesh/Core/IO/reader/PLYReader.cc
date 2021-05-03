@@ -364,7 +364,7 @@ namespace OpenMesh {
 		};
 		
 		template <typename T, typename Handle>
-		typename BaseHandle PLYParser::create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listType) {
+		BaseHandle PLYParser::create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listType) {
 			if (_listType == Unsupported) {
 				// no list type defined -> property is not a list
 				typename Handle2Prop<T, Handle>::PropT prop;

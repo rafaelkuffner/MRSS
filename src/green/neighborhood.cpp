@@ -821,8 +821,8 @@ namespace green {
 			avg_normal_z = select(avg_normal_z, avg_normal_z + norm[2], m);
 		};
 
-		search.run<0>(mesh, stats, rootvdis, radius, visitor);
-		search.run<1>(mesh, stats, rootvdis, radius, visitor);
+		search.template run<0>(mesh, stats, rootvdis, radius, visitor);
+		search.template run<1>(mesh, stats, rootvdis, radius, visitor);
 
 		OpenMesh::Vec3f avg_normal[SimdTraits::simd_size];
 		dist_t plane_min{+9001e19}, plane_max{-9001e19};
@@ -855,7 +855,7 @@ namespace green {
 
 			// TODO don't really have to do a search again
 			// could cache the positions from this first search
-			search.run<2>(mesh, stats, rootvdis, radius, visitor2);
+			search.template run<2>(mesh, stats, rootvdis, radius, visitor2);
 
 		}
 

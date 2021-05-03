@@ -60,7 +60,7 @@ cgu_target_source_group_tree(green)
 if(WIN32)
 	target_compile_definitions(green PRIVATE GREEN_DIALOG_WIN32)
 else()
-	target_compile_definitions(green PRIVATE GREEN_DIALOG_BASIC)
+	target_compile_definitions(green PRIVATE GREEN_DIALOG_SIMPLE)
 endif()
 
 # shaders

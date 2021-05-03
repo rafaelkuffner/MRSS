@@ -78,6 +78,8 @@
 #include <utility>
 #endif
 
+#define OMLOG_SOURCE HeapT
+
 //== NAMESPACE ================================================================
 
 namespace OpenMesh { // BEGIN_NS_OPENMESH
@@ -263,12 +265,12 @@ public:
     {
       if (((j=left(i))<size()) && interface_.greater(entry(i), entry(j))) 
       {
-        omerr() << "Heap condition violated\n";
+        OMLOG_ERROR << "Heap condition violated";
         ok=false;
       }
       if (((j=right(i))<size()) && interface_.greater(entry(i), entry(j)))
       {
-        omerr() << "Heap condition violated\n";
+        OMLOG_ERROR << "Heap condition violated";
         ok=false;
       }
     }
@@ -375,6 +377,9 @@ downheap(size_t _idx)
 //=============================================================================
 } // END_NS_UTILS
 } // END_NS_OPENMESH
+
+#undef OMLOG_SOURCE
+
 //=============================================================================
 #endif // OSG_HEAP_HH defined
 //=============================================================================

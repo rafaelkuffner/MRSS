@@ -54,6 +54,7 @@
 #include <OpenMesh/Core/Mesh/Attributes.hh>
 
 #include <cstdlib>
+#include <cstring>
 
 //== NAMESPACES ==============================================================
 

@@ -445,9 +445,9 @@ namespace green {
 				maxDiff = std::min(OpenMesh::dot(norm1, norm2), maxDiff);
 			}
 		}
-		maxDiff = pow(((1 - (maxDiff)) / 2), normalPower); //Divided by two to get 0-1 range so our power parameter works :)
+		maxDiff = std::pow(((1 - (maxDiff)) / 2), normalPower); //Divided by two to get 0-1 range so our power parameter works :)
 		maxDiff = std::clamp(maxDiff, 0.f, 1.f);
-		if (!isfinite(maxDiff)) maxDiff = 0;
+		if (!std::isfinite(maxDiff)) maxDiff = 0;
 		return maxDiff;
 	}
 
@@ -480,8 +480,8 @@ namespace green {
 				auto norm1 = mesh.normal(nv);
 				k += area * std::max(OpenMesh::dot(norm0, norm1), 0.f);
 			}
-			k = pow((1 - (k / w)), normal_power);
-			if (!isfinite(k)) k = 0;
+			k = std::pow((1 - (k / w)), normal_power);
+			if (!std::isfinite(k)) k = 0;
 			mesh.property(curv.prop_curv, *vIt) = k;
 			update_minmax(curv, k);
 		}
@@ -514,7 +514,7 @@ namespace green {
 			//std::shuffle(samples.begin() + nsamples / 3, samples.end(), rand);
 		}
 		auto eval_entropy = [&](float contrast) {
-			auto f = [=](float x) { return pow(x, contrast); };
+			auto f = [=](float x) { return std::pow(x, contrast); };
 			auto hist = histogram<MeshCache::ncurvbins>(mesh, prop_vert_area, curv.prop_curv, f, bin_min, bin_max, samples, nsamples);
 			float s = histogram_entropy(hist);
 			return s;

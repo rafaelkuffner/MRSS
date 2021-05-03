@@ -71,18 +71,18 @@ namespace OpenMesh
 		}
 	}
 
-	void OpenMesh::set_log_handler(log_handler_t f) noexcept
+	void set_log_handler(log_handler_t f) noexcept
 	{
 		if (!f) return;
 		current_log_handler = f;
 	}
 
-	log_handler_t OpenMesh::get_log_handler() noexcept
+	log_handler_t get_log_handler() noexcept
 	{
 		return current_log_handler;
 	}
 
-	void OpenMesh::default_log_handler(log_message &&msg) noexcept
+	void default_log_handler(log_message &&msg) noexcept
 	{
 		std::cerr << "[OM:" << msg.source << "] " << name(msg.level) << " : " << msg.message << std::endl;
 	}

@@ -30,7 +30,8 @@ if ( NOT ${PROJECT_NAME} MATCHES "OpenMesh")
 endif()
 
 
-if (WIN32)
+# just build the lib ffs
+if (1 OR WIN32)
 
   if ( OPENMESH_BUILD_SHARED )
     add_definitions( -DOPENMESHDLL -DBUILDOPENMESHDLL)

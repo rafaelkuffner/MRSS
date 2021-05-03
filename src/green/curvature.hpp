@@ -15,7 +15,7 @@
 #ifndef GREEN_CURVATURE_HPP
 #define GREEN_CURVATURE_HPP
 
-#include "model.hpp"
+#include "meshutils.hpp"
 
 #include <random>
 #include <algorithm>

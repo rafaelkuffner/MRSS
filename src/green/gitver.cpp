@@ -30,7 +30,7 @@ namespace green {
 	bool git_is_release() {
 		// proper releases just look like v0.2
 		// anything else looks like v0.2-N-gHASH
-		return std::string_view(git_describe()).find("-g") == std::string::npos;
+		return std::string_view(git_describe()).find("-g") == std::string_view::npos;
 	}
 
 }

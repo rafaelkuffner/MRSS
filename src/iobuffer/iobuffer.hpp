@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <climits>
 #include <array>
 #include <vector>
 #include <tuple>
@@ -34,6 +36,9 @@
 #endif
 
 namespace iob {
+
+	template <typename ...Ts>
+	constexpr inline bool dependent_false_v = false;
 
 	enum class endian : unsigned char {
 		little, big
@@ -138,7 +143,7 @@ namespace iob {
 				// unsigned < signed
 				return v2 >= 0 && v1 < uintmax_t(v2);
 			} else {
-				static_assert(false, "statically unreachable");
+				static_assert(dependent_false_v<T1, T2>, "statically unreachable");
 			}
 		}
 
@@ -646,7 +651,7 @@ namespace iob {
 			} else if constexpr (std::is_floating_point_v<T>) {
 				if (m_native_float_endian != m_endian) val = detail::byteswap(val);
 			} else {
-				static_assert(false, "bad type for get_val");
+				static_assert(dependent_false_v<T>, "bad type for get_val");
 			}
 			return nr < sizeof(val) ? T{0} : val;
 		}
@@ -887,7 +892,7 @@ namespace iob {
 			} else if constexpr (std::is_floating_point_v<T>) {
 				if (m_native_float_endian != m_endian) x = detail::byteswap(x);
 			} else {
-				static_assert(false, "bad type for put_val");
+				static_assert(dependent_false_v<T>, "bad type for put_val");
 			}
 			m_iobuf->put({reinterpret_cast<uchar *>(&x), sizeof(T)});
 		}
