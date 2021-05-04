@@ -248,7 +248,7 @@ namespace green {
 				switch (sparams.color_mode) {
 				case model_color_mode::saliency:
 				{
-					const float s = m_mesh.property(sparams.prop_saliency, *vIt);
+					const float s = powsign(m_mesh.property(sparams.prop_saliency, *vIt), sparams.sal_gamma);
 					mapScalarToColor(v, s, TransferFunction::ZBRUSH);
 					break;
 				}
@@ -256,7 +256,7 @@ namespace green {
 				{
 					const float s = m_mesh.property(sparams.prop_saliency, *vIt);
 					const float b = m_mesh.property(sparams.prop_saliency_baseline, *vIt);
-					mapScalarToColor(v, std::clamp((s - b) * sparams.error_scale * 0.5f + 0.5f, 0.f, 1.f), TransferFunction::ZBRUSH);
+					mapScalarToColor(v, std::clamp(powsign((s - b) * sparams.error_scale, sparams.sal_gamma) * 0.5f + 0.5f, 0.f, 1.f), TransferFunction::ZBRUSH);
 					break;
 				}
 				case model_color_mode::vcolor:
@@ -641,7 +641,7 @@ namespace green {
 		if (cparams.color_mode == model_color_mode::saliency) {
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
-				const float s = m_mesh.property(cparams.prop_saliency, v);
+				const float s = powsign(m_mesh.property(cparams.prop_saliency, v), cparams.sal_gamma);
 				data[i] = glm::vec4(s, 0, 0, 0);
 			}
 		} else if (cparams.color_mode == model_color_mode::saliency_comparison) {
@@ -657,7 +657,7 @@ namespace green {
 				err->max = std::max(err->max, e);
 				sse += e * e;
 				// TODO do scale on gpu
-				data[i] = glm::vec4(e * cparams.error_scale, 0, 0, 0);
+				data[i] = glm::vec4(powsign(e * cparams.error_scale, cparams.sal_gamma), 0, 0, 0);
 			}
 			err->rms = sqrt(sse / nverts);
 		} else if (cparams.color_mode == model_color_mode::vcolor) {

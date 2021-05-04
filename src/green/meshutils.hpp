@@ -23,6 +23,10 @@
 
 namespace green {
 
+	inline float powsign(float x, float e) {
+		return std::copysign(std::pow(std::abs(x), e), x);
+	}
+
 	inline OpenMesh::Vec2f glm2om(const glm::vec2 &v) {
 		OpenMesh::Vec2f vv;
 		vv[0] = v.x;

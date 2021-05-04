@@ -168,8 +168,15 @@ namespace green {
 		if (!lock.try_lock()) return;
 		auto &saliency_outputs = m_model->saliency();
 		model_color_params cparams;
-		if (m_saliency_index < saliency_outputs.size()) cparams.prop_saliency = saliency_outputs[m_saliency_index].prop_saliency;
-		if (m_saliency_baseline_index < saliency_outputs.size()) cparams.prop_saliency_baseline = saliency_outputs[m_saliency_baseline_index].prop_saliency;;
+		if (m_saliency_index < saliency_outputs.size()) {
+			auto &sd = saliency_outputs[m_saliency_index];
+			cparams.prop_saliency = sd.prop_saliency;
+			cparams.sal_gamma = sd.gamma;
+		}
+		if (m_saliency_baseline_index < saliency_outputs.size()) {
+			auto &sd = saliency_outputs[m_saliency_baseline_index];
+			cparams.prop_saliency_baseline = sd.prop_saliency;
+		}
 		cparams.color_mode = m_disp_color_mode;
 		cparams.error_scale = m_saliency_error_scale;
 		m_model->update_color(cparams, &m_saliency_errors);
@@ -421,6 +428,9 @@ namespace green {
 				if (Button("Rename")) OpenPopup("Rename Saliency##rename");
 				SameLine();
 				if (Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
+				if (SliderFloat("Gamma", &salout.gamma, 0, 2)) {
+					invalidate_saliency_vbo();
+				}
 				Checkbox("Persistent", &salout.persistent);
 				SetHoveredTooltip("Persistent properties will be preserved when decimating\nand will be exported by default");
 				Separator();
@@ -483,8 +493,8 @@ namespace green {
 							// (so this section should come last)
 							if (m_saliency_index >= saliency_outputs.size()) {
 								m_saliency_index = std::max(0, m_saliency_index - 1);
-								invalidate_saliency_vbo();
 							}
+							invalidate_saliency_vbo();
 						}
 						CloseCurrentPopup();
 					}

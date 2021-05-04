@@ -56,6 +56,7 @@ namespace green {
 		saliency_prop_t prop_saliency_baseline{};
 		model_color_mode color_mode = model_color_mode::none;
 		float error_scale = 1;
+		float sal_gamma = 1;
 	};
 
 	struct model_save_params : model_color_params {
@@ -77,6 +78,7 @@ namespace green {
 		saliency_progress progress;
 		saliency_prop_t prop_saliency{};
 		OpenMesh::VPropHandleT<unsigned char> prop_sampled{};
+		float gamma = 1;
 		bool decimated = false;
 		bool persistent = false;
 		bool uparams_known = false;

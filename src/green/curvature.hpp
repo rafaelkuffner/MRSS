@@ -51,7 +51,7 @@ namespace green {
 
 	inline float curvature_contrast(float x, float e) {
 		// ensure we can use negative inputs sensibly
-		return std::copysign(std::pow(std::abs(x), e), x);
+		return powsign(x, e);
 	}
 
 	struct curvature_autocontrast : curvature_measure {
