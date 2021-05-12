@@ -545,7 +545,7 @@ namespace green {
 					std::cout << "Giving up" << std::endl;
 				}
 			} else {
-				best_contrast = best_contrast - (s - target_entropy) / dsdc;
+				best_contrast = std::clamp(best_contrast - (s - target_entropy) / dsdc, best_contrast * 0.5f, best_contrast * 2.f);
 			}
 			contrast_delta *= 0.7f;
 		}
