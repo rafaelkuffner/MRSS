@@ -26,7 +26,8 @@
 
 namespace green {
 
-	extern float autocontrast_target_entropy;
+	// indexed by saliency_curvature_mode
+	extern float autocontrast_target_entropy_factor[2];
 
 	enum class model_color_mode : unsigned char {
 		none,

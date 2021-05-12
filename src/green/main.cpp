@@ -1027,6 +1027,8 @@ namespace {
 		saliency_progress sal_progress;
 		decimate_progress dec_progress;
 
+		float target_entropy = 0;
+
 		bool show_gui = false;
 		bool do_version = false, do_help = false, do_sal = false, do_dec = false;
 		bool save_ascii = false;
@@ -1086,7 +1088,7 @@ namespace {
 				.doc(loc[help_sal_salprop].clone()),
 			(option("--colorprop") & value("propname", colorprop))
 				.doc(loc[help_sal_colorprop].clone()),
-			(option("--targetentropy") & value("entropy", autocontrast_target_entropy))
+			(option("--targetentropy") & value("entropy", target_entropy))
 				.doc("INTERNAL USE ONLY"),
 			(option("--curv") & value("curv", curvmode))
 				.doc(loc[help_sal_curv].clone())
@@ -1178,6 +1180,10 @@ namespace {
 		} else {
 			cout << "unknown curvature mode " << curvmode << endl;
 			exit(1);
+		}
+
+		if (target_entropy > 0.f) {
+			autocontrast_target_entropy_factor[int(sal_uparams.curv_mode)] = target_entropy / 8.f;
 		}
 
 		sal_uparams.sanitize();

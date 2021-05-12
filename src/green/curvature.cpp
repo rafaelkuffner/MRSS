@@ -492,6 +492,7 @@ namespace green {
 	curvature_autocontrast autocontrast(
 		const PolyMesh &mesh,
 		const curvature_measure &curv,
+		float target_entropy_factor,
 		OpenMesh::VPropHandleT<float> prop_vert_area,
 		bool natural_binning
 	){
@@ -524,17 +525,28 @@ namespace green {
 			float s1 = eval_entropy(contrast + delta);
 			return std::pair{s0, (s1 - s0) / delta};
 		};
-		//for (float contrast = 0.1f; contrast < 1.6f; contrast += 0.1f) {
+		//for (float contrast = 0.01f; contrast < 1.6f; contrast *= 1.1f) {
 		//	float s = eval_entropy(contrast);
 		//	std::cout << "Global entropy at contrast " << contrast << ": " << s << std::endl;
 		//}
-		const float target_entropy = autocontrast_target_entropy;
+		const float target_entropy = target_entropy_factor * log2f(MeshCache::ncurvbins);
 		float best_contrast = 1;
 		float contrast_delta = 0.1f;
 		for (int i = 0; i < 5; i++) {
 			auto [s, dsdc] = eval_entropy_gradient(best_contrast, contrast_delta);
-			std::cout << "Global entropy step: " << s << std::endl;
-			best_contrast = best_contrast - (s - target_entropy) / dsdc;
+			std::cout << "Global entropy " << s << " at contrast " << best_contrast << std::endl;
+			if (s < 1) {
+				// saliency too close to zero => need to reduce (gradient unreliable)
+				best_contrast *= 0.667f;
+				// maybe take an extra step
+				if (best_contrast > 0.05f) {
+					i--;
+				} else {
+					std::cout << "Giving up" << std::endl;
+				}
+			} else {
+				best_contrast = best_contrast - (s - target_entropy) / dsdc;
+			}
 			contrast_delta *= 0.7f;
 		}
 		std::cout << "Auto contrast: " << best_contrast << std::endl;

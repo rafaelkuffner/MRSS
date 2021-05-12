@@ -32,7 +32,7 @@
 
 namespace green {
 
-	float autocontrast_target_entropy = log2f(MeshCache::ncurvbins) * 0.45f;
+	float autocontrast_target_entropy_factor[2]{0.45f, 0.3f};
 
 	ModelBase::ModelBase(const std::filesystem::path &fpath) {
 		// face status not really required here
@@ -191,7 +191,7 @@ namespace green {
 			std::cout << "Don curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 			// TODO time autocontrast?
 			std::cout << "Computing auto contrast for don curvature" << std::endl;
-			m_curv_don = autocontrast(m_mesh, curv, m_prop_vertex_area, true);
+			m_curv_don = autocontrast(m_mesh, curv, autocontrast_target_entropy_factor[int(saliency_curvature_mode::don)], m_prop_vertex_area, true);
 		}
 
 		{
@@ -203,7 +203,7 @@ namespace green {
 			std::cout << "Mean curvature took " << ((time_curv_finish - time_curv_start) / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 			// TODO time autocontrast?
 			std::cout << "Computing auto contrast for mean curvature" << std::endl;
-			m_curv_mean = autocontrast(m_mesh, curv, m_prop_vertex_area, false);
+			m_curv_mean = autocontrast(m_mesh, curv, autocontrast_target_entropy_factor[int(saliency_curvature_mode::mean)], m_prop_vertex_area, false);
 		}
 
 	}

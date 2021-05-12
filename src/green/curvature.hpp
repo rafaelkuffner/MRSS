@@ -72,6 +72,7 @@ namespace green {
 	curvature_autocontrast autocontrast(
 		const PolyMesh &mesh,
 		const curvature_measure &curv,
+		float target_entropy_factor,
 		OpenMesh::VPropHandleT<float> prop_vert_area,
 		bool natural_binning
 	);
