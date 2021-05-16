@@ -34,10 +34,12 @@ namespace green {
 		char *p = buf;
 		if (verbose) {
 			// use extra precision
-			p += snprintf(p, end - p, "l=%d,a=%g,c=%g,r=%g", levels, area, curv_weight, normal_power);
+			p += snprintf(p, end - p, "l=%d,a=%g,c=%g", levels, area, curv_weight);
+			if (!auto_contrast) p += snprintf(p, end - p, ",r=%g", normal_power);
 			if (normalmap_filter) p += snprintf(p, end - p, ",e=%g", noise_height);
 		} else {
-			p += snprintf(p, end - p, "l=%d,a=%.3g,c=%.2g,r=%.3g", levels, area, curv_weight, normal_power);
+			p += snprintf(p, end - p, "l=%d,a=%.3g,c=%.2g", levels, area, curv_weight);
+			if (!auto_contrast) p += snprintf(p, end - p, ",r=%.3g", normal_power);
 			if (normalmap_filter) p += snprintf(p, end - p, ",e=%.3g", noise_height);
 		}
 		if (subsample_auto) p += snprintf(p, end - p, ",s=%.0f", samples_per_neighborhood);
@@ -48,10 +50,11 @@ namespace green {
 		std::cout << "parsing saliency param string " << s << std::endl;
 		// start with defaults, and construct a separate instance in case of failure
 		saliency_user_params uparams;
-		// ensure these switches start off, because they are implied on by value params
+		// ensure these switches start off(on), because they are implied on(off) by value params
 		uparams.normalmap_filter = false;
 		uparams.subsample_manual = false;
 		uparams.subsample_auto = false;
+		uparams.auto_contrast = true;
 		std::istringstream iss{std::string(s)};
 		while (iss) {
 			const char sp = iss.get();
@@ -92,6 +95,7 @@ namespace green {
 				break;
 			case 'r':
 				if (!need_val()) return false;
+				uparams.auto_contrast = false;
 				uparams.normal_power = val;
 				break;
 			case 'e':
