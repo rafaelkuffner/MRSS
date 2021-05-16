@@ -222,7 +222,7 @@ namespace green {
 
 		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
 
-		void init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params uparams);
+		void init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params &uparams);
 
 		void cleanup_saliency_params(saliency_mesh_params &mparams, bool success) noexcept;
 

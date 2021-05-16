@@ -389,7 +389,7 @@ namespace green {
 		return true;
 	}
 
-	void Model::init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params uparams) {
+	void Model::init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params &uparams) {
 		mparams.mesh = &m_mesh;
 		// set input properties
 		mparams.curv = curv(uparams.curv_mode);
