@@ -69,8 +69,8 @@ vec4 map_color(vec4 c) {
 		// attribute color
 		return c;
 	case 2:
-		// scalar attribute * uniform color
-		return c.r * u_color;
+		// attribute * uniform color
+		return c * u_color;
 	case 3:
 		// zbrush style
 		return map_color_zbrush(c.r);

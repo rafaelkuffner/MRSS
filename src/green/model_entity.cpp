@@ -37,7 +37,8 @@ namespace {
 			"Curvature (DoN)\0"
 			"Surface Normal\0"
 			"UVs\0"
-			"Checkerboard\0";
+			"Checkerboard\0"
+			"Decimation Error\0";
 		int x = int(mode);
 		if (Combo("Color Mode", &x, optstr)) {
 			mode = model_color_mode(x);
@@ -45,36 +46,7 @@ namespace {
 		}
 		return false;
 	}
-
-	GLuint checkerboard_texture() {
-		static GLuint tex = 0;
-		if (!tex) {
-			glGenTextures(1, &tex);
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, tex);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
-			constexpr size_t shift = 6;
-			constexpr size_t sx = 1 << shift;
-			std::vector<GLubyte> data(sx * sx * 4);
-			for (size_t i = 0; i < sx * sx; i++) {
-				const auto a = GLubyte((i & 1u) - 1u);
-				const auto b = GLubyte(((i >> shift) & 1u) - 1u);
-				const auto k = (a ^ b) | GLubyte(15);
-				data[i * 4 + 0] = k;
-				data[i * 4 + 1] = k;
-				data[i * 4 + 2] = k;
-				data[i * 4 + 3] = 0xFF;
-			}
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sx, sx, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
-			glBindTexture(GL_TEXTURE_2D, 0);
-		}
-		return tex;
-	}
+	
 }
 
 namespace green {
@@ -179,7 +151,8 @@ namespace green {
 		}
 		cparams.color_mode = m_disp_color_mode;
 		cparams.error_scale = m_saliency_error_scale;
-		m_model->update_color(cparams, &m_saliency_errors);
+		cparams.dec_err_gamma = m_dec_err_gamma;
+		m_disp_color_map = m_model->update_color(cparams, &m_saliency_errors);
 		m_saliency_vbo_dirty = false;
 		invalidate_scene();
 	}
@@ -358,6 +331,13 @@ namespace green {
 
 			if (combo_color_mode(m_disp_color_mode)) invalidate_saliency_vbo();
 
+			if (m_disp_color_mode == model_color_mode::dec_err) {
+				if (SliderFloat("Gamma##decerr", &m_dec_err_gamma, 0, 2, "%.3f", 2.f)) {
+					invalidate_saliency_vbo();
+				}
+				m_dec_err_gamma = std::clamp(m_dec_err_gamma, 0.f, 2.f);
+			}
+
 			Separator();
 
 			std::vector<model_saliency_data> empty_saliency_outputs;
@@ -375,7 +355,7 @@ namespace green {
 					return true;
 				}, 
 				saliency_outputs.data(), saliency_outputs.size()
-					)) {
+			)) {
 				invalidate_saliency_vbo();
 			}
 
@@ -429,7 +409,7 @@ namespace green {
 				if (Button("Rename")) OpenPopup("Rename Saliency##rename");
 				SameLine();
 				if (Button("Baseline")) m_saliency_baseline_index = m_saliency_index;
-				if (SliderFloat("Gamma", &salout.gamma, 0, 2)) {
+				if (SliderFloat("Gamma##sal", &salout.gamma, 0, 2)) {
 					invalidate_saliency_vbo();
 				}
 				Checkbox("Persistent", &salout.persistent);
@@ -844,22 +824,11 @@ namespace green {
 			if (selected) draw_window_selection();
 			if (selected) draw_window_export();
 			if (draw_scene) {
-				update_vbo();
-				GLuint tex = 0;
-				// determine color map to apply in shader
 				auto &saliency_outputs = m_model->saliency();
-				int color_map = 0;
 				const bool sal_valid = m_saliency_index < saliency_outputs.size();
-				if (m_disp_color_mode == model_color_mode::saliency && sal_valid) color_map = 3;
-				if (m_disp_color_mode == model_color_mode::saliency_comparison && sal_valid && m_saliency_baseline_index < saliency_outputs.size()) color_map = 4;
-				if (m_disp_color_mode == model_color_mode::vcolor && m_model->prop_vcolor_original().is_valid()) color_map = 1;
-				if (m_disp_color_mode == model_color_mode::doncurv) color_map = 3;
-				if (m_disp_color_mode == model_color_mode::normal) color_map = 7;
-				if (m_disp_color_mode == model_color_mode::uv && m_model->has_texcoords2d()) color_map = 5;
-				if (m_disp_color_mode == model_color_mode::checkerboard && m_model->has_texcoords2d()) {
-					color_map = 6;
-					tex = checkerboard_texture();
-				}
+				// update vbos and determine color map to apply in shader
+				update_vbo();
+				GLuint tex = m_model->texture(m_disp_color_mode);
 				// prepare to draw
 				model_draw_params params;
 				params.sel = sel;
@@ -868,13 +837,13 @@ namespace green {
 				params.polymode = GL_FILL;
 				params.shade_flat = m_shade_flat;
 				params.color = {0.6f, 0.6f, 0.5f, 1};
-				params.vert_color_map = m_color_faces ? color_map : 0;
+				params.vert_color_map = m_color_faces ? m_disp_color_map : model_color_map::uniform;
 				glCullFace(GL_BACK);
 				if (m_cull_faces) glEnable(GL_CULL_FACE);
 				glColorMaski(1, GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
 				if (m_show_faces) {
 					glActiveTexture(GL_TEXTURE0);
-					if (tex) glBindTexture(GL_TEXTURE_2D, tex);
+					if (m_disp_color_map == model_color_map::texture) glBindTexture(GL_TEXTURE_2D, tex);
 					m_model->draw(view * transform(), proj, zfar, params);
 					glBindTexture(GL_TEXTURE_2D, 0);
 				}
@@ -883,7 +852,7 @@ namespace green {
 				params.shade_flat = false;
 				params.shading = 0;
 				params.color = {0.03f, 0.03f, 0.03f, 1};
-				params.vert_color_map = 0;
+				params.vert_color_map = model_color_map::uniform;
 				// culling not supported atm
 				//set_cull_faces(m_cull_edges);
 				glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -893,7 +862,7 @@ namespace green {
 				params.shade_flat = false;
 				params.shading = 0;
 				params.color = {1, 0, 0, 1};
-				params.vert_color_map = 0;
+				params.vert_color_map = model_color_map::uniform;
 				// culling not supported atm
 				//set_cull_faces(m_cull_edges);
 				glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -902,7 +871,7 @@ namespace green {
 				params.boundaries = false;
 				params.polymode = GL_POINT;
 				params.color = {0.5f, 0, 0, 1};
-				params.vert_color_map = m_color_verts ? color_map : 0;
+				params.vert_color_map = m_color_verts ? m_disp_color_map : model_color_map::uniform;
 				params.sel.hover_entity = -1;
 				params.sel.select_entity = -1;
 				//params.show_samples = sal_valid && (m_color_mode == color_mode::saliency || m_color_mode == color_mode::saliency_comparison);

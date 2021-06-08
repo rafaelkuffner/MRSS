@@ -314,7 +314,7 @@ namespace green {
 
 		progress.state = decimation_state::run;
 		OpenMesh::Decimater::DecimaterT<PolyMesh> decimater(*mparams.mesh);
-		
+
 		OpenMesh::Decimater::ModQuadricT<PolyMesh>::Handle hModQuadrics;
 		decimater.add(hModQuadrics);
 		decimater.module(hModQuadrics).unset_max_err();
@@ -360,6 +360,28 @@ namespace green {
 			int k = fin_bin_counts[i];
 			int r = init_bin_counts[i] - k;
 			std::cout << "bin " << i << ": kept " << k << " (" << (float(k) / mparams.mesh->n_vertices()) << "); removed " << r << " (" << (float(r) / target_collapses) << ")" << std::endl;
+		}
+
+		std::cout << "collecting decimation error values" << std::endl;
+		auto &mq = decimater.module(hModQuadrics);
+		auto prop_v_err = mparams.prop_dec_error;
+		// init vertex errors
+		for (auto &e : mparams.mesh->property(prop_v_err).data_vector()) {
+			e = FLT_MAX;
+		}
+		// find smallest halfedge error for each vertex
+		for (auto hh : mparams.mesh->halfedges()) {
+			OpenMesh::Decimater::CollapseInfoT<PolyMesh> ci(*mparams.mesh, hh);
+			float h_err = mq.collapse_priority(ci);
+			float &v_err = mparams.mesh->property(prop_v_err, ci.v0);
+			v_err = std::min(v_err, h_err);
+		}
+		// deal with non-collapsibles
+		for (auto &e : mparams.mesh->property(prop_v_err).data_vector()) {
+			if (!(e < FLT_MAX)) {
+				// hackish?
+				e = 0;
+			}
 		}
 
 		std::cout << "final vertices: " << mparams.mesh->n_vertices() << std::endl;

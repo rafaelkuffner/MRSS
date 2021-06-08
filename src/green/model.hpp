@@ -37,7 +37,19 @@ namespace green {
 		doncurv,
 		normal,
 		uv,
-		checkerboard
+		checkerboard,
+		dec_err
+	};
+
+	enum class model_color_map : unsigned char {
+		uniform = 0,
+		attribute = 1,
+		attribute_x_uniform = 2,
+		zbrush = 3,
+		zbrush_diff = 4,
+		uv = 5,
+		texture = 6,
+		normal = 7
 	};
 
 	struct model_draw_params {
@@ -46,7 +58,7 @@ namespace green {
 		glm::vec4 color{0.6f, 0.6f, 0.5f, 1};
 		float shading = 0.9f;
 		int entity_id = -1;
-		int vert_color_map = 0;
+		model_color_map vert_color_map = model_color_map::uniform;
 		bool show_samples = false;
 		bool shade_flat = false;
 		bool boundaries = false;
@@ -58,6 +70,7 @@ namespace green {
 		model_color_mode color_mode = model_color_mode::none;
 		float error_scale = 1;
 		float sal_gamma = 1;
+		float dec_err_gamma = 0.2f;
 	};
 
 	struct model_save_params : model_color_params {
@@ -155,10 +168,6 @@ namespace green {
 			return m_mesh;
 		}
 
-		bool has_texcoords2d() const {
-			return m_mesh.has_halfedge_texcoords2D();
-		}
-
 		std::vector<model_saliency_data> & saliency() {
 			return m_saliency;
 		}
@@ -188,6 +197,7 @@ namespace green {
 		OpenMesh::VPropHandleT<float> m_prop_vertex_area;
 		OpenMesh::EPropHandleT<float> m_prop_edge_length;
 		saliency_prop_t m_prop_sal_dec;
+		OpenMesh::VPropHandleT<float> m_prop_dec_error;
 
 		curvature_autocontrast m_curv_don;
 		curvature_autocontrast m_curv_mean;
@@ -296,7 +306,9 @@ namespace green {
 
 		void update_vbos();
 
-		bool update_color(const model_color_params &cparams, model_saliency_errors * = nullptr);
+		model_color_map update_color(const model_color_params &cparams, model_saliency_errors * = nullptr);
+
+		GLuint texture(model_color_mode);
 
 		void draw(GLenum polymode = GL_FILL, bool boundaries = false) const;
 

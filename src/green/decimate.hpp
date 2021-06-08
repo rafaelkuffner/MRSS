@@ -59,6 +59,8 @@ namespace green {
 	struct decimate_mesh_params {
 		PolyMesh *mesh = nullptr;
 		OpenMesh::VPropHandleT<float> prop_saliency;
+		// output
+		OpenMesh::VPropHandleT<float> prop_dec_error;
 	};
 
 	enum class decimation_state {

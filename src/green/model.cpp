@@ -30,6 +30,38 @@
 
 #include "model.glsl.hpp"
 
+namespace {
+	GLuint checkerboard_texture() {
+		static GLuint tex = 0;
+		if (!tex) {
+			glGenTextures(1, &tex);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
+			constexpr size_t shift = 6;
+			constexpr size_t sx = 1 << shift;
+			std::vector<GLubyte> data(sx * sx * 4);
+			for (size_t i = 0; i < sx * sx; i++) {
+				const auto a = GLubyte((i & 1u) - 1u);
+				const auto b = GLubyte(((i >> shift) & 1u) - 1u);
+				const auto k = (a ^ b) | GLubyte(15);
+				data[i * 4 + 0] = k;
+				data[i * 4 + 1] = k;
+				data[i * 4 + 2] = k;
+				data[i * 4 + 3] = 0xFF;
+			}
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sx, sx, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+		return tex;
+	}
+}
+
 namespace green {
 
 	float autocontrast_target_entropy_factor[2]{0.45f, 0.3f};
@@ -337,6 +369,8 @@ namespace green {
 		// FIXME if source has face status etc, those props are broken in the copy! (openmesh bug)
 		if (m_mesh.has_face_status()) std::abort();
 		m.m_mesh.assign(m_mesh, true);
+		// create decimation error property
+		m.m_mesh.add_property(m.m_prop_dec_error);
 		// copy original vertex colors if present
 		if (m_prop_vcolor_original.is_valid()) {
 			m.m_mesh.add_property(m.m_prop_vcolor_original);
@@ -374,6 +408,7 @@ namespace green {
 		decimate_mesh_params mparams;
 		mparams.mesh = &m_mesh;
 		mparams.prop_saliency = m_prop_sal_dec;
+		mparams.prop_dec_error = m_prop_dec_error;
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
@@ -624,27 +659,29 @@ namespace green {
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
-	bool Model::update_color(const model_color_params &cparams, model_saliency_errors *err) {
+	model_color_map Model::update_color(const model_color_params &cparams, model_saliency_errors *err) {
 		model_saliency_errors err2{};
 		if (!err) err = &err2;
-		if (cparams.color_mode == model_color_mode::saliency && !cparams.prop_saliency.is_valid()) return false;
-		if (cparams.color_mode == model_color_mode::vcolor && !m_prop_vcolor_original.is_valid()) return false;
-		if (cparams.color_mode == model_color_mode::saliency_comparison && !cparams.prop_saliency.is_valid()) return false;
-		if (cparams.color_mode == model_color_mode::saliency_comparison && !cparams.prop_saliency_baseline.is_valid()) return false;
-		if (cparams.color_mode == model_color_mode::doncurv && !m_curv_don.prop_curv.is_valid()) return false;
-		if (!m_vbo_col) return false;
+		if (!m_vbo_col) return model_color_map::uniform;
+		model_color_map cmap = model_color_map::uniform;
 		const auto nverts = vao_nverts();
 		glBindBuffer(GL_ARRAY_BUFFER, m_vbo_col);
 		auto *data = reinterpret_cast<glm::vec4 *>(
 			glMapBufferRange(GL_ARRAY_BUFFER, 0, nverts * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)
 		);
-		if (cparams.color_mode == model_color_mode::saliency) {
+		if (cparams.color_mode == model_color_mode::saliency && cparams.prop_saliency.is_valid()) {
+			cmap = model_color_map::zbrush;
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				const float s = powsign(m_mesh.property(cparams.prop_saliency, v), cparams.sal_gamma);
 				data[i] = glm::vec4(s, 0, 0, 0);
 			}
-		} else if (cparams.color_mode == model_color_mode::saliency_comparison) {
+		} else if (
+			cparams.color_mode == model_color_mode::saliency_comparison
+			&& cparams.prop_saliency.is_valid()
+			&& cparams.prop_saliency_baseline.is_valid()
+		) {
+			cmap = model_color_map::zbrush_diff;
 			err->min = 9001;
 			err->max = -9001;
 			float sse = 0;
@@ -660,26 +697,49 @@ namespace green {
 				data[i] = glm::vec4(powsign(e * cparams.error_scale, cparams.sal_gamma), 0, 0, 0);
 			}
 			err->rms = sqrt(sse / nverts);
-		} else if (cparams.color_mode == model_color_mode::vcolor) {
+		} else if (cparams.color_mode == model_color_mode::vcolor && m_prop_vcolor_original.is_valid()) {
+			cmap = model_color_map::attribute;
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				const auto col = m_mesh.property(m_prop_vcolor_original, v);
 				// need to gamma decode the color because the shader expects linear
 				data[i] = glm::vec4(pow(glm::vec3(col[0], col[1], col[2]) / 255.f, glm::vec3(2.2f)), 1);
 			}
-		} else if (cparams.color_mode == model_color_mode::doncurv) {
+		} else if (cparams.color_mode == model_color_mode::doncurv && m_curv_don.prop_curv.is_valid()) {
+			cmap = model_color_map::zbrush;
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				// note: need much lower contrast for display than for saliency
 				const float c = std::pow(m_mesh.property(m_curv_don.prop_curv, v), m_curv_don.contrast * 0.2f);
 				data[i] = glm::vec4(c, 0, 0, 0);
 			}
-		} else {
-			// uvs/texture are handled in the shader directly
+		} else if (cparams.color_mode == model_color_mode::normal) {
+			// handled in shader directly
+			cmap = model_color_map::normal;
+		} else if (cparams.color_mode == model_color_mode::uv && m_mesh.has_halfedge_texcoords2D()) {
+			// handled in shader directly
+			cmap = model_color_map::uv;
+		} else if (cparams.color_mode == model_color_mode::checkerboard && m_mesh.has_halfedge_texcoords2D()) {
+			// handled in shader directly
+			cmap = model_color_map::texture;
+		} else if (cparams.color_mode == model_color_mode::dec_err && m_prop_dec_error.is_valid()) {
+			cmap = model_color_map::zbrush;
+			const auto &err_data = m_mesh.property(m_prop_dec_error).data_vector();
+			float imax_err = 1.f / *std::max_element(err_data.begin(), err_data.end());
+			for (size_t i = 0; i < nverts; i++) {
+				const auto v = OpenMesh::VertexHandle(i);
+				const float err = m_mesh.property(m_prop_dec_error, v);
+				data[i] = glm::vec4(std::pow(err * imax_err, cparams.dec_err_gamma), 0, 0, 0);
+			}
 		}
 		glUnmapBuffer(GL_ARRAY_BUFFER);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		return true;
+		return cmap;
+	}
+
+	GLuint Model::texture(model_color_mode cmode) {
+		if (cmode == model_color_mode::checkerboard) return checkerboard_texture();
+		return 0;
 	}
 
 	void Model::draw(GLenum polymode, bool boundaries) const {
@@ -782,7 +842,7 @@ namespace green {
 		if (polymode == GL_POINT) bias = -0.00002;
 		glUniform1f(glGetUniformLocation(prog, "u_depth_bias"), bias);
 		glUniform1i(glGetUniformLocation(prog, "u_entity_id"), params.entity_id);
-		glUniform1i(glGetUniformLocation(prog, "u_color_map"), params.vert_color_map);
+		glUniform1i(glGetUniformLocation(prog, "u_color_map"), int(params.vert_color_map));
 		glUniform1i(glGetUniformLocation(prog, "u_show_samples"), params.show_samples);
 
 		draw(polymode, params.boundaries);
