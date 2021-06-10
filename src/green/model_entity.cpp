@@ -240,6 +240,7 @@ namespace green {
 
 	void ModelEntity::draw_window_selection() {
 		using namespace ImGui;
+		if (!m_model) return;
 		if (Begin("Selection")) {
 			PushID(this);
 			draw_select_header(true);
@@ -825,11 +826,14 @@ namespace green {
 			} catch (...) {
 				std::cerr << "failed to load model" << std::endl;
 			}
-			// gl stuff has to happen on main thread (and dont catch exceptions from it)
-			m_model->update_vaos();
-			m_model->update_vbos();
-			m_scale = m_model->unit_bound_scale() * 4;
-			invalidate_saliency_vbo();
+			// TODO improve load failure handling (destroy entity, show popup?)
+			if (m_model) {
+				// gl stuff has to happen on main thread (and dont catch exceptions from it)
+				m_model->update_vaos();
+				m_model->update_vbos();
+				m_scale = m_model->unit_bound_scale() * 4;
+				invalidate_saliency_vbo();
+			}
 		}
 		auto &sel = ui_selection();
 		const bool selected = sel.select_entity == id();
