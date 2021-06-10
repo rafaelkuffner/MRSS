@@ -389,7 +389,8 @@ namespace OpenMesh {
 							auto cAf = _be.colorAf(vh);
 							_out << " " << cAf;
 						} else {
-							auto cA = _be.colorA(vh);
+							// printing uchar directly does not give integers
+							auto cA = vector_cast<Vec4i>(_be.colorA(vh));
 							_out << " " << cA;
 						}
 					} else {
@@ -398,7 +399,8 @@ namespace OpenMesh {
 							auto cf = _be.colorf(vh);
 							_out << " " << cf;
 						} else {
-							auto c = _be.color(vh);
+							// printing uchar directly does not give integers
+							auto c = vector_cast<Vec3i>(_be.color(vh));
 							_out << " " << c;
 						}
 					}
@@ -473,7 +475,8 @@ namespace OpenMesh {
 							auto cAf = _be.colorAf(fh);
 							_out << " " << cAf;
 						} else {
-							auto cA = _be.colorA(fh);
+							// printing uchar directly does not give integers
+							auto cA = vector_cast<Vec4i>(_be.colorA(fh));
 							_out << " " << cA;
 						}
 					} else {
@@ -482,7 +485,8 @@ namespace OpenMesh {
 							auto cf = _be.colorf(fh);
 							_out << " " << cf;
 						} else {
-							auto c = _be.color(fh);
+							// printing uchar directly does not give integers
+							auto c = vector_cast<Vec3i>(_be.color(fh));
 							_out << " " << c;
 						}
 					}
