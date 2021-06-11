@@ -365,6 +365,7 @@ namespace OpenMesh {
 		
 		template <typename T, typename Handle>
 		BaseHandle PLYParser::create_custom_prop(const std::string &_propName, const ValueType _valueType, const ValueType _listType) {
+			OMLOG_DEBUG << "Create custom property " << _propName;
 			if (_listType == Unsupported) {
 				// no list type defined -> property is not a list
 				typename Handle2Prop<T, Handle>::PropT prop;
@@ -481,6 +482,7 @@ namespace OpenMesh {
 		}
 
 		bool PLYParser::parse_property(iob::text_reader &in) {
+			const bool want_custom = m_bi && m_bi->user_options().check(OptionBits::Custom);
 			in.skip_ws();
 			if (in.peek_until_ws() == "list") {
 				in.get_until_ws();
@@ -502,13 +504,14 @@ namespace OpenMesh {
 					OMLOG_ERROR << "Unsupported value type " << valtypestr << " for list property " << propname;
 					return false;
 				}
-				PropertyInfo property(CUSTOM_PROP, valtype, propname);
+				PropertyInfo property(UNSUPPORTED, valtype, propname);
 				property.listIndexType = indextype;
 				if (elements_.empty()) {
 					OMLOG_ERROR << "No element for property " << propname;
 					return false;
 				}
 				ElementInfo &element = elements_.back();
+				OMLOG_DEBUG << "Found " << element.name_ << " list property " << propname;
 				if (element.name_ == "face") {
 					if (propname == "vertex_index" || propname == "vertex_indices") {
 						// special case for vertex indices
@@ -523,10 +526,9 @@ namespace OpenMesh {
 						property.property = TEXCOORDS;
 						options_.hattribs |= AttributeBits::TexCoord2D;
 					} else {
+						property.property = CUSTOM_PROP;
 						options_ += OptionBits::Custom;
-					}
-					if (m_bi && property.property == CUSTOM_PROP) {
-						property.handle = create_custom_prop<FaceHandle>(propname, valtype, indextype);
+						if (want_custom) property.handle = create_custom_prop<FaceHandle>(propname, valtype, indextype);
 					}
 				} else {
 					OMLOG_WARNING << "List property " << propname << " belongs to unsupported element " << element.name_;
@@ -553,108 +555,95 @@ namespace OpenMesh {
 					return false;
 				}
 				ElementInfo &element = elements_.back();
-				PropertyInfo entry;
+				PropertyInfo property(UNSUPPORTED, valtype, propname);
+				OMLOG_DEBUG << "Found " << element.name_ << " scalar property " << propname;
 				// special treatment for some vertex properties.
 				if (element.name_ == "vertex") {
 					if (propname == "x") {
-						entry = PropertyInfo(XCOORD, valtype);
+						property.property = XCOORD;
 						vertexDimension_++;
 					} else if (propname == "y") {
-						entry = PropertyInfo(YCOORD, valtype);
+						property.property = YCOORD;
 						vertexDimension_++;
 					} else if (propname == "z") {
-						entry = PropertyInfo(ZCOORD, valtype);
+						property.property = ZCOORD;
 						vertexDimension_++;
 					} else if (propname == "nx") {
-						entry = PropertyInfo(XNORM, valtype);
+						property.property = XNORM;
 						options_.vattribs |= AttributeBits::Normal;
 					} else if (propname == "ny") {
-						entry = PropertyInfo(YNORM, valtype);
+						property.property = YNORM;
 						options_.vattribs |= AttributeBits::Normal;
 					} else if (propname == "nz") {
-						entry = PropertyInfo(ZNORM, valtype);
+						property.property = ZNORM;
 						options_.vattribs |= AttributeBits::Normal;
 					} else if (propname == "u" || propname == "s") {
-						entry = PropertyInfo(TEXX, valtype);
+						property.property = TEXX;
 						options_.vattribs |= AttributeBits::TexCoord2D;
 					} else if (propname == "v" || propname == "t") {
-						entry = PropertyInfo(TEXY, valtype);
+						property.property = TEXY;
 						options_.vattribs |= AttributeBits::TexCoord2D;
 					} else if (propname == "red") {
-						entry = PropertyInfo(COLORRED, valtype);
+						property.property = COLORRED;
 						options_.vattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "green") {
-						entry = PropertyInfo(COLORGREEN, valtype);
+						property.property = COLORGREEN;
 						options_.vattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "blue") {
-						entry = PropertyInfo(COLORBLUE, valtype);
+						property.property = COLORBLUE;
 						options_.vattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "diffuse_red") {
-						entry = PropertyInfo(COLORRED, valtype);
+						property.property = COLORRED;
 						options_.vattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "diffuse_green") {
-						entry = PropertyInfo(COLORGREEN, valtype);
+						property.property = COLORGREEN;
 						options_.vattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "diffuse_blue") {
-						entry = PropertyInfo(COLORBLUE, valtype);
+						property.property = COLORBLUE;
 						options_.vattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "alpha") {
-						entry = PropertyInfo(COLORALPHA, valtype);
+						property.property = COLORALPHA;
 						options_.vattribs |= AttributeBits::Color;
 						options_ += OptionBits::ColorAlpha;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
-					}
-					if (m_bi && entry.property == CUSTOM_PROP) {
-						entry.handle = create_custom_prop<VertexHandle>(propname, valtype, Unsupported);
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
+					} else {
+						property.property = CUSTOM_PROP;
+						options_ += OptionBits::Custom;
+						if (want_custom) property.handle = create_custom_prop<VertexHandle>(propname, valtype, Unsupported);
 					}
 				} else if (element.name_ == "face") {
 					if (propname == "red") {
-						entry = PropertyInfo(COLORRED, valtype);
+						property.property = COLORRED;
 						options_.fattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "green") {
-						entry = PropertyInfo(COLORGREEN, valtype);
+						property.property = COLORGREEN;
 						options_.fattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "blue") {
-						entry = PropertyInfo(COLORBLUE, valtype);
+						property.property = COLORBLUE;
 						options_.fattribs |= AttributeBits::Color;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
 					} else if (propname == "alpha") {
-						entry = PropertyInfo(COLORALPHA, valtype);
+						property.property = COLORALPHA;
 						options_.fattribs |= AttributeBits::Color;
 						options_ += OptionBits::ColorAlpha;
-						if (valtype == ValueTypeFLOAT || valtype == ValueTypeFLOAT32)
-							options_ += OptionBits::ColorFloat;
+						if (is_float_[valtype]) options_ += OptionBits::ColorFloat;
+					} else {
+						property.property = CUSTOM_PROP;
+						options_ += OptionBits::Custom;
+						if (want_custom) property.handle = create_custom_prop<FaceHandle>(propname, valtype, Unsupported);
 					}
-					if (m_bi && entry.property == CUSTOM_PROP) {
-						entry.handle = create_custom_prop<FaceHandle>(propname, valtype, Unsupported);
-					}
+				} else {
+					OMLOG_WARNING << "Scalar property " << propname << " belongs to unsupported element " << element.name_;
 				}
-				// not a special property, load as custom
-				if (entry.value == Unsupported) {
-					options_ += OptionBits::Custom;
-					entry = PropertyInfo(CUSTOM_PROP, valtype, propname);
-				}
-				if (entry.property != UNSUPPORTED) {
-					element.properties_.push_back(entry);
-				}
+				element.properties_.push_back(property);
 			}
 			return true;
 		}
@@ -849,7 +838,7 @@ namespace OpenMesh {
 							get_color(prop.value, _in, c[3]);
 							break;
 						case CUSTOM_PROP:
-							if (m_bi->file_options().check(OptionBits::Custom) && prop.handle.is_valid()) {
+							if (prop.handle.is_valid()) {
 								get_custom_prop(_in, vh, prop.handle, prop.value, prop.listIndexType);
 							} else {
 								consume_property(_in, prop);
@@ -935,7 +924,7 @@ namespace OpenMesh {
 							get_color(prop.value, _in, c[3]);
 							break;
 						case CUSTOM_PROP:
-							if (m_bi->file_options().check(OptionBits::Custom) && fh.is_valid() && prop.handle.is_valid()) {
+							if (fh.is_valid() && prop.handle.is_valid()) {
 								get_custom_prop(_in, fh, prop.handle, prop.value, prop.listIndexType);
 							} else {
 								consume_property(_in, prop);
