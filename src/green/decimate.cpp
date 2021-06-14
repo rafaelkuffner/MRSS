@@ -131,7 +131,7 @@ namespace {
 
 	public: // inherited
 		virtual void initialize() {
-			std::printf("decimating @%8.2fs : %9d collapses, %5.1f%%", progress->elapsed_time / std::chrono::duration<double>(1.0), collapses, 100.f * collapses / progress->target_collapses);
+			
 		}
 
 		virtual float collapse_priority(const CollapseInfo& _ci) {
@@ -232,6 +232,7 @@ namespace {
 	private:
 
 	};
+
 }
 
 namespace green {
@@ -333,13 +334,13 @@ namespace green {
 			std::cout << "decimating without saliency, bins will be ignored" << std::endl;
 		}
 
+		decimater.initialize();
 		for (int i = 0; i < nbins; i++) {
 			if (progress.should_cancel) {
 				progress.state = decimation_state::cancelled;
 				return false;
 			}
 			std::cout << "decimating bin " << i << std::endl;
-			decimater.initialize();
 			auto &mod = decimater.module(hModWeighting);
 			mod.current_bin = i;
 			int target = init_bin_counts[i] - bin_keep[i];
@@ -347,8 +348,8 @@ namespace green {
 			progress.completed_collapses = mod.collapses;
 			std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%\n", progress.elapsed_time / std::chrono::duration<double>(1.0), progress.completed_collapses, 100.f * progress.completed_collapses / progress.target_collapses);
 			std::cout << "vertices removed: " << collapses << std::endl;
-			mparams.mesh->garbage_collection();
 		}
+		mparams.mesh->garbage_collection();
 
 		const auto fin_bin_counts = saliency_bin_counts(*mparams.mesh, prop_bin, nbins);
 

@@ -71,7 +71,8 @@ namespace green {
 		// NOTE face status currently breaks decimation
 		//m_trimesh.request_face_status();
 		// TODO what else do we need to ask for and preserve on export?
-		OpenMesh::IO::Options readOptions{OpenMesh::IO::OptionBits::Custom | OpenMesh::IO::OptionBits::Fuse};
+		OpenMesh::IO::Options readOptions{OpenMesh::IO::OptionBits::Custom};
+		readOptions.set(OpenMesh::IO::OptionBits::Fuse);
 		readOptions.vattribs |= OpenMesh::AttributeBits::Color;
 		readOptions.hattribs |= OpenMesh::AttributeBits::Normal;
 		readOptions.hattribs |= OpenMesh::AttributeBits::TexCoordAll;
