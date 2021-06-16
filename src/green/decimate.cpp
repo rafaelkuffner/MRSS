@@ -105,55 +105,84 @@ namespace {
 		}
 	}
 
-	template <class MeshT>
-	class ModVertexWeightingT : public Decimater::ModBaseT<MeshT>
-	{
+	template <typename MeshT>
+	class ModProgress : public Decimater::ModBaseT<MeshT> {
 	public:
+		DECIMATING_MODULE(ModProgress, MeshT, Progress);
 
-		// Defines the types Self, Handle, Base, Mesh, and CollapseInfo
-		// and the memberfunction name()
-		DECIMATING_MODULE(ModVertexWeightingT, MeshT, VertexWeighting)
+		ModProgress(MeshT &_mesh) : Base(_mesh, true) {}
 
-	public:
-
-		/** Constructor
-		*  \internal
-		*/
-		ModVertexWeightingT(MeshT& _mesh)
-			: Base(_mesh, true)
-		{
+		virtual float collapse_priority(const CollapseInfo &_ci) override {
+			// cancel => make everything illegal so we terminate quickly
+			if (cancel) return Base::ILLEGAL_COLLAPSE;
+			return Base::LEGAL_COLLAPSE;
 		}
 
-
-		/// Destructor
-		virtual ~ModVertexWeightingT() {}
-
-
-	public: // inherited
-		virtual void initialize() {
-			
+		virtual void postprocess_collapse(const CollapseInfo &_ci) override {
+			collapses++;
+			if (collapses - collapses_last_progress > 5000) update();
 		}
 
-		virtual float collapse_priority(const CollapseInfo& _ci) {
+		void update() {
+			collapses_last_progress = collapses;
+			progress->completed_collapses = collapses;
+			progress->elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
+			if (progress->should_cancel) cancel = true;
+			if (show_progress) {
+				std::printf(
+					"\rdecimating @%8.2fs : %9d collapses, %5.1f%%",
+					progress->elapsed_time / std::chrono::duration<double>(1.0),
+					collapses, 100.f * collapses / progress->target_collapses
+				);
+			}
+		}
+
+	public:
+		decimate_progress *progress = nullptr;
+		int collapses = 0;
+		int collapses_last_progress = 0;
+		std::chrono::steady_clock::time_point time_start;
+		bool cancel = false;
+		bool show_progress = true;
+	};
+
+	template <typename MeshT>
+	class ModSeamPreservation : public Decimater::ModBaseT<MeshT> {
+	public:
+		DECIMATING_MODULE(ModSeamPreservation, MeshT, SeamPreservation);
+
+		ModSeamPreservation(MeshT &_mesh) : Base(_mesh, true) {
+			// seam flags based on differences in halfedge properties
+			// (normal, texcoord2d, texcoord3d)
+			_mesh.add_property(prop_seam);
+			// number of seam edges
+			_mesh.add_property(prop_seamarity);
+			compute_seams(_mesh, prop_seam, prop_seamarity);
+		}
+
+		virtual ~ModSeamPreservation() {
+			this->mesh().remove_property(prop_seam);
+			this->mesh().remove_property(prop_seamarity);
+		}
+
+		virtual void initialize() override {
+
+		}
+
+		virtual float collapse_priority(const CollapseInfo& _ci) override {
 			// note: v0 gets removed
 			auto &mesh = _ci.mesh;
-			if (cancel) return Base::ILLEGAL_COLLAPSE;
 			if (prop_seam.is_valid() && prop_seamarity.is_valid()) {
 				const auto sa0 = mesh.property(prop_seamarity, _ci.v0);
 				const auto sa1 = mesh.property(prop_seamarity, _ci.v1);
-				// dont remove anything with boundarity 1 (terminus)
+				// dont remove anything with seamarity 1 (terminus)
 				if (sa0 == 1) return Base::ILLEGAL_COLLAPSE;
-				// dont remove anything with boundarity > 2 (patch junction)
+				// dont remove anything with seamarity > 2 (patch junction)
 				if (sa0 > 2) return Base::ILLEGAL_COLLAPSE;
-				// dont collapse edge into non-boundary
+				// dont collapse seam edge into non-seam
 				if (sa0 == 2 && sa1 == 0) return Base::ILLEGAL_COLLAPSE;
-				// 2 vertices on boundary edges may be connected by a non-boundary edge
+				// 2 vertices on seam edges may be connected by a non-seam edge
 				if (sa0 > 1 && sa1 > 1 && !mesh.property(prop_seam, mesh.edge_handle(_ci.v0v1))) return Base::ILLEGAL_COLLAPSE;
-			}
-			if (prop_bin.is_valid()) {
-				const auto bin = mesh.property(prop_bin, _ci.v0);
-				// only allow collapse within current bin
-				if (bin != current_bin) return Base::ILLEGAL_COLLAPSE;
 			}
 			return Base::LEGAL_COLLAPSE;
 		}
@@ -163,16 +192,16 @@ namespace {
 		}
 
 		virtual void postprocess_collapse(const CollapseInfo &_ci) override {
-			update_progress();
 			// TODO turn off check when sure of correctness
-			check_boundaries(_ci);
+			check_seams(_ci);
 		}
 
-		void check_boundaries(const CollapseInfo &_ci) {
+	private:
+		void check_seams(const CollapseInfo &_ci) {
 			auto &mesh = _ci.mesh;
 			for (auto it = mesh.cvih_begin(_ci.v1); it.is_valid(); ++it) {
 				if (is_seam(mesh, *it) && !mesh.property(prop_seam, mesh.edge_handle(*it))) {
-					std::cout << "BOUNDARY INCONSISTENCY" << std::endl;
+					std::cout << "SEAM INCONSISTENCY" << std::endl;
 				}
 			}
 		}
@@ -206,31 +235,42 @@ namespace {
 			}
 		}
 
-		void update_progress() {
-			collapses++;
-			if (collapses - collapses_last_progress > 5000) {
-				collapses_last_progress = collapses;
-				progress->completed_collapses = collapses;
-				progress->elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
-				if (progress->should_cancel) cancel = true;
-				if (show_progress) std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%", progress->elapsed_time / std::chrono::duration<double>(1.0), collapses, 100.f * collapses / progress->target_collapses);
-			}
-		}
-
-	public: // local
-		VPropHandleT<int> prop_bin;
+	private:
 		VPropHandleT<uint8_t> prop_seamarity;
 		EPropHandleT<uint8_t> prop_seam;
+	};
+
+	template <typename MeshT>
+	class ModVertexBinning : public Decimater::ModBaseT<MeshT> {
+	public:
+		DECIMATING_MODULE(ModVertexBinning, MeshT, VertexBinning);
+
+		ModVertexBinning(MeshT &_mesh) : Base(_mesh, true) {
+			_mesh.add_property(prop_bin);
+		}
+
+		virtual ~ModVertexBinning() {
+			this->mesh().remove_property(prop_bin);
+		}
+
+		virtual float collapse_priority(const CollapseInfo& _ci) override {
+			// note: v0 gets removed
+			auto &mesh = _ci.mesh;
+			if (use_bins) {
+				const auto bin = mesh.property(prop_bin, _ci.v0);
+				// only allow collapse within current bin
+				if (bin != current_bin) return Base::ILLEGAL_COLLAPSE;
+			}
+			return Base::LEGAL_COLLAPSE;
+		}
+
+	public:
+		// explicit bin tags to deal with cases where there are large numbers
+		// of vertices with the same saliency values preventing bin discrimination
+		// TODO smaller data type?
+		VPropHandleT<int> prop_bin;
 		int current_bin = 0;
-		decimate_progress *progress = nullptr;
-		int collapses = 0;
-		int collapses_last_progress = 0;
-		std::chrono::steady_clock::time_point time_start;
-		bool cancel = false;
-		bool show_progress = true;
-
-	private:
-
+		bool use_bins = false;
 	};
 
 }
@@ -258,24 +298,38 @@ namespace green {
 
 		if (targetverts >= mparams.mesh->n_vertices()) return true;
 
-		// seam flags based on differences in halfedge properties
-		// (normal, texcoord2d, texcoord3d)
-		OpenMesh::EPropHandleT<uint8_t> prop_seam;
-		mparams.mesh->add_property(prop_seam);
-		// number of seam edges
-		OpenMesh::VPropHandleT<uint8_t> prop_seamarity;
-		mparams.mesh->add_property(prop_seamarity);
-		compute_seams(*mparams.mesh, prop_seam, prop_seamarity);
+		OpenMesh::Decimater::DecimaterT<PolyMesh> decimater(*mparams.mesh);
 
-		// explicit bin tags to deal with cases where there are large numbers
-		// of vertices with the same saliency values preventing bin discrimination
-		// TODO ensure this property is removed when eg cancelled
-		// TODO smaller data type?
-		OpenMesh::VPropHandleT<int> prop_bin;
-		mparams.mesh->add_property(prop_bin);
+		// progress reporting module
+		ModProgress<PolyMesh>::Handle hmod_progress;
+		decimater.add(hmod_progress);
+		auto &mod_progress = decimater.module(hmod_progress);
+		mod_progress.progress = &progress;
+		mod_progress.time_start = time_start;
+		mod_progress.show_progress = uparams.show_progress;
+
+		// seam preservation module
+		ModSeamPreservation<PolyMesh>::Handle hmod_seams;
+		decimater.add(hmod_seams);
+
+		// vertex binning module
+		ModVertexBinning<PolyMesh>::Handle hmod_bins;
+		decimater.add(hmod_bins);
+		auto &mod_bins = decimater.module(hmod_bins);
+
+		// quadric error weighting module
+		OpenMesh::Decimater::ModQuadricT<PolyMesh>::Handle hmod_quadric;
+		decimater.add(hmod_quadric);
+		auto &mod_quadric = decimater.module(hmod_quadric);
+		mod_quadric.unset_max_err();
+
+		if (uparams.use_saliency) {
+			mod_bins.use_bins = true;
+		} else {
+			std::cout << "decimating without saliency, bins will be ignored" << std::endl;
+		}
 
 		const int nbins = uparams.nbins;
-
 		const int target_collapses = mparams.mesh->n_vertices() - targetverts;
 		progress.target_collapses = target_collapses;
 		const float target_ratio = float(targetverts) / mparams.mesh->n_vertices();
@@ -301,8 +355,8 @@ namespace green {
 			bin_keep[i] = std::max<int>(targetverts * w, bin_min_keep);
 		}
 
-		const auto sal_bin_edges = saliency_bin_edges(*mparams.mesh, mparams.prop_saliency, prop_bin, nbins);
-		const auto init_bin_counts = saliency_bin_counts(*mparams.mesh, prop_bin, nbins);
+		const auto sal_bin_edges = saliency_bin_edges(*mparams.mesh, mparams.prop_saliency, mod_bins.prop_bin, nbins);
+		const auto init_bin_counts = saliency_bin_counts(*mparams.mesh, mod_bins.prop_bin, nbins);
 
 		for (int i = 0; i < nbins; i++) {
 			int k = bin_keep[i];
@@ -314,26 +368,6 @@ namespace green {
 		}
 
 		progress.state = decimation_state::run;
-		OpenMesh::Decimater::DecimaterT<PolyMesh> decimater(*mparams.mesh);
-
-		OpenMesh::Decimater::ModQuadricT<PolyMesh>::Handle hModQuadrics;
-		decimater.add(hModQuadrics);
-		decimater.module(hModQuadrics).unset_max_err();
-
-		ModVertexWeightingT<PolyMesh>::Handle hModWeighting;
-		decimater.add(hModWeighting);
-		decimater.module(hModWeighting).progress = &progress;
-		decimater.module(hModWeighting).time_start = time_start;
-		decimater.module(hModWeighting).show_progress = uparams.show_progress;
-		decimater.module(hModWeighting).prop_seam = prop_seam;
-		decimater.module(hModWeighting).prop_seamarity = prop_seamarity;
-		
-		if (uparams.use_saliency) {
-			decimater.module(hModWeighting).prop_bin = prop_bin;
-		} else {
-			std::cout << "decimating without saliency, bins will be ignored" << std::endl;
-		}
-
 		decimater.initialize();
 		for (int i = 0; i < nbins; i++) {
 			if (progress.should_cancel) {
@@ -341,21 +375,15 @@ namespace green {
 				return false;
 			}
 			std::cout << "decimating bin " << i << std::endl;
-			auto &mod = decimater.module(hModWeighting);
-			mod.current_bin = i;
+			mod_bins.current_bin = i;
 			int target = init_bin_counts[i] - bin_keep[i];
 			int collapses = decimater.decimate_to(std::max<size_t>(mparams.mesh->n_vertices() - target, targetverts));
-			progress.completed_collapses = mod.collapses;
-			std::printf("\rdecimating @%8.2fs : %9d collapses, %5.1f%%\n", progress.elapsed_time / std::chrono::duration<double>(1.0), progress.completed_collapses, 100.f * progress.completed_collapses / progress.target_collapses);
-			std::cout << "vertices removed: " << collapses << std::endl;
+			mod_progress.update();
+			std::cout << "\nvertices removed: " << collapses << std::endl;
 		}
 		mparams.mesh->garbage_collection();
 
-		const auto fin_bin_counts = saliency_bin_counts(*mparams.mesh, prop_bin, nbins);
-
-		mparams.mesh->remove_property(prop_bin);
-		mparams.mesh->remove_property(prop_seam);
-		mparams.mesh->remove_property(prop_seamarity);
+		const auto fin_bin_counts = saliency_bin_counts(*mparams.mesh, mod_bins.prop_bin, nbins);
 
 		for (int i = 0; i < nbins; i++) {
 			int k = fin_bin_counts[i];
@@ -364,7 +392,6 @@ namespace green {
 		}
 
 		std::cout << "collecting decimation error values" << std::endl;
-		auto &mq = decimater.module(hModQuadrics);
 		auto prop_v_err = mparams.prop_dec_error;
 		// init vertex errors
 		for (auto &e : mparams.mesh->property(prop_v_err).data_vector()) {
@@ -373,7 +400,7 @@ namespace green {
 		// find smallest halfedge error for each vertex
 		for (auto hh : mparams.mesh->halfedges()) {
 			OpenMesh::Decimater::CollapseInfoT<PolyMesh> ci(*mparams.mesh, hh);
-			float h_err = mq.collapse_priority(ci);
+			float h_err = mod_quadric.collapse_priority(ci);
 			float &v_err = mparams.mesh->property(prop_v_err, ci.v0);
 			v_err = std::min(v_err, h_err);
 		}
@@ -387,7 +414,6 @@ namespace green {
 
 		std::cout << "final vertices: " << mparams.mesh->n_vertices() << std::endl;
 		std::cout << "final triangles: " << mparams.mesh->n_faces() << std::endl;
-		progress.completed_collapses = decimater.module(hModWeighting).collapses;
 		progress.elapsed_time = std::chrono::duration_cast<decltype(decimate_progress::elapsed_time)>(std::chrono::steady_clock::now() - time_start);
 		std::cout << "decimate time: " << (progress.elapsed_time / std::chrono::duration<double>(1.0)) << "s" << std::endl;
 		progress.state = progress.should_cancel ? decimation_state::cancelled : decimation_state::done;
