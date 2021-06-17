@@ -726,11 +726,14 @@ namespace green {
 		} else if (cparams.color_mode == model_color_mode::dec_err && m_prop_dec_error.is_valid()) {
 			cmap = model_color_map::zbrush;
 			const auto &err_data = m_mesh.property(m_prop_dec_error).data_vector();
-			float imax_err = 1.f / *std::max_element(err_data.begin(), err_data.end());
+			const float min_err = *std::min_element(err_data.begin(), err_data.end());
+			const float max_err = *std::max_element(err_data.begin(), err_data.end());
+			float irange = 1.f / (max_err - min_err);
 			for (size_t i = 0; i < nverts; i++) {
 				const auto v = OpenMesh::VertexHandle(i);
 				const float err = m_mesh.property(m_prop_dec_error, v);
-				data[i] = glm::vec4(std::pow(err * imax_err, cparams.dec_err_gamma), 0, 0, 0);
+				const float x = (err - min_err) * irange;
+				data[i] = glm::vec4(std::pow(x, cparams.dec_err_gamma), 0, 0, 0);
 			}
 		}
 		glUnmapBuffer(GL_ARRAY_BUFFER);

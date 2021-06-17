@@ -58,22 +58,36 @@ namespace green {
 		// decimation
 		loc[help_cli_opts_decimate] = "Decimation options (Work in Progress):";
 		loc[help_dec_go] = "Perform decimation";
+		loc[help_dec_usebins] = "Use saliency bins instead of weighting";
 		loc[help_dec_usetris] = "Decimate by triangle count (not exact) instead of vertex count (exact)";
 		loc[help_dec_targetverts] = "Target number of vertices (exact)";
 		loc[help_dec_targettris] = "Target number of triangles (not exact)";
-		loc[help_dec_weight] = "Saliency weighting; 0 (even) .. 1 (most weight to highest saliency)";
-		loc[help_dec_power] = "Non-linearity of saliency weighting; 1 (linear) .. 2 (more extreme)";
+		loc[help_dec_weight] = "Saliency weighting (error multiplier):\n"
+			"-  k : vertices with sal=1 will have 1/k error compared to those with sal=0\n"
+			"-  1 : even weighting, saliency has no impact\n"
+			"- <1 : more salient => more error\n"
+			"- >1 : more salient => less error\n"
+			"-  X : default [TODO]"; // TODO default value
+		loc[help_dec_binweight] = "Saliency bin weighting; 0 (even) .. 1 (most weight to highest saliency)";
+		loc[help_dec_power] = "Non-linearity of saliency weighting:\n"
+			"- <1 : mid-range saliency preserved more\n"
+			"-  1 : linear\n"
+			"- >1 : mid-range saliency preserved less\n"
+			"-  X : default [TODO]"; // TODO default value
 		loc[help_dec_bins] = "Number of saliency bins";
 		loc[help_dec_decprop] = "Saliency property to use for decimation if not calculating saliency.\n"
 			"Default is @0, the first property.";
 		loc[help_dec_usesaliency] = "Use saliency for decimation";
 		loc[help_dec_nosaliency] = "Don't use saliency for decimation";
 		loc[param_dec_usesaliency] = "Use Saliency";
+		loc[param_dec_usebins] = "Use Bins";
 		loc[param_dec_usetris] = "Use Triangles";
 		loc[param_dec_targetverts] = "Vertices";
 		loc[param_dec_targettris] = "Triangles";
-		loc[param_dec_weight] = "Weight";
-		loc[param_dec_power] = "Power";
+		loc[param_dec_weight] = "Sal Weight";
+		loc[param_dec_binweight] = "Bin Weight";
+		loc[param_dec_power] = "Sal Power";
+		loc[param_dec_binpower] = "Bin Power";
 		loc[param_dec_bins] = "Bins";
 		// curvature
 		loc[curv_don] = "DoN curvature";

@@ -30,8 +30,11 @@ namespace green {
 		int targetverts = 10000;
 		int targettris = 10000;
 		int nbins = 5;
-		float weight = 1.f;
-		float power = 1.f;
+		float bin_weight = 1.f;
+		float sal_weight = 10.f;
+		float bin_power = 1.f;
+		float sal_power = 3.f;
+		bool use_bins = false;
 		bool use_tris = false;
 		bool use_saliency = true;
 		bool show_progress = true;
@@ -45,7 +48,13 @@ namespace green {
 			} else {
 				p += snprintf(p, end - p, "v=%d", targetverts);
 			}
-			if (use_saliency) p += snprintf(p, end - p, ",b=%d,w=%.2f,p=%.2f", nbins, weight, power);
+			if (use_saliency) {
+				if (use_bins) {
+					p += snprintf(p, end - p, ",b=%d,w=%.2f,p=%.2f", nbins, bin_weight, bin_power);
+				} else {
+					p += snprintf(p, end - p, ",w=%.2f,p=%.2f", sal_weight, sal_power);
+				}
+			}
 			return {buf};
 		}
 
@@ -64,7 +73,7 @@ namespace green {
 	};
 
 	enum class decimation_state {
-		idle, bins, run, done, cancelled
+		idle, init, run, done, cancelled
 	};
 
 	struct decimate_progress {

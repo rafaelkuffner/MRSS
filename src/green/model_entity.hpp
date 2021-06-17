@@ -52,7 +52,7 @@ namespace green {
 		model_color_mode m_disp_color_mode = model_color_mode::saliency;
 		model_color_map m_disp_color_map = model_color_map::uniform;
 		float m_saliency_error_scale = 1;
-		float m_dec_err_gamma = 0.2f;
+		float m_dec_err_gamma = 0.35f;
 		int m_vert_point_size = 3;
 		bool m_color_faces = true;
 		bool m_color_verts = false;

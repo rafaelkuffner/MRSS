@@ -169,7 +169,7 @@ namespace {
 
 		}
 
-		virtual float collapse_priority(const CollapseInfo& _ci) override {
+		virtual float collapse_priority(const CollapseInfo &_ci) override {
 			// note: v0 gets removed
 			auto &mesh = _ci.mesh;
 			if (prop_seam.is_valid() && prop_seamarity.is_valid()) {
@@ -253,7 +253,7 @@ namespace {
 			this->mesh().remove_property(prop_bin);
 		}
 
-		virtual float collapse_priority(const CollapseInfo& _ci) override {
+		virtual float collapse_priority(const CollapseInfo &_ci) override {
 			// note: v0 gets removed
 			auto &mesh = _ci.mesh;
 			if (use_bins) {
@@ -271,6 +271,38 @@ namespace {
 		VPropHandleT<int> prop_bin;
 		int current_bin = 0;
 		bool use_bins = false;
+	};
+
+	template <typename MeshT>
+	class ModSaliencyQuadric : public Decimater::ModQuadricT<MeshT> {
+	public:
+		DECIMATING_MODULE(ModSaliencyQuadric, MeshT, SaliencyQuadric);
+		using ModQuadric = Decimater::ModQuadricT<MeshT>;
+
+		ModSaliencyQuadric(MeshT &_mesh) : ModQuadric(_mesh) {}
+
+		virtual float collapse_priority(const CollapseInfo &_ci) override {
+			// note: v0 gets removed
+			// quadric eval returns _squared_ error
+			float err = ModQuadric::collapse_priority(_ci);
+			if (prop_saliency.is_valid()) {
+				float k = error_factor(_ci.mesh.property(prop_saliency, _ci.v0));
+				// ... so we need to square this too
+				err *= k * k;
+				//std::cout << k << std::endl;
+			}
+			return err;
+		}
+
+	private:
+		float error_factor(float s) const {
+			return std::pow(std::max(s, 0.f), power) * (weight - 1) + 1;
+		}
+
+	public:
+		sal_prop_t prop_saliency;
+		float weight = 2;
+		float power = 1;
 	};
 
 	class Decimation {
@@ -314,14 +346,23 @@ namespace {
 		bool run() {
 			if (m_uparams.targetverts >= m_mparams.mesh->n_vertices()) return true;
 
+			m_progress.state = decimation_state::init;
+
 			m_target_collapses = m_mparams.mesh->n_vertices() - m_uparams.targetverts;
 			m_progress.target_collapses = m_target_collapses;
 			const float target_ratio = float(m_uparams.targetverts) / m_mparams.mesh->n_vertices();
 			std::cout << "total vertices to remove: " << m_target_collapses << "; " << (1.f - target_ratio) << std::endl;
 
-			if (!run_binned()) {
-				m_progress.state = decimation_state::cancelled;
-				return false;
+			if (m_uparams.use_bins) {
+				if (!run_binned()) {
+					m_progress.state = decimation_state::cancelled;
+					return false;
+				}
+			} else {
+				if (!run_weighted()) {
+					m_progress.state = decimation_state::cancelled;
+					return false;
+				}
 			}
 
 			std::cout << "final vertices: " << m_mparams.mesh->n_vertices() << std::endl;
@@ -334,6 +375,38 @@ namespace {
 		}
 
 	private:
+		bool run_weighted() {
+			auto &mod_progress = m_decimater.module(m_hmod_progress);
+
+			ModSaliencyQuadric<PolyMesh>::Handle hmod_squadric;
+			m_decimater.add(hmod_squadric);
+			auto &mod_squadric = m_decimater.module(hmod_squadric);
+			mod_squadric.unset_max_err();
+			mod_squadric.weight = m_uparams.sal_weight;
+			mod_squadric.power = m_uparams.sal_power;
+
+			if (m_uparams.use_saliency && m_mparams.prop_saliency.is_valid()) {
+				std::cout << "decimating using saliency weighting" << std::endl;
+				mod_squadric.prop_saliency = m_mparams.prop_saliency;
+			} else {
+				std::cout << "decimating without saliency, weighting will be ignored" << std::endl;
+			}
+
+			m_decimater.initialize();
+			m_progress.state = decimation_state::run;
+			if (m_progress.should_cancel) return false;
+			int collapses = m_decimater.decimate_to(m_uparams.targetverts);
+			mod_progress.update();
+			std::cout << "\nvertices removed: " << collapses << std::endl;
+			m_mparams.mesh->garbage_collection();
+
+			// disable saliency so we can collect the real errors
+			mod_squadric.prop_saliency.invalidate();
+			collect_errors(mod_squadric);
+
+			return true;
+		}
+
 		bool run_binned() {
 			auto &mod_progress = m_decimater.module(m_hmod_progress);
 
@@ -348,9 +421,8 @@ namespace {
 			auto &mod_quadric = m_decimater.module(hmod_quadric);
 			mod_quadric.unset_max_err();
 
-			m_progress.state = decimation_state::bins;
-
 			if (m_uparams.use_saliency) {
+				std::cout << "decimating using saliency bins" << std::endl;
 				mod_bins.use_bins = true;
 			} else {
 				std::cout << "decimating without saliency, bins will be ignored" << std::endl;
@@ -366,9 +438,9 @@ namespace {
 				// bin weight params: higher bin weight => more vertices _kept_ in that bin
 				// (saliency) weight: 0 (even weights across bins) .. 1 (least weight to low bin, most weight to high bin)
 				// power: non-linearity of weighting; 1 (linear) .. 2 (quadratic, more extreme)
-				const float d = m_uparams.weight;
+				const float d = m_uparams.bin_weight;
 				const float x = (i + 0.5f) / float(nbins);
-				const float w = std::max(std::pow(x, m_uparams.power) * d + (1.f - d) * 0.5f, 0.f);
+				const float w = std::max(std::pow(x, m_uparams.bin_power) * d + (1.f - d) * 0.5f, 0.f);
 				bin_weights[i] = w;
 				bin_weight_divisor += w;
 			}
@@ -389,8 +461,8 @@ namespace {
 				}
 			}
 
-			m_progress.state = decimation_state::run;
 			m_decimater.initialize();
+			m_progress.state = decimation_state::run;
 			for (int i = 0; i < nbins; i++) {
 				if (m_progress.should_cancel) return false;
 				std::cout << "decimating bin " << i << std::endl;
@@ -421,23 +493,31 @@ namespace {
 			if (!m_mparams.prop_dec_error.is_valid()) return;
 			std::cout << "collecting decimation error values" << std::endl;
 			auto prop_v_err = m_mparams.prop_dec_error;
+			auto &err_vec = m_mparams.mesh->property(prop_v_err).data_vector();
 			// init vertex errors
-			for (auto &e : m_mparams.mesh->property(prop_v_err).data_vector()) {
+			for (auto &e : err_vec) {
 				e = FLT_MAX;
 			}
 			// find smallest halfedge error for each vertex
+			// note: _squared_ error at this point
 			for (auto hh : m_mparams.mesh->halfedges()) {
 				OpenMesh::Decimater::CollapseInfoT<PolyMesh> ci(*m_mparams.mesh, hh);
 				float h_err = mod_quadric.collapse_priority(ci);
 				float &v_err = m_mparams.mesh->property(prop_v_err, ci.v0);
 				v_err = std::min(v_err, h_err);
 			}
+			// get max collapsible error
+			float max_err = 0;
+			for (auto &e : err_vec) {
+				if (e < FLT_MAX) max_err = std::max(max_err, e);
+			}
+			// now switch to abs error
+			max_err = std::sqrt(max_err);
 			// deal with non-collapsibles
-			for (auto &e : m_mparams.mesh->property(prop_v_err).data_vector()) {
-				if (!(e < FLT_MAX)) {
-					// hackish?
-					e = 0;
-				}
+			std::cout << "max error: " << max_err << std::endl;
+			for (auto &e : err_vec) {
+				// clamp non-collapsibles to max collapsible error
+				e = std::min(std::sqrt(e), max_err);
 			}
 		}
 	};
@@ -450,8 +530,10 @@ namespace green {
 		targetverts = std::max(targetverts, 0);
 		targettris = std::max(targettris, 0);
 		nbins = std::max(nbins, 1);
-		weight = std::max(weight, 0.f);
-		power = std::clamp(power, 0.1f, 10.f);
+		bin_weight = std::clamp(bin_weight, 0.f, 1.f);
+		sal_weight = std::max(sal_weight, 0.f);
+		bin_power = std::clamp(bin_power, 0.1f, 10.f);
+		sal_power = std::clamp(sal_power, 0.01f, 50.f);
 	}
 
 	bool decimate(const decimate_mesh_params &mparams, const decimate_user_params &uparams, decimate_progress &progress) {

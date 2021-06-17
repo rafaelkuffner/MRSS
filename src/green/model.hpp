@@ -70,7 +70,7 @@ namespace green {
 		model_color_mode color_mode = model_color_mode::none;
 		float error_scale = 1;
 		float sal_gamma = 1;
-		float dec_err_gamma = 0.2f;
+		float dec_err_gamma = 1;
 	};
 
 	struct model_save_params : model_color_params {

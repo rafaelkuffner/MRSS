@@ -1101,14 +1101,20 @@ namespace {
 				.doc(loc[help_dec_targetverts].clone()),
 			(option("--targettris") & integer("tris", dec_uparams.targettris).set(dec_uparams.use_tris))
 				.doc(loc[help_dec_targettris].clone()),
-			(option("-w", "--salweight") & number("weight", dec_uparams.weight))
+			(option("-w", "--decweight") & number("weight", dec_uparams.sal_weight))
 				.doc(loc[help_dec_weight].clone()),
-			(option("-p", "--binpower") & number("power", dec_uparams.power))
+			(option("-p", "--decpower") & number("power", dec_uparams.sal_power))
 				.doc(loc[help_dec_power].clone()),
+			(option("--decbinweight") & number("weight", dec_uparams.bin_weight))
+				.doc(loc[help_dec_binweight].clone()),
+			(option("--decbinpower") & number("power", dec_uparams.bin_power))
+				.doc(loc[help_dec_power].clone()), // TODO distinct help
 			(option("--decbins") & integer("bins", dec_uparams.nbins))
 				.doc(loc[help_dec_bins].clone()),
 			(option("--decprop") & value("propname", decprop))
 				.doc(loc[help_dec_decprop].clone()),
+			option("--decimate-usebins").call([&]{ dec_uparams.use_bins = true; })
+				.doc(loc[help_dec_usebins].clone()),
 			option("--decimate-nosaliency").call([&]{ dec_uparams.use_saliency = false; })
 				.doc(loc[help_dec_nosaliency].clone())
 		}.doc(loc[help_cli_opts_decimate].clone());
@@ -1420,8 +1426,8 @@ namespace green {
 		switch (s) {
 		case decimation_state::idle:
 			return "Idle";
-		case decimation_state::bins:
-			return "Initializing decimation bins";
+		case decimation_state::init:
+			return "Initializing";
 		case decimation_state::run:
 			return "Running";
 		case decimation_state::done:
@@ -1548,9 +1554,15 @@ namespace ImGui {
 		} else {
 			widgets.inputint(param_dec_targetverts, help_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
 		}
-		widgets.slider(param_dec_bins, help_dec_bins, &decimate_user_params::nbins, 1, 10);
-		widgets.slider(param_dec_weight, help_dec_weight, &decimate_user_params::weight, 0.f, 1.f);
-		widgets.slider(param_dec_power, help_dec_power, &decimate_user_params::power, 0.f, 2.f);
+		widgets.checkbox(param_dec_usebins, help_dec_usebins, &decimate_user_params::use_bins);
+		if (uparams.use_bins) {
+			widgets.slider(param_dec_bins, help_dec_bins, &decimate_user_params::nbins, 1, 10);
+			widgets.slider(param_dec_binweight, help_dec_binweight, &decimate_user_params::bin_weight, 0.f, 1.f);
+			widgets.slider(param_dec_power, help_dec_power, &decimate_user_params::bin_power, 0.f, 2.f);
+		} else {
+			widgets.slider(param_dec_weight, help_dec_weight, &decimate_user_params::sal_weight, 0.f, 100.f, "%.3f", 2.f);
+			widgets.slider(param_dec_power, help_dec_power, &decimate_user_params::sal_power, 0.f, 10.f, "%.3f", 2.f);
+		}
 		// ensure params are valid
 		uparams.sanitize();
 		// TODO return true if modified?
