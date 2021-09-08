@@ -1094,6 +1094,7 @@ namespace {
 				.doc(loc[help_sal_curv].clone())
 		}.doc(loc[help_cli_opts_saliency].clone());
 
+		// TODO opts for seams/folds/ratio
 		auto dec_opts = group{
 			option("--decimate").set(do_dec)
 				.doc(loc[help_dec_go].clone()),
@@ -1562,6 +1563,13 @@ namespace ImGui {
 		} else {
 			widgets.slider(param_dec_weight, help_dec_weight, &decimate_user_params::sal_weight, 0.f, 100.f, "%.3f", 2.f);
 			widgets.slider(param_dec_power, help_dec_power, &decimate_user_params::sal_power, 0.f, 10.f, "%.3f", 2.f);
+		}
+		// TODO help text
+		widgets.checkbox(param_dec_seams, nullstr, &decimate_user_params::preserve_seams);
+		widgets.checkbox(param_dec_folds, nullstr, &decimate_user_params::prevent_folds);
+		widgets.checkbox(param_dec_limit_aspect, nullstr, &decimate_user_params::limit_aspect);
+		if (uparams.limit_aspect) {
+			widgets.slider(param_dec_max_aspect, nullstr, &decimate_user_params::max_aspect, 1.f, 20.f, "%.3f", 2.f);
 		}
 		// ensure params are valid
 		uparams.sanitize();

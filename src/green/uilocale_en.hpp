@@ -89,6 +89,10 @@ namespace green {
 		loc[param_dec_power] = "Sal Power";
 		loc[param_dec_binpower] = "Bin Power";
 		loc[param_dec_bins] = "Bins";
+		loc[param_dec_seams] = "Preserve Seams";
+		loc[param_dec_folds] = "Prevent Folds";
+		loc[param_dec_limit_aspect] = "Limit Aspect Ratio";
+		loc[param_dec_max_aspect] = "Max Aspect";
 		// curvature
 		loc[curv_don] = "DoN curvature";
 		loc[curv_mean] = "Mean curvature";

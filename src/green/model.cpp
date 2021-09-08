@@ -363,6 +363,7 @@ namespace green {
 	}
 
 	Model Model::prepare_decimate(saliency_prop_t prop_saliency, const std::vector<model_saliency_data> &sdv) const {
+		std::cout << "Preparing to decimate model" << std::endl;
 		Model m;
 		m.m_bound_min = m_bound_min;
 		m.m_bound_max = m_bound_max;
@@ -370,6 +371,11 @@ namespace green {
 		// FIXME if source has face status etc, those props are broken in the copy! (openmesh bug)
 		if (m_mesh.has_face_status()) std::abort();
 		m.m_mesh.assign(m_mesh, true);
+		if (!m.m_mesh.has_face_normals()) {
+			std::cout << "Computing face normals" << std::endl;
+			m.m_mesh.request_face_normals();
+			m.m_mesh.update_face_normals();
+		}
 		// create decimation error property
 		m.m_mesh.add_property(m.m_prop_dec_error);
 		// copy original vertex colors if present
@@ -413,9 +419,7 @@ namespace green {
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
-		m_mesh.request_face_normals();
 		m_mesh.request_vertex_normals();
-		m_mesh.update_face_normals();
 		m_mesh.update_vertex_normals();
 		// recompute vertex areas and edge length
 		std::cout << "Computing vertex areas" << std::endl;

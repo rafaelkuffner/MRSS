@@ -77,6 +77,10 @@ namespace green {
 			param_dec_power,
 			param_dec_binpower,
 			param_dec_bins,
+			param_dec_seams,
+			param_dec_folds,
+			param_dec_limit_aspect,
+			param_dec_max_aspect,
 			// curvature
 			curv_don,
 			curv_mean,

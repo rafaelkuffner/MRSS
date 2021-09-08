@@ -14,6 +14,7 @@
 
 #include "OpenMesh/Tools/Decimater/DecimaterT.hh"
 #include "OpenMesh/Tools/Decimater/ModQuadricT.hh"
+#include "OpenMesh/Tools/Decimater/ModAspectRatioT.hh"
 #include <OpenMesh/Tools/Decimater/ModBaseT.hh>
 
 #include "decimate.hpp"
@@ -103,6 +104,35 @@ namespace {
 			}
 			mesh.property(prop_seamarity, vh) = uint8_t(std::min<int>(255, boundarity));
 		}
+	}
+
+	// lifted from openmesh ModAspectRatio
+	template <typename PointT>
+	float aspect_ratio(const PointT& _v0, const PointT& _v1, const PointT& _v2) {
+		auto d0 = _v0 - _v1;
+		auto d1 = _v1 - _v2;
+
+		// finds the max squared edge length
+		float l2, maxl2 = d0.sqrnorm();
+		if ((l2 = d1.sqrnorm()) > maxl2)
+			maxl2 = l2;
+		// keep searching for the max squared edge length
+		d1 = _v2 - _v0;
+		if ((l2 = d1.sqrnorm()) > maxl2)
+			maxl2 = l2;
+
+		// squared area of the parallelogram spanned by d0 and d1
+		float a2 = (d0 % d1).sqrnorm();
+
+		// the area of the triangle would be
+		// sqrt(a2)/2 or length * height / 2
+		// aspect ratio = length / height
+		//              = length * length / (2*area)
+		//              = length * length / sqrt(a2)
+
+		// returns the length of the longest edge
+		//         divided by its corresponding height
+		return maxl2 / sqrt(a2);
 	}
 
 	template <typename MeshT>
@@ -240,6 +270,82 @@ namespace {
 		EPropHandleT<uint8_t> prop_seam;
 	};
 
+	// this module is very similar atm to openmesh's ModNormalFlipping (but better implemented maybe)
+	template <typename MeshT>
+	class ModFoldPrevention : public Decimater::ModBaseT<MeshT> {
+	public:
+		DECIMATING_MODULE(ModFoldPrevention, MeshT, FoldPrevention);
+
+		ModFoldPrevention(MeshT &_mesh) : Base(_mesh, true) {
+			
+		}
+
+		virtual float collapse_priority(const CollapseInfo &_ci) override {
+			// note: v0 gets removed
+			auto &mesh = _ci.mesh;
+			// inspect all faces connected to v0
+			for (auto it = mesh.cvih_iter(_ci.v0); it.is_valid(); ++it) {
+				const auto f = mesh.face_handle(*it);
+				// ... except those sharing edge v0-v1
+				if (!f.is_valid() || f == _ci.fl || f == _ci.fr) continue;
+				// get the other 2 points of our assumed triangle
+				const auto hp = mesh.prev_halfedge_handle(*it);
+				const auto hn = mesh.next_halfedge_handle(*it);
+				const auto pp = mesh.point(mesh.to_vertex_handle(hp));
+				const auto pn = mesh.point(mesh.to_vertex_handle(hn));
+				// calc current face normal
+				const auto n0 = mesh.calc_face_normal(pp, _ci.p0, pn);
+				// see what happens to the normal if v0 collapsed into v1
+				const auto n1 = mesh.calc_face_normal(pp, _ci.p1, pn);
+				if (dot(n0, n1) < 0.1f) {
+					// face would have (nearly) 'flipped' normal
+					// while the threshold can be made more strict, this doesnt seem to improve the result
+					return Base::ILLEGAL_COLLAPSE;
+				}
+			}
+			return Base::LEGAL_COLLAPSE;
+		}
+	};
+
+	// this module is similar to openmesh's ModAspectRatio.
+	// here, collapse is only prevented if a currently good triangle would turn bad.
+	template <typename MeshT>
+	class ModAspectRatio : public Decimater::ModBaseT<MeshT> {
+	public:
+		DECIMATING_MODULE(ModAspectRatio, MeshT, AspectRatio);
+
+		ModAspectRatio(MeshT &_mesh) : Base(_mesh, true) {
+			
+		}
+
+		virtual float collapse_priority(const CollapseInfo &_ci) override {
+			// note: v0 gets removed
+			auto &mesh = _ci.mesh;
+			// inspect all faces connected to v0
+			for (auto it = mesh.cvih_iter(_ci.v0); it.is_valid(); ++it) {
+				const auto f = mesh.face_handle(*it);
+				// ... except those sharing edge v0-v1
+				if (!f.is_valid() || f == _ci.fl || f == _ci.fr) continue;
+				// get the other 2 points of our assumed triangle
+				const auto hp = mesh.prev_halfedge_handle(*it);
+				const auto hn = mesh.next_halfedge_handle(*it);
+				const auto pp = mesh.point(mesh.to_vertex_handle(hp));
+				const auto pn = mesh.point(mesh.to_vertex_handle(hn));
+				// calc current aspect ratio
+				const float r0 = aspect_ratio(pp, _ci.p0, pn);
+				// see what happens to the aspect ratio if v0 collapsed into v1
+				const float r1 = aspect_ratio(pp, _ci.p1, pn);
+				if (r0 <= max_aspect && r1 > max_aspect) {
+					// when good triangles turn bad
+					return Base::ILLEGAL_COLLAPSE;
+				}
+			}
+			return Base::LEGAL_COLLAPSE;
+		}
+
+		float max_aspect = 5;
+	};
+
 	template <typename MeshT>
 	class ModVertexBinning : public Decimater::ModBaseT<MeshT> {
 	public:
@@ -312,7 +418,9 @@ namespace {
 		decimate_progress &m_progress;
 		OpenMesh::Decimater::DecimaterT<PolyMesh> m_decimater;
 		ModProgress<PolyMesh>::Handle m_hmod_progress;
+		ModAspectRatio<PolyMesh>::Handle m_hmod_aspect;
 		ModSeamPreservation<PolyMesh>::Handle m_hmod_seams;
+		ModFoldPrevention<PolyMesh>::Handle m_hmod_folds;
 		std::chrono::steady_clock::time_point m_time_start = std::chrono::steady_clock::now();
 		int m_target_collapses = 0;
 
@@ -324,6 +432,7 @@ namespace {
 			m_decimater(*mparams.mesh)
 		{
 			// progress reporting module
+			// TODO use the 'observer' thing instead
 			m_decimater.add(m_hmod_progress);
 			auto &mod_progress = m_decimater.module(m_hmod_progress);
 			mod_progress.progress = &progress;
@@ -331,7 +440,24 @@ namespace {
 			mod_progress.show_progress = uparams.show_progress;
 
 			// seam preservation module
-			m_decimater.add(m_hmod_seams);
+			if (uparams.preserve_seams) {
+				std::cout << "decimating with seam preservation" << std::endl;
+				m_decimater.add(m_hmod_seams);
+			}
+
+			// fold prevention module
+			// TODO this fails to decimate some areas on buddha, needs further investigation (possibly just bad topo to start with)
+			if (uparams.prevent_folds) {
+				std::cout << "decimating with fold prevention" << std::endl;
+				m_decimater.add(m_hmod_folds);
+			}
+
+			// aspect ratio limit module
+			if (uparams.limit_aspect) {
+				std::cout << "decimating with max aspect ratio " << uparams.max_aspect << std::endl;
+				m_decimater.add(m_hmod_aspect);
+				m_decimater.module(m_hmod_aspect).max_aspect = uparams.max_aspect;
+			}
 
 			if (uparams.use_tris) {
 				// NOTE needs triangulated mesh to work
@@ -534,6 +660,7 @@ namespace green {
 		sal_weight = std::max(sal_weight, 0.f);
 		bin_power = std::clamp(bin_power, 0.1f, 10.f);
 		sal_power = std::clamp(sal_power, 0.01f, 50.f);
+		max_aspect = std::clamp(max_aspect, 1.f, 1000.f);
 	}
 
 	bool decimate(const decimate_mesh_params &mparams, const decimate_user_params &uparams, decimate_progress &progress) {

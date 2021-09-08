@@ -34,9 +34,13 @@ namespace green {
 		float sal_weight = 10.f;
 		float bin_power = 1.f;
 		float sal_power = 3.f;
+		float max_aspect = 5.f;
 		bool use_bins = false;
 		bool use_tris = false;
 		bool use_saliency = true;
+		bool limit_aspect = true;
+		bool preserve_seams = true;
+		bool prevent_folds = true;
 		bool show_progress = true;
 
 		std::string str() const {
@@ -55,6 +59,7 @@ namespace green {
 					p += snprintf(p, end - p, ",w=%.2f,p=%.2f", sal_weight, sal_power);
 				}
 			}
+			// TODO update with aspect, seams, folds etc
 			return {buf};
 		}
 
