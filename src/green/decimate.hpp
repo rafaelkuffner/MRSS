@@ -31,9 +31,9 @@ namespace green {
 		int targettris = 10000;
 		int nbins = 5;
 		float bin_weight = 1.f;
-		float sal_weight = 10.f;
+		float sal_weight = 20.f;
 		float bin_power = 1.f;
-		float sal_power = 3.f;
+		float sal_power = 2.f;
 		float max_aspect = 5.f;
 		bool use_bins = false;
 		bool use_tris = false;
