@@ -1106,16 +1106,16 @@ namespace {
 				.doc(loc[help_dec_weight].clone()),
 			(option("-p", "--decpower") & number("power", dec_uparams.sal_power))
 				.doc(loc[help_dec_power].clone()),
-			(option("--decbinweight") & number("weight", dec_uparams.bin_weight))
-				.doc(loc[help_dec_binweight].clone()),
-			(option("--decbinpower") & number("power", dec_uparams.bin_power))
-				.doc(loc[help_dec_power].clone()), // TODO distinct help
-			(option("--decbins") & integer("bins", dec_uparams.nbins))
-				.doc(loc[help_dec_bins].clone()),
+			//(option("--decbinweight") & number("weight", dec_uparams.bin_weight))
+			//	.doc(loc[help_dec_binweight].clone()),
+			//(option("--decbinpower") & number("power", dec_uparams.bin_power))
+			//	.doc(loc[help_dec_power].clone()), // TODO distinct help
+			//(option("--decbins") & integer("bins", dec_uparams.nbins))
+			//	.doc(loc[help_dec_bins].clone()),
 			(option("--decprop") & value("propname", decprop))
 				.doc(loc[help_dec_decprop].clone()),
-			option("--decimate-usebins").call([&]{ dec_uparams.use_bins = true; })
-				.doc(loc[help_dec_usebins].clone()),
+			//option("--decimate-usebins").call([&]{ dec_uparams.use_bins = true; })
+			//	.doc(loc[help_dec_usebins].clone()),
 			option("--decimate-nosaliency").call([&]{ dec_uparams.use_saliency = false; })
 				.doc(loc[help_dec_nosaliency].clone())
 		}.doc(loc[help_cli_opts_decimate].clone());
@@ -1555,7 +1555,7 @@ namespace ImGui {
 		} else {
 			widgets.inputint(param_dec_targetverts, help_dec_targetverts, &decimate_user_params::targetverts, 100, 1000);
 		}
-		widgets.checkbox(param_dec_usebins, help_dec_usebins, &decimate_user_params::use_bins);
+		//widgets.checkbox(param_dec_usebins, help_dec_usebins, &decimate_user_params::use_bins);
 		if (uparams.use_bins) {
 			widgets.slider(param_dec_bins, help_dec_bins, &decimate_user_params::nbins, 1, 10);
 			widgets.slider(param_dec_binweight, help_dec_binweight, &decimate_user_params::bin_weight, 0.f, 1.f);
