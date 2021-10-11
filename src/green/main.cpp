@@ -35,6 +35,21 @@
 #include "about_licences.txt.hpp"
 
 #ifdef _WIN32
+#include "resource.h"
+// prevent glfw pulling in windows.h and workaround the requirements
+#define _WINDOWS_
+using HANDLE = void *;
+using HWND = void *;
+using WPARAM = unsigned *;
+using LPARAM = long *;
+using LRESULT = long *;
+#define MAKEINTRESOURCEA(i) ((char *)((unsigned long *)((unsigned short)(i))))
+#undef GLFW_APIENTRY_DEFINED
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
+
+#ifdef _WIN32
 // TODO why am i having to do this now? (vs 16.7)
 #pragma comment(lib, "winmm.lib")
 extern "C" {
@@ -71,6 +86,7 @@ namespace {
 	void focus_callback(GLFWwindow *win, int focused);
 	void APIENTRY gl_debug_callback(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar *, const GLvoid *);
 	void set_ui_thread_priority();
+	void init_icon(GLFWwindow *);
 	void init_console();
 	void init_fonts(ImGuiIO &io, ImFontConfig &fc);
 	void load_model(const std::filesystem::path &p);
@@ -840,6 +856,7 @@ namespace {
 			abort();
 		}
 
+		init_icon(window);
 		center_window(window, glfwGetPrimaryMonitor());
 
 		glfwMakeContextCurrent(window);
@@ -1680,11 +1697,29 @@ namespace {
 		__declspec(dllimport) int __stdcall SetThreadPriority(void *hThread, int nPriority);
 		__declspec(dllimport) bool __stdcall SetConsoleOutputCP(unsigned int wCodePageID);
 		__declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned CodePage, int dwFlags, const wchar_t *lpWideCharStr, int cchWideChar, char *lpMultiByteStr, int cbMultiByte, const char *lpDefaultChar, bool *lpUsedDefaultChar);
+		__declspec(dllimport) HANDLE __stdcall GetModuleHandleA(const char *lpModuleName);
+		__declspec(dllimport) HANDLE __stdcall LoadIconA(HANDLE hInst, const char *name);
+		__declspec(dllimport) LRESULT __stdcall SendMessageA(HWND hWnd, unsigned Msg, WPARAM wParam, LPARAM lParam);
 	}
 
 	void set_ui_thread_priority() {
 		constexpr int THREAD_PRIORITY_ABOVE_NORMAL = 1;
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+	}
+
+	void init_icon(GLFWwindow *win) {
+		const HWND hw = glfwGetWin32Window(win);
+		if (!hw) return;
+		HANDLE hico = LoadIconA(GetModuleHandleA(nullptr), MAKEINTRESOURCEA(IDI_ICON1));
+		if (!hico) {
+			std::cerr << "failed to load icon" << std::endl;
+			return;
+		}
+		constexpr int WM_SETICON = 0x0080;
+		constexpr int ICON_SMALL = 0;
+		constexpr int ICON_BIG = 1;
+		SendMessageA(hw, WM_SETICON, (WPARAM) ICON_SMALL, (LPARAM) hico);
+		SendMessageA(hw, WM_SETICON, (WPARAM) ICON_BIG, (LPARAM) hico);
 	}
 
 	void init_console() {
@@ -1712,6 +1747,10 @@ namespace {
 
 #else
 	void set_ui_thread_priority() {
+
+	}
+
+	void init_icon(GLFWwindow *) {
 
 	}
 

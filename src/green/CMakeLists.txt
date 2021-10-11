@@ -51,6 +51,13 @@ set(sources
 
 cgu_create_missing(${sources})
 
+if(WIN32)
+	list(APPEND sources
+		green.rc
+		green.ico
+	)
+endif()
+
 add_executable(green ${sources})
 target_compile_features(green PUBLIC cxx_std_17)
 target_link_libraries(green PRIVATE cgu fmt assimp OpenMeshCore OpenMeshTools)
