@@ -1537,7 +1537,7 @@ namespace ImGui {
 			if (Button("Cancel")) progress.should_cancel = true;
 			SameLine();
 		}
-		FmtText("", progress.elapsed_time / std::chrono::duration<double>(1.0));
+		FmtText("{:.3f}s", progress.elapsed_time / std::chrono::duration<double>(1.0));
 		TextUnformatted(decimation_state_str(progress.state));
 	}
 
