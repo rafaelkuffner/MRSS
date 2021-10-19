@@ -47,12 +47,49 @@ namespace {
 		return false;
 	}
 	
+	struct saliency_preset {
+		std::string name;
+		saliency_user_params uparams;
+	};
+
+	constexpr static int sal_preset_default = 0;
+	constexpr static int sal_preset_custom = 1;
+	// TODO
+	constexpr static int sal_preset_globality = -1;
+
+	auto & saliency_presets() {
+		// TODO localized names?
+		static std::vector<saliency_preset> v{
+			{"Default"},
+			{"Custom"}
+		};
+		return v;
+	}
+
+	bool combo_saliency_preset(int &i) {
+		using namespace ImGui;
+		const auto &presets = saliency_presets();
+		if (presets.empty()) return false;
+		const int i0 = i;
+		i = std::clamp(i, 0, int(presets.size() - 1));
+		if (BeginCombo("Preset", presets[i].name.c_str(), ImGuiComboFlags_HeightLarge)) {
+			for (auto &p : presets) {
+				const int j = int(&p - presets.data());
+				if (Selectable(p.name.c_str(), i == j, ImGuiSelectableFlags_None)) {
+					i = j;
+				}
+			}
+			EndCombo();
+		}
+		return i != i0;
+	}
+
 }
 
 namespace green {
 
 	ModelEntity::ModelEntity() {
-
+		m_sal_preset = sal_preset_default;
 	}
 
 	void ModelEntity::load(const std::filesystem::path &fpath) {
@@ -634,21 +671,111 @@ namespace green {
 			if (Begin("Saliency")) {
 				PushID(this);
 				draw_select_header(true);
-				m_sal_need_preview |= Checkbox("Preview", &m_sal_uparams.preview);
+				m_sal_need_preview |= Checkbox("Preview", &m_sal_want_preview);
 				SetHoveredTooltip("Enable interactive preview\nUse on small models only! (< ~500k vertices)\nCoarse subsampling will be activated.");
 				SameLine();
 				bool go = false;
-				if (m_sal_uparams.preview || m_sal_future.valid()) {
+				if (m_sal_want_preview || m_sal_future.valid()) {
 					ButtonDisabled("GO", {-1, 0});
 				} else {
 					if (Button("GO", {-1, 0})) go = true;
 				}
 				Separator();
 				// TODO easily obtain settings from other models
-				m_sal_need_preview |= edit_saliency_params(m_sal_uparams);
+
+				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				m_sal_need_preview |= combo_saliency_preset(m_sal_preset);
+
+				// params for possible launch (member params are for 'custom')
+				saliency_user_params uparams;
+
+				auto draw_remove_preset = [&]() {
+					SameLine();
+					SetCursorPosX(GetCursorPosX() + std::max(0.f, GetContentRegionAvail().x - 20));
+					PushStyleColor(ImGuiCol_Button, ImVec4{0.6f, 0.3f, 0.3f, 1});
+					const bool x = Button("X", {-1, 0});
+					SetHoveredTooltip("Remove current preset");
+					PopStyleColor(1);
+					if (x) {
+						ui_spawn([sal_preset=m_sal_preset](bool *p_open) {
+							auto &presets = saliency_presets();
+							if (*p_open) OpenPopup("##removesalpreset");
+							if (BeginPopupModal("##removesalpreset", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration)) {
+								Text("Remove preset \"%s\" ?", presets[sal_preset].name.c_str());
+								if (Button("Remove")) {
+									presets.erase(presets.begin() + sal_preset);
+									*p_open = false;
+									CloseCurrentPopup();
+								}
+								SameLine();
+								if (Button("Cancel")) {
+									*p_open = false;
+									CloseCurrentPopup();
+								}
+								EndPopup();
+							}
+						});
+					}
+				};
+
+				auto draw_add_preset = [&]() {
+					SameLine();
+					SetNextItemWidth(GetContentRegionAvail().x);
+					const bool x = Button("Add...");
+					SetHoveredTooltip("Add a preset with current parameters");
+					if (x) {
+						ui_spawn([=, buf=std::array<char, 256>()](bool *p_open) mutable {
+							if (*p_open) OpenPopup("Saliency Preset");
+							if (BeginPopupModal("Saliency Preset", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+								bool canadd = true;
+								TextDisabled("Presets do not automatically persist yet");
+								InputText("Name", buf.data(), buf.size(), ImGuiInputTextFlags_CharsNoBlank);
+								if (buf[0] == '\0') {
+									TextColored(extra_colors().bad, "Enter a preset name");
+									canadd = false;
+								}
+								Separator();
+								draw_saliency_params(uparams);
+								Separator();
+								if (Button("Add") && canadd) {
+									saliency_presets().push_back({std::string(buf.data()), uparams});
+									*p_open = false;
+									CloseCurrentPopup();
+								}
+								SameLine();
+								if (Button("Cancel")) {
+									*p_open = false;
+									CloseCurrentPopup();
+								}
+								EndPopup();
+							}
+						});
+					}
+				};
+
+				if (m_sal_preset == sal_preset_custom) {
+					// need to also copy params first so they can be captured by 'add preset'
+					uparams = m_sal_uparams;
+					draw_add_preset();
+					Separator();
+					// edit custom params
+					m_sal_need_preview |= edit_saliency_params(m_sal_uparams);
+					uparams = m_sal_uparams;
+				} else if (m_sal_preset == sal_preset_globality) {
+					draw_add_preset();
+					Separator();
+					// TODO edit globality param
+				} else {
+					if (m_sal_preset != sal_preset_default) draw_remove_preset();
+					Separator();
+					// show preset params
+					uparams = saliency_presets()[m_sal_preset].uparams;
+					draw_saliency_params(uparams);
+				}
+				
 				Separator();
 				SetCursorPosY(GetCursorPosY() + GetStyle().ItemSpacing.y);
-				if (m_sal_need_preview && m_sal_uparams.preview) {
+				if (m_sal_need_preview && m_sal_want_preview) {
 					// user params edited and preview enabled, try launch preview
 					if (m_sal_future.valid()) {
 						m_sal_progress.should_cancel = true;
@@ -657,10 +784,12 @@ namespace green {
 						m_sal_need_preview = false;
 					}
 				}
+
 				if (go) {
 					// launch calculation
 					auto real_uparams = m_sal_uparams;
-					if (real_uparams.preview) {
+					if (m_sal_want_preview) {
+						real_uparams.preview = true;
 						real_uparams.subsample_auto = true;
 						real_uparams.subsample_manual = false;
 						real_uparams.samples_per_neighborhood = 10;

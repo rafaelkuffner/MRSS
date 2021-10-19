@@ -22,10 +22,12 @@ namespace green {
 		bool m_decimated = false;
 
 		// computation
+		int m_sal_preset = 0;
 		saliency_user_params m_sal_uparams;
 		saliency_progress m_sal_progress;
 		std::future<saliency_result> m_sal_future;
 		decimate_user_params m_dec_uparams;
+		bool m_sal_want_preview = false;
 		bool m_sal_need_preview = false;
 
 		// saving
