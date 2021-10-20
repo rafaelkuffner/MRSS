@@ -50,6 +50,7 @@ namespace {
 	struct saliency_preset {
 		std::string name;
 		saliency_user_params uparams;
+		bool builtin = false;
 	};
 
 	constexpr static int sal_preset_default = 0;
@@ -60,8 +61,8 @@ namespace {
 	auto & saliency_presets() {
 		// TODO localized names?
 		static std::vector<saliency_preset> v{
-			{"Default"},
-			{"Custom"}
+			{"default", {}, true},
+			{"custom", {}, true}
 		};
 		return v;
 	}
@@ -75,6 +76,7 @@ namespace {
 		if (BeginCombo("Preset", presets[i].name.c_str(), ImGuiComboFlags_HeightLarge)) {
 			for (auto &p : presets) {
 				const int j = int(&p - presets.data());
+				if (j > 0 && !p.builtin && presets[j - 1].builtin) Separator();
 				if (Selectable(p.name.c_str(), i == j, ImGuiSelectableFlags_None)) {
 					i = j;
 				}
@@ -683,7 +685,7 @@ namespace green {
 				Separator();
 				// TODO easily obtain settings from other models
 
-				SetNextItemWidth(GetContentRegionAvail().x * 0.6f);
+				SetNextItemWidth(GetContentRegionAvail().x * 0.5f);
 				m_sal_need_preview |= combo_saliency_preset(m_sal_preset);
 
 				// params for possible launch (member params are for 'custom')
@@ -720,16 +722,17 @@ namespace green {
 
 				auto draw_add_preset = [&]() {
 					SameLine();
-					SetNextItemWidth(GetContentRegionAvail().x);
+					SetNextItemWidth(GetContentRegionAvail().x - 25);
 					const bool x = Button("Add...");
-					SetHoveredTooltip("Add a preset with current parameters");
+					SetHoveredTooltip("Add new preset with current parameters");
 					if (x) {
 						ui_spawn([=, buf=std::array<char, 256>()](bool *p_open) mutable {
-							if (*p_open) OpenPopup("Saliency Preset");
-							if (BeginPopupModal("Saliency Preset", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+							if (*p_open) OpenPopup("Add Saliency Preset");
+							if (BeginPopupModal("Add Saliency Preset", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
 								bool canadd = true;
 								TextDisabled("Presets do not automatically persist yet");
 								InputText("Name", buf.data(), buf.size(), ImGuiInputTextFlags_CharsNoBlank);
+								if (IsWindowAppearing()) SetKeyboardFocusHere();
 								if (buf[0] == '\0') {
 									TextColored(extra_colors().bad, "Enter a preset name");
 									canadd = false;
@@ -753,12 +756,26 @@ namespace green {
 					}
 				};
 
+				auto draw_customize_preset = [&]() {
+					SameLine();
+					SetNextItemWidth(GetContentRegionAvail().x - 25);
+					const bool x = Button("Customize...");
+					SetHoveredTooltip("Start customizing with these parameters");
+					if (x) {
+						m_sal_uparams = uparams;
+						m_sal_preset = sal_preset_custom;
+					}
+				};
+
 				if (m_sal_preset == sal_preset_custom) {
 					// need to also copy params first so they can be captured by 'add preset'
+					// note: dont capture as preview mode
 					uparams = m_sal_uparams;
 					draw_add_preset();
 					Separator();
 					// edit custom params
+					// pass preview mode to param editor
+					m_sal_uparams.preview = m_sal_want_preview;
 					m_sal_need_preview |= edit_saliency_params(m_sal_uparams);
 					uparams = m_sal_uparams;
 				} else if (m_sal_preset == sal_preset_globality) {
@@ -766,10 +783,14 @@ namespace green {
 					Separator();
 					// TODO edit globality param
 				} else {
+					// copy first so they can be loaded for customization
+					uparams = saliency_presets()[m_sal_preset].uparams;
+					draw_customize_preset();
 					if (m_sal_preset != sal_preset_default) draw_remove_preset();
 					Separator();
 					// show preset params
-					uparams = saliency_presets()[m_sal_preset].uparams;
+					// pass preview mode to param viewer
+					uparams.preview = m_sal_want_preview;
 					draw_saliency_params(uparams);
 				}
 				
@@ -787,7 +808,7 @@ namespace green {
 
 				if (go) {
 					// launch calculation
-					auto real_uparams = m_sal_uparams;
+					auto real_uparams = uparams;
 					if (m_sal_want_preview) {
 						real_uparams.preview = true;
 						real_uparams.subsample_auto = true;
@@ -1025,6 +1046,7 @@ namespace green {
 			spawn_locked_notification();
 			return;
 		}
+		std::string pname = m_sal_preset == sal_preset_custom ? "" : saliency_presets()[m_sal_preset].name;
 		saliency_user_params uparams = uparams0;
 		saliency_mesh_params mparams;
 		m_model->init_saliency_params(mparams, uparams);
@@ -1049,6 +1071,7 @@ namespace green {
 				sd.prop_saliency = mparams.prop_saliency;
 				sd.prop_sampled = mparams.prop_sampled;
 				sd.uparams_known = true;
+				sd.dispname = pname;
 				saliency_outputs.push_back(sd);
 				// give focus to this result
 				m_saliency_index = saliency_outputs.size() - 1;

@@ -1514,7 +1514,7 @@ namespace ImGui {
 		}
 		if (uparams.preview) {
 			// TODO configure this somewhere (and use it in model entity)
-			Text("Preview mode: subsampling at 10 S/N");
+			Text("Preview: automatic subsampling (10 S/N)");
 		} else {
 			widgets.checkbox(param_sal_subsample, help_sal_subsample, &saliency_user_params::subsample_auto);
 			if (uparams.subsample_manual) {
@@ -1522,7 +1522,7 @@ namespace ImGui {
 				//widgets.slider("Rate", &saliency_user_params::subsampling_rate, 1.f, 5000.f, "%.1fx", 3.f);
 				//SetHoveredTooltip("Subsampling Rate\nMust be tuned for each model.\nHigher: fewer samples, less accurate results.");
 			} else if (uparams.subsample_auto) {
-				widgets.slider(param_sal_samplespern, help_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 1.f, 500.f, "%.1f", 2.f);
+				widgets.slider(param_sal_samplespern, help_sal_samplespern, &saliency_user_params::samples_per_neighborhood, 5.f, 500.f, "%.1f", 2.f);
 			}
 		}
 		// ensure params are valid
@@ -1531,19 +1531,35 @@ namespace ImGui {
 	}
 
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
+		const Model *model = select_model ? select_model->model() : nullptr;
 		Text("Levels: %d", uparams.levels);
 		Text("Area: %.3f", uparams.area);
 		Text("Contour: %.3f", uparams.curv_weight);
-		Text("Contrast: %.3f", uparams.normal_power);
+		if (uparams.curv_mode == saliency_curvature_mode::don) {
+			Text("DoN Curvature");
+		} else if (uparams.curv_mode == saliency_curvature_mode::mean) {
+			Text("Mean Curvature");
+		}
+		if (uparams.auto_contrast) {
+			Text("Automatic Contrast");
+			if (model) {
+				SameLine();
+				Text(" [current: %.3f]", model->curv(uparams.curv_mode).contrast);
+			}
+		} else {
+			Text("Contrast: %.3f", uparams.normal_power);
+		}
 		Text("Noise Filter: %s", uparams.normalmap_filter ? "true" : "false");
 		if (uparams.normalmap_filter) {
 			Text("Noise Height: %f", uparams.noise_height);
 		}
-		Text("Subsampling: %s", uparams.subsample_manual ? "Manual" : uparams.subsample_auto ? "Auto" : "None");
-		if (uparams.subsample_manual) {
-			Text("Subsampling Rate: %.1f", uparams.subsampling_rate);
+		if (uparams.preview) {
+			// TODO configure this somewhere (and use it in model entity)
+			Text("Preview: automatic subsampling (10 S/N)");
 		} else if (uparams.subsample_auto) {
-			Text("Samples per Neighbourhood: %.1f", uparams.samples_per_neighborhood);
+			Text("Automatic Subsampling (%.1f S/N)", uparams.samples_per_neighborhood);
+		} else if (uparams.subsample_manual) {
+			Text("Manual Subsampling (%.1fx)", uparams.subsampling_rate);
 		}
 	}
 
