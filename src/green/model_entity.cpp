@@ -47,26 +47,6 @@ namespace {
 		return false;
 	}
 	
-	struct saliency_preset {
-		std::string name;
-		saliency_user_params uparams;
-		bool builtin = false;
-	};
-
-	constexpr static int sal_preset_default = 0;
-	constexpr static int sal_preset_custom = 1;
-	// TODO
-	constexpr static int sal_preset_globality = -1;
-
-	auto & saliency_presets() {
-		// TODO localized names?
-		static std::vector<saliency_preset> v{
-			{"default", {}, true},
-			{"custom", {}, true}
-		};
-		return v;
-	}
-
 	bool combo_saliency_preset(int &i) {
 		using namespace ImGui;
 		const auto &presets = saliency_presets();

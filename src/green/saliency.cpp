@@ -129,6 +129,15 @@ namespace green {
 		samples_per_neighborhood = max(samples_per_neighborhood, 1.f);
 		noise_height = clamp(noise_height, 0.f, 1.f);
 	}
+
+	std::vector<saliency_preset> & saliency_presets() {
+		// TODO localized names?
+		static std::vector<saliency_preset> v{
+			{"default", {}, true},
+			{"custom", {}, true}
+		};
+		return v;
+	}
 	
 	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {
 		return std::async([=, &progress]() { return compute_saliency(mparams, uparams, progress); });

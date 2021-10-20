@@ -176,6 +176,19 @@ namespace green {
 		saliency_state state = saliency_state::idle;
 	};
 
+	struct saliency_preset {
+		std::string name;
+		saliency_user_params uparams;
+		bool builtin = false;
+	};
+
+	constexpr static int sal_preset_default = 0;
+	constexpr static int sal_preset_custom = 1;
+	// TODO
+	constexpr static int sal_preset_globality = -1;
+
+	std::vector<saliency_preset> & saliency_presets();
+
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);
 
 	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);
