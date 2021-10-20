@@ -17,7 +17,9 @@
 
 #include <omp.h>
 
-#include "plf_colony.h"
+#include <iobuffer/iobuffer.hpp>
+
+//#include "plf_colony.h"
 
 #include "model.hpp"
 #include "neighborhood.hpp"
@@ -29,6 +31,7 @@ namespace green {
 	std::string saliency_user_params::str(bool verbose) const {
 		// TODO locale independent formatting - this needs to be parseable
 		// we dont set a locale atm though
+		// TODO curv mode?
 		char buf[128];
 		char *end = buf + sizeof(buf);
 		char *p = buf;
@@ -137,6 +140,65 @@ namespace green {
 			{"custom", {}, true}
 		};
 		return v;
+	}
+
+	bool load_saliency_presets(const std::filesystem::path &fpath) {
+		// TODO pull this out into a dedicated 'config' thing
+		auto &presets = saliency_presets();
+		iob::file_buffer fbuf(fpath, iob::file_buffer::read);
+		if (!fbuf.is_open()) {
+			std::cout << "failed to open " << fpath.u8string() << std::endl;
+			return false;
+		}
+		std::cout << "loading saliency presets from " << fpath.u8string() << std::endl;
+		iob::text_reader in(&fbuf);
+		while (!in.eof()) {
+			in.skip_ws();
+			if (in.peek(1) == "#") {
+				in.skip_line();
+				continue;
+			}
+			auto funcname = in.get_until_ws();
+			in.skip_ws();
+			if (funcname == "sal_preset") {
+				saliency_preset p;
+				p.name = in.get_until_ws();
+				in.skip_ws();
+				auto paramstr = in.get_until_ws();
+				if (p.uparams.parse(paramstr)) {
+					std::cout << "parsed saliency preset " << p.name << " : " << p.uparams.str() << std::endl;
+					presets.push_back(std::move(p));
+				} else {
+					std::cout << "failed to parse saliency preset " << p.name << std::endl;
+				}
+				in.skip_line();
+			}
+		}
+
+	}
+
+	bool save_saliency_presets(const std::filesystem::path &fpath) {
+		return save_saliency_presets(fpath, saliency_presets());
+	}
+
+	bool save_saliency_presets(const std::filesystem::path &fpath, const std::vector<saliency_preset> &presets) {
+		iob::file_buffer fbuf(fpath, iob::file_buffer::write);
+		if (!fbuf.is_open()) {
+			std::cout << "failed to open " << fpath.u8string() << std::endl;
+			return false;
+		}
+		std::cout << "saving saliency presets to " << fpath.u8string() << std::endl;
+		iob::text_writer out(&fbuf);
+		out.put("# MRSS saliency presets persisted from GUI\n");
+		for (auto &p : presets) {
+			if (p.builtin) continue;
+			out.put("sal_preset ");
+			out.put(p.name);
+			out.put(' ');
+			out.put(p.uparams.str());
+			out.put('\n');
+		}
+		return true;
 	}
 	
 	std::future<saliency_result> compute_saliency_async(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress) {

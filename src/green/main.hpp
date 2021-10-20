@@ -43,6 +43,8 @@ namespace green {
 
 	void invalidate_scene();
 
+	std::filesystem::path config_dir();
+
 }
 
 namespace ImGui {

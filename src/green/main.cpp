@@ -90,6 +90,9 @@ namespace {
 	void init_console();
 	void init_fonts(ImGuiIO &io, ImFontConfig &fc);
 	void load_model(const std::filesystem::path &p);
+	std::filesystem::path eval_config_dir();
+	void config_load();
+	void config_save();
 
 	const char *glsl_depth_env = R"(
 	#ifndef DEPTH_ENV
@@ -1456,6 +1459,12 @@ namespace green {
 			return "???";
 		}
 	}
+
+	std::filesystem::path config_dir() {
+		static std::filesystem::path cdir = eval_config_dir();
+		return cdir;
+	}
+
 }
 
 namespace ImGui {
@@ -1614,6 +1623,24 @@ namespace ImGui {
 
 namespace {
 
+	void config_load() {
+		const auto cdir = config_dir();
+		if (cdir.empty()) return;
+		std::error_code ec;
+		std::filesystem::create_directories(cdir, ec);
+		if (ec != std::error_code{}) {
+			std::cout << "failed to create config dir " << cdir.u8string() << std::endl;
+			return;
+		}
+		load_saliency_presets(cdir / "presets.conf");
+	}
+
+	void config_save() {
+		const auto cdir = config_dir();
+		if (cdir.empty()) return;
+		save_saliency_presets(cdir / "presets.conf");
+	}
+
 	void load_model(const std::filesystem::path &p) {
 		auto e = std::make_unique<ModelEntity>();
 		e->load(p);
@@ -1716,6 +1743,7 @@ namespace {
 		__declspec(dllimport) HANDLE __stdcall GetModuleHandleA(const char *lpModuleName);
 		__declspec(dllimport) HANDLE __stdcall LoadIconA(HANDLE hInst, const char *name);
 		__declspec(dllimport) LRESULT __stdcall SendMessageA(HWND hWnd, unsigned Msg, WPARAM wParam, LPARAM lParam);
+		__declspec(dllimport) unsigned ExpandEnvironmentStringsW(const wchar_t *lpSrc, wchar_t *lpDst, unsigned nSize);
 	}
 
 	void set_ui_thread_priority() {
@@ -1761,6 +1789,22 @@ namespace {
 		io.Fonts->AddFontFromFileTTF("c:\\windows\\fonts\\malgunsl.ttf", 18, &fc, io.Fonts->GetGlyphRangesKorean());
 	}
 
+	std::filesystem::path eval_config_dir() {
+		const wchar_t *base = L"%APPDATA%\\MRSS";
+		const unsigned buflen = 1024;
+		wchar_t buf[buflen]{};
+		auto r = ExpandEnvironmentStringsW(base, buf, buflen);
+		if (!r) {
+			std::cout << "failed to expand env vars for config path" << std::endl;
+			return "";
+		}
+		if (r > buflen) {
+			std::cout << "expanded env vars for config path too long" << std::endl;
+			return "";
+		}
+		return buf;
+	}
+
 #else
 	void set_ui_thread_priority() {
 
@@ -1777,6 +1821,12 @@ namespace {
 	void init_fonts(ImGuiIO &io, ImFontConfig &fc) {
 
 	}
+
+	std::filesystem::path config_dir() {
+		// TODO
+		return "";
+	}
+
 #endif
 
 }
@@ -1784,6 +1834,7 @@ namespace {
 #ifdef _WIN32
 int wmain(int argc, const wchar_t *wargv[]) {
 	init_console();
+	config_load();
 	if (argc > 1) {
 		// need to convert to utf-8
 		std::vector<const char *> argv(argc);
@@ -1802,14 +1853,17 @@ int wmain(int argc, const wchar_t *wargv[]) {
 	} else {
 		main_gui();
 	}
+	config_save();
 }
 #else
 int main(int argc, const char *argv[]) {
 	init_console();
+	config_load();
 	if (argc > 1) {
 		main_cli(argc, argv);
 	} else {
 		main_gui();
 	}
+	config_save();
 }
 #endif

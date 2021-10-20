@@ -19,6 +19,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <filesystem>
 
 #include <imgui.h>
 
@@ -188,6 +189,12 @@ namespace green {
 	constexpr static int sal_preset_globality = -1;
 
 	std::vector<saliency_preset> & saliency_presets();
+
+	bool load_saliency_presets(const std::filesystem::path &);
+
+	bool save_saliency_presets(const std::filesystem::path &);
+
+	bool save_saliency_presets(const std::filesystem::path &, const std::vector<saliency_preset> &);
 
 	saliency_result compute_saliency(const saliency_mesh_params &mparams, const saliency_user_params &uparams, saliency_progress &progress);
 

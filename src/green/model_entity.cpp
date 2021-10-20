@@ -710,7 +710,11 @@ namespace green {
 							if (*p_open) OpenPopup("Add Saliency Preset");
 							if (BeginPopupModal("Add Saliency Preset", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
 								bool canadd = true;
-								TextDisabled("Presets do not automatically persist yet");
+								if (config_dir().empty()) {
+									TextDisabled("Presets are not automatically persisted");
+								} else {
+									TextDisabled("Presets are automatically persisted in:\n%s", config_dir().u8string().c_str());
+								}
 								InputText("Name", buf.data(), buf.size(), ImGuiInputTextFlags_CharsNoBlank);
 								if (IsWindowAppearing()) SetKeyboardFocusHere();
 								if (buf[0] == '\0') {
