@@ -21,6 +21,7 @@
 #include <cgu/shader.hpp>
 
 #include "main.hpp"
+#include "config.hpp"
 #include "imguiex.hpp"
 #include "dialog.hpp"
 #include "model_entity.hpp"
@@ -1632,13 +1633,13 @@ namespace {
 			std::cout << "failed to create config dir " << cdir.u8string() << std::endl;
 			return;
 		}
-		load_saliency_presets(cdir / "presets.conf");
+		load_config(cdir / "presets.conf");
 	}
 
 	void config_save() {
 		const auto cdir = config_dir();
 		if (cdir.empty()) return;
-		save_saliency_presets(cdir / "presets.conf");
+		save_presets(cdir / "presets.conf");
 	}
 
 	void load_model(const std::filesystem::path &p) {

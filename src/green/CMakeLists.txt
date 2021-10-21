@@ -10,6 +10,8 @@ set(sources
 	gitver.cpp
 	main.hpp
 	main.cpp
+	config.hpp
+	config.cpp
 	model.hpp
 	model.cpp
 	model_entity.hpp
