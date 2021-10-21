@@ -19,11 +19,11 @@ namespace green {
 		while (in.good()) {
 			in.skip_ws();
 			auto funcname = in.get_until_ws();
-			in.skip_ws();
 			if (funcname.empty() || funcname[0] == '#') {
 				in.skip_line();
 			} else if (funcname == "sal_preset") {
 				saliency_preset p;
+				in.skip_ws();
 				p.name = in.get_until_ws();
 				in.skip_ws();
 				auto paramstr = in.get_until_ws();
