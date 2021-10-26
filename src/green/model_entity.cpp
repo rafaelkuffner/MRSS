@@ -8,6 +8,7 @@
 
 #include "imguiex.hpp"
 #include "main.hpp"
+#include "config.hpp"
 
 namespace {
 	using namespace green;
@@ -56,10 +57,12 @@ namespace {
 		if (BeginCombo("Preset", presets[i].name.c_str(), ImGuiComboFlags_HeightLarge)) {
 			for (auto &p : presets) {
 				const int j = int(&p - presets.data());
+				PushID(j);
 				if (j > 0 && !p.builtin && presets[j - 1].builtin) Separator();
 				if (Selectable(p.name.c_str(), i == j, ImGuiSelectableFlags_None)) {
 					i = j;
 				}
+				PopID();
 			}
 			EndCombo();
 		}
@@ -665,7 +668,8 @@ namespace green {
 				Separator();
 				// TODO easily obtain settings from other models
 
-				SetNextItemWidth(GetContentRegionAvail().x * 0.5f);
+				TextDisabled("Import presets with [File > Open] or drag-and-drop");
+				SetNextItemWidth(150);
 				m_sal_need_preview |= combo_saliency_preset(m_sal_preset);
 
 				// params for possible launch (member params are for 'custom')
@@ -742,12 +746,84 @@ namespace green {
 
 				auto draw_customize_preset = [&]() {
 					SameLine();
-					SetNextItemWidth(GetContentRegionAvail().x - 25);
-					const bool x = Button("Customize...");
+					//SetNextItemWidth(GetContentRegionAvail().x - 25);
+					const bool x = Button("Customize");
 					SetHoveredTooltip("Start customizing with these parameters");
 					if (x) {
 						m_sal_uparams = uparams;
 						m_sal_preset = sal_preset_custom;
+					}
+				};
+
+				auto draw_export_preset = [&]() {
+					SameLine();
+					const bool x = Button("Export");
+					SetHoveredTooltip("Export this preset");
+					if (x) {
+						auto preset = saliency_presets()[m_sal_preset];
+						ui_spawn([=](bool *p_open) {
+							if (*p_open) OpenPopup("Export Saliency Preset");
+							if (BeginPopupModal("Export Saliency Preset", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+								// export path
+								auto pathhint = m_fpath_save.empty() ? m_fpath_load : m_fpath_save;
+								pathhint = pathhint.parent_path() / std::filesystem::u8path(preset.name + ".conf");
+								// TODO better?
+								static char pathbuf[1024]{};
+								if (IsWindowAppearing()) snprintf(pathbuf, sizeof(pathbuf), "%s", pathhint.u8string().c_str());
+								auto &fpath_save_fut = ui_save_path(pathhint, Button("Browse"));
+								if (fpath_save_fut.valid() && fpath_save_fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+									auto s = fpath_save_fut.get().u8string();
+									if (!s.empty()) snprintf(pathbuf, sizeof(pathbuf), "%s", s.c_str());
+								}
+								SameLine();
+								InputText("Path", pathbuf, sizeof(pathbuf));
+								Separator();
+								auto badcol = extra_colors().bad;
+								// validate path and maybe export
+								auto fpath = std::filesystem::u8path(pathbuf);
+								auto stat = std::filesystem::status(fpath);
+								bool cansave = !fpath.empty();
+								const char *badchars = "\\/:*?\"<>|";
+								if (fpath.is_relative()) {
+									TextColored(badcol, "Path must be absolute");
+									cansave = false;
+								} else if (std::filesystem::is_directory(stat)) {
+									TextColored(badcol, "Path is a directory");
+									cansave = false;
+								} else if (!std::filesystem::is_directory(fpath.parent_path())) {
+									TextColored(badcol, "Directory does not exist");
+									cansave = false;
+								} else if (fpath.filename().u8string().find_first_of(badchars) != std::string::npos) {
+									TextColored(badcol, "File name must not contain any of \"%s\"", badchars);
+									cansave = false;
+								} else if (std::filesystem::exists(stat)) {
+									TextColored(badcol, "Path exists! Save will overwrite");
+								}
+								if (Button("Save") && cansave) {
+									bool ok = save_saliency_presets(fpath, {preset});
+									ui_spawn([=](bool *p_open) {
+										const char *title = ok ? "Saliency Preset Export Succeeded" : "Saliency Preset Export Failed";
+										if (*p_open) OpenPopup(title);
+										if (BeginPopupModal(title, p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
+											Text("Export \"%s\" %s", fpath.u8string().c_str(), ok ? "succeeded" : "failed");
+											if (Button("OK")) {
+												*p_open = false;
+												CloseCurrentPopup();
+											}
+											EndPopup();
+										}
+									});
+									*p_open = false;
+									CloseCurrentPopup();
+								}
+								SameLine();
+								if (Button("Cancel")) {
+									*p_open = false;
+									CloseCurrentPopup();
+								}
+								EndPopup();
+							}
+						});
 					}
 				};
 
@@ -770,6 +846,7 @@ namespace green {
 					// copy first so they can be loaded for customization
 					uparams = saliency_presets()[m_sal_preset].uparams;
 					draw_customize_preset();
+					draw_export_preset();
 					if (m_sal_preset != sal_preset_default) draw_remove_preset();
 					Separator();
 					// show preset params

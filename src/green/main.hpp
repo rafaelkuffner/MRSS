@@ -34,6 +34,8 @@ namespace green {
 
 	std::future<std::filesystem::path> & ui_save_path(const std::filesystem::path &hint, bool prompt);
 
+	std::future<std::vector<std::filesystem::path>> & ui_open_paths(const std::filesystem::path &hint, bool prompt, bool multi);
+
 	// spawn persistent ui component. persists until *p_open is set to false.
 	void ui_spawn(std::function<void(bool *p_open)>);
 

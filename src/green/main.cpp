@@ -134,7 +134,7 @@ namespace {
 	ModelEntity *select_model = nullptr;
 	ModelEntity *hover_model = nullptr;
 
-	std::vector<std::function<void(bool *p_open)>> persistent_ui;
+	std::vector<std::function<void(bool *p_open)>> persistent_ui, persistent_ui_add;
 
 	std::future<std::vector<std::filesystem::path>> open_paths_future;
 	std::future<std::filesystem::path> save_path_future;
@@ -429,7 +429,11 @@ namespace {
 			if (open_paths_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 				auto paths = open_paths_future.get();
 				for (auto &p : paths) {
-					load_model(p);
+					if (p.extension() == ".conf") {
+						load_config(p);
+					} else {
+						load_model(p);
+					}
 				}
 			}
 		}
@@ -1007,6 +1011,12 @@ namespace {
 			render(scene_was_dirty);
 			render_main_ui(scene_was_dirty);
 
+			// add persistent ui functions separately so they can be spawned from other persistent ui calls
+			if (persistent_ui_add.size()) {
+				persistent_ui.insert(persistent_ui.end(), std::make_move_iterator(persistent_ui_add.begin()), make_move_iterator(persistent_ui_add.end()));
+				persistent_ui_add.clear();
+			}
+
 			for (auto it = persistent_ui.begin(); it != persistent_ui.end(); ) {
 				bool r = true;
 				(*it)(&r);
@@ -1399,8 +1409,21 @@ namespace green {
 		return save_path_future;
 	}
 
+	std::future<std::vector<std::filesystem::path>> & ui_open_paths(const std::filesystem::path &hint, bool prompt, bool multi) {
+		if (open_paths_future.valid()) {
+			if (prompt && open_paths_future.wait_for(0s) == future_status::ready) {
+				// discard existing open paths
+				open_paths_future.get();
+			} else {
+				return open_paths_future;
+			}
+		}
+		if (prompt) open_paths_future = open_file_dialog(window, hint, multi);
+		return open_paths_future;
+	}
+
 	void ui_spawn(std::function<void(bool *p_open)> f) {
-		persistent_ui.push_back(std::move(f));
+		persistent_ui_add.push_back(std::move(f));
 	}
 
 	bool ui_saliency_window_open() {
@@ -1654,6 +1677,8 @@ namespace {
 			if (std::filesystem::is_directory(p)) {
 				std::cout << "chdir to " << p << std::endl;
 				std::filesystem::current_path(p);
+			} else if (p.extension() == ".conf") {
+				load_config(p);
 			} else {
 				load_model(p);
 			}
