@@ -124,6 +124,27 @@ namespace green {
 		using std::clamp;
 		using std::min;
 		using std::max;
+		globality = clamp(globality, 0.f, 1.f);
+		if (meta_mode == saliency_metaparam_mode::globality) {
+			// apply rafael's local-global param
+			float g = globality;
+			levels = [&] {
+				if (g == 1) return 1;
+				if (g <= 0.5f) {
+					return 3;
+				} else {
+					return int(3 - ((1 - g) * 4));
+				}
+			}();
+			area = [&] {
+				if (g == 1) return 0.0555f;
+				return max(0.0001f, g * 0.05f);
+			}();
+			curv_weight = [&] {
+				if (g < 0.5f) return 1.0f;
+				return 2 * (1 - g);
+			}();
+		}
 		levels = clamp(levels, 1, 10);
 		area = clamp(area, 0.f, 1.f);
 		curv_weight = max(curv_weight, 0.f);
@@ -137,7 +158,8 @@ namespace green {
 		// TODO localized names?
 		static std::vector<saliency_preset> v{
 			{"default", {}, false, true},
-			{"custom", {}, false, true}
+			{"custom", {}, false, true},
+			{"globality", {}, false, true}
 		};
 		return v;
 	}

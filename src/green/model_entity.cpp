@@ -75,6 +75,7 @@ namespace green {
 
 	ModelEntity::ModelEntity() {
 		m_sal_preset = sal_preset_default;
+		m_sal_uparams_globality.meta_mode = saliency_metaparam_mode::globality;
 	}
 
 	void ModelEntity::load(const std::filesystem::path &fpath) {
@@ -440,7 +441,10 @@ namespace green {
 				if (CollapsingHeader("Saliency Parameters")) {
 					if (salout.uparams_known) {
 						draw_saliency_params(salout.uparams);
-						if (Button("Reload")) m_sal_uparams = salout.uparams;
+						if (Button("Reload")) {
+							m_sal_uparams_custom = salout.uparams;
+							m_sal_preset = sal_preset_custom;
+						}
 					} else {
 						TextDisabled("Parameters unknown");
 					}
@@ -672,7 +676,7 @@ namespace green {
 				SetNextItemWidth(130);
 				m_sal_need_preview |= combo_saliency_preset(m_sal_preset);
 
-				// params for possible launch (member params are for 'custom')
+				// params for possible launch (member params are for custom/globality etc)
 				saliency_user_params uparams;
 
 				auto draw_remove_preset = [&]() {
@@ -754,8 +758,10 @@ namespace green {
 					const bool x = Button("Customize");
 					SetHoveredTooltip("Start customizing with these parameters");
 					if (x) {
-						m_sal_uparams = uparams;
+						m_sal_uparams_custom = uparams;
+						m_sal_uparams_custom.meta_mode = saliency_metaparam_mode::normal;
 						m_sal_preset = sal_preset_custom;
+						m_sal_need_preview = true;
 					}
 				};
 
@@ -832,20 +838,35 @@ namespace green {
 				};
 
 				if (m_sal_preset == sal_preset_custom) {
-					// need to also copy params first so they can be captured by 'add preset'
+					// copy params first so they can be captured by 'add preset'
 					// note: dont capture as preview mode
-					uparams = m_sal_uparams;
+					uparams = m_sal_uparams_custom;
 					draw_add_preset();
 					Separator();
 					// edit custom params
 					// pass preview mode to param editor
-					m_sal_uparams.preview = m_sal_want_preview;
-					m_sal_need_preview |= edit_saliency_params(m_sal_uparams);
-					uparams = m_sal_uparams;
+					m_sal_uparams_custom.preview = m_sal_want_preview;
+					m_sal_need_preview |= edit_saliency_params(m_sal_uparams_custom);
+					uparams = m_sal_uparams_custom;
 				} else if (m_sal_preset == sal_preset_globality) {
+					// copy params first so they can be captured by 'add preset'
+					// note: dont capture as preview mode
+					uparams = m_sal_uparams_globality;
+					draw_customize_preset();
 					draw_add_preset();
 					Separator();
-					// TODO edit globality param
+					// edit globality params
+					// pass preview mode to param editor
+					m_sal_uparams_globality.preview = m_sal_want_preview;
+					m_sal_need_preview |= edit_saliency_params(m_sal_uparams_globality);
+					uparams = m_sal_uparams_globality;
+					Separator();
+					// show resulting actual params
+					// pass preview mode to param viewer
+					uparams.preview = m_sal_want_preview;
+					if (CollapsingHeader("Details")) {
+						draw_saliency_params(uparams);
+					}
 				} else {
 					// copy first so they can be loaded for customization
 					uparams = saliency_presets()[m_sal_preset].uparams;
@@ -856,7 +877,9 @@ namespace green {
 					// show preset params
 					// pass preview mode to param viewer
 					uparams.preview = m_sal_want_preview;
-					draw_saliency_params(uparams);
+					if (CollapsingHeader("Details")) {
+						draw_saliency_params(uparams);
+					}
 				}
 				
 				Separator();
@@ -1111,7 +1134,17 @@ namespace green {
 			spawn_locked_notification();
 			return;
 		}
-		std::string pname = m_sal_preset == sal_preset_custom ? "" : saliency_presets()[m_sal_preset].name;
+		std::string pname;
+		if (m_sal_preset == sal_preset_custom) {
+			pname = "";
+		} else if (m_sal_preset == sal_preset_globality) {
+			pname = saliency_presets()[m_sal_preset].name;
+			char buf[32]{};
+			std::snprintf(buf, sizeof(buf), "=%.3f", uparams0.globality);
+			pname += buf;
+		} else {
+			pname = saliency_presets()[m_sal_preset].name;
+		}
 		saliency_user_params uparams = uparams0;
 		saliency_mesh_params mparams;
 		m_model->init_saliency_params(mparams, uparams);

@@ -47,6 +47,7 @@ namespace green {
 			"Will always be placed at the last index (@-1) for subsequent decimation, colorization and saving.";
 		loc[help_sal_colorprop] = "Saliency property to colorize when saving.\n"
 			"Default is the saliency property used for decimation (--decprop), or the computed saliency (@-1), or @0.";
+		loc[help_sal_globality] = "Single meta parameter to adjust saliency between local and global.";
 		loc[param_sal_curv] = "Curvature";
 		loc[param_sal_area] = "Area";
 		loc[param_sal_levels] = "Levels";
@@ -57,6 +58,7 @@ namespace green {
 		loc[param_sal_samplespern] = "S/N";
 		loc[param_sal_subsample] = "Subsample";
 		loc[param_sal_autocontrast] = "Automatic contrast";
+		loc[param_sal_globality] = "Globality";
 		// decimation
 		loc[help_cli_opts_decimate] = "Decimation options (Work in Progress):";
 		loc[help_dec_go] = "Perform decimation";

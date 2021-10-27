@@ -379,7 +379,7 @@ namespace {
 		SetNextWindowBgAlpha(0.5f);
 		SetNextWindowSize({400, 600}, ImGuiCond_Appearing);
 		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
-		if (Begin("Saliency", &saliency_window_open)) {
+		if (Begin("Saliency", &saliency_window_open, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 			// contents drawn by model entities
 		}
 		End();
@@ -392,7 +392,7 @@ namespace {
 		SetNextWindowBgAlpha(0.5f);
 		SetNextWindowSize({400, 500}, ImGuiCond_Appearing);
 		SetNextWindowPos({winsize.x / 2.f, winsize.y / 2.f}, ImGuiCond_Appearing, {0.5f, 0.5f});
-		if (Begin("Decimation", &decimation_window_open)) {
+		if (Begin("Decimation", &decimation_window_open, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 			// contents drawn by model entities
 		}
 		End();
@@ -1118,6 +1118,10 @@ namespace {
 		auto sal_opts = group{
 			option("--saliency").set(do_sal)
 				.doc(loc[help_sal_go].clone()),
+			(option("-g", "--globality").call([&] {
+					sal_uparams.meta_mode = saliency_metaparam_mode::globality;
+				}) & number("globality", sal_uparams.globality))
+				.doc(loc[help_sal_globality].clone()),
 			(option("-a", "--area") & number("area", sal_uparams.area))
 				.doc(loc[help_sal_area].clone()),
 			(option("-l", "--levels") & integer("levels", sal_uparams.levels))
@@ -1218,10 +1222,6 @@ namespace {
 			);
 			cout << man << endl;
 		}
-
-		cout << "saliency enabled=" << do_sal << "; params: " << sal_uparams.str(true) << endl;
-		cout << "decimate enabled=" << do_dec << "; params: " << dec_uparams.str() << endl;
-		cout << "saliency automatic contrast enabled=" << sal_uparams.auto_contrast << endl;
 		
 		if (!(do_sal || do_dec || show_gui || infile.size() || outfile.size())) {
 			if (!do_help && !do_version) cout << "nothing to do" << endl;
@@ -1248,6 +1248,10 @@ namespace {
 		sal_uparams.sanitize();
 		dec_uparams.sanitize();
 		sal_progress.levels.resize(sal_uparams.levels);
+
+		cout << "saliency enabled=" << do_sal << "; params: " << sal_uparams.str(true) << endl;
+		cout << "decimate enabled=" << do_dec << "; params: " << dec_uparams.str() << endl;
+		cout << "saliency automatic contrast enabled=" << sal_uparams.auto_contrast << endl;
 
 		const auto inpath = filesystem::u8path(infile);
 
@@ -1548,9 +1552,13 @@ namespace ImGui {
 		saliency_user_params defparams;
 		param_widgets widgets{&loc, &defparams, &uparams};
 		TextDisabled("Ctrl-click sliders to enter values directly");
-		widgets.slider(param_sal_levels, help_sal_levels, &saliency_user_params::levels, 1, 6);
-		widgets.slider(param_sal_area, help_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5f", 2.f);
-		widgets.slider(param_sal_curvweight, help_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
+		if (uparams.meta_mode == saliency_metaparam_mode::normal) {
+			widgets.slider(param_sal_levels, help_sal_levels, &saliency_user_params::levels, 1, 6);
+			widgets.slider(param_sal_area, help_sal_area, &saliency_user_params::area, 0.f, 0.05f, "%.5g", 2.f);
+			widgets.slider(param_sal_curvweight, help_sal_curvweight, &saliency_user_params::curv_weight, 0.f, 1.f);
+		} else if (uparams.meta_mode == saliency_metaparam_mode::globality) {
+			widgets.slider(param_sal_globality, help_sal_globality, &saliency_user_params::globality, 0.f, 1.f);
+		}
 		widgets.combobox(param_sal_curv, help_sal_curv, &saliency_user_params::curv_mode, {curv_don, curv_mean});
 		widgets.checkbox(param_sal_autocontrast, nullstr, &saliency_user_params::auto_contrast);
 		// TODO autocontrast tooltip
@@ -1587,7 +1595,7 @@ namespace ImGui {
 	void draw_saliency_params(const green::saliency_user_params &uparams) {
 		const Model *model = select_model ? select_model->model() : nullptr;
 		Text("Levels: %d", uparams.levels);
-		Text("Area: %.3f", uparams.area);
+		Text("Area: %.5g", uparams.area);
 		Text("Contour: %.3f", uparams.curv_weight);
 		if (uparams.curv_mode == saliency_curvature_mode::don) {
 			Text("DoN Curvature");

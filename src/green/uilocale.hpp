@@ -45,6 +45,7 @@ namespace green {
 			help_sal_full,
 			help_sal_salprop,
 			help_sal_colorprop,
+			help_sal_globality,
 			param_sal_curv,
 			param_sal_area,
 			param_sal_levels,
@@ -55,6 +56,7 @@ namespace green {
 			param_sal_samplespern,
 			param_sal_subsample,
 			param_sal_autocontrast,
+			param_sal_globality,
 			// decimation
 			help_cli_opts_decimate,
 			help_dec_go,

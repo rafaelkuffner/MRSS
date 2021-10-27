@@ -83,6 +83,10 @@ namespace green {
 		don, mean
 	};
 
+	enum class saliency_metaparam_mode {
+		normal, globality
+	};
+
 	struct saliency_user_params {
 		int levels = 5;
 		float area = 0.02f;
@@ -94,6 +98,10 @@ namespace green {
 		float samples_per_neighborhood = 100;
 		// used with normalmap filter; relative to sqrt(real_surface_area)
 		float noise_height = 0.002f;
+		// rafael's local-global metaparam
+		float globality = 0.5f;
+		// meta parameter mode
+		saliency_metaparam_mode meta_mode = saliency_metaparam_mode::normal;
 		// curvature mode
 		saliency_curvature_mode curv_mode = saliency_curvature_mode::don;
 		// filter out normalmappable detail
@@ -126,7 +134,7 @@ namespace green {
 			return !(*this == other);
 		}
 
-		// clamp parameters to valid ranges
+		// apply meta parameters then clamp actual parameters to valid ranges
 		void sanitize();
 
 	};
@@ -186,8 +194,7 @@ namespace green {
 
 	constexpr static int sal_preset_default = 0;
 	constexpr static int sal_preset_custom = 1;
-	// TODO
-	constexpr static int sal_preset_globality = -1;
+	constexpr static int sal_preset_globality = 2;
 
 	std::vector<saliency_preset> & saliency_presets();
 

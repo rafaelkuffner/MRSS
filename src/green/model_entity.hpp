@@ -23,7 +23,8 @@ namespace green {
 
 		// computation
 		int m_sal_preset = 0;
-		saliency_user_params m_sal_uparams;
+		saliency_user_params m_sal_uparams_custom;
+		saliency_user_params m_sal_uparams_globality;
 		saliency_progress m_sal_progress;
 		std::future<saliency_result> m_sal_future;
 		decimate_user_params m_dec_uparams;
