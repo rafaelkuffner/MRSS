@@ -58,7 +58,7 @@ namespace {
 			for (auto &p : presets) {
 				const int j = int(&p - presets.data());
 				PushID(j);
-				if (j > 0 && !p.builtin && presets[j - 1].builtin) Separator();
+				if (j > 0 && p.builtin != presets[j - 1].builtin) Separator();
 				if (Selectable(p.name.c_str(), i == j, ImGuiSelectableFlags_None)) {
 					i = j;
 				}
@@ -669,13 +669,17 @@ namespace green {
 				// TODO easily obtain settings from other models
 
 				TextDisabled("Import presets with [File > Open] or drag-and-drop");
-				SetNextItemWidth(150);
+				SetNextItemWidth(130);
 				m_sal_need_preview |= combo_saliency_preset(m_sal_preset);
 
 				// params for possible launch (member params are for 'custom')
 				saliency_user_params uparams;
 
 				auto draw_remove_preset = [&]() {
+					auto &preset = saliency_presets()[m_sal_preset];
+					SameLine();
+					Checkbox("", &preset.persistent);
+					SetHoveredTooltip("Persistent");
 					SameLine();
 					SetCursorPosX(GetCursorPosX() + std::max(0.f, GetContentRegionAvail().x - 20));
 					PushStyleColor(ImGuiCol_Button, ImVec4{0.6f, 0.3f, 0.3f, 1});

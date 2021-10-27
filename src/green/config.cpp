@@ -7,7 +7,7 @@
 
 namespace green {
 
-	bool load_config(const std::filesystem::path &fpath) {
+	bool load_config(const std::filesystem::path &fpath, bool persistent) {
 		auto &presets = saliency_presets();
 		iob::file_buffer fbuf(fpath, iob::file_buffer::read);
 		if (!fbuf.is_open()) {
@@ -23,6 +23,7 @@ namespace green {
 				in.skip_line();
 			} else if (funcname == "sal_preset") {
 				saliency_preset p;
+				p.persistent = persistent;
 				in.skip_ws();
 				p.name = in.get_until_ws();
 				in.skip_ws();
@@ -46,7 +47,7 @@ namespace green {
 		iob::text_writer out(&buf);
 		out.put("# MRSS saliency presets\n");
 		for (auto &p : presets) {
-			if (p.builtin) continue;
+			if (!p.persistent) continue;
 			out.put("sal_preset ");
 			out.put(p.name);
 			out.put(' ');

@@ -26,6 +26,7 @@ namespace green {
 			"    or by index with @index (starting at @0). Negative indices can be used for reverse indexing from\n"
 			"    the last property (which is @-1). @index notation cannot be used when assigning a property name\n"
 			"    (as with --salprop); property indices are automatically assigned when saving the model.";
+		loc[help_cli_config] = "Config file to load for e.g. saliency presets";
 		loc[param_threads] = "Threads";
 		// saliency
 		loc[help_cli_opts_saliency] = "Saliency options:";
@@ -40,6 +41,7 @@ namespace green {
 		loc[help_sal_noiseheight] = "Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area.";
 		loc[help_sal_samplespern] = "Higher: more samples, more accurate results.\nDoes not usually need tuning per model.";
 		loc[help_sal_subsample] = "Apply automatic subsampling (fast, recommended).\nEnable to access sampling parameters.";
+		loc[help_sal_preset] = "Saliency preset to use";
 		loc[help_sal_full] = "Disable subsampling (slow, not recommended)";
 		loc[help_sal_salprop] = "Name for computed saliency property.\n"
 			"Will always be placed at the last index (@-1) for subsequent decimation, colorization and saving.";

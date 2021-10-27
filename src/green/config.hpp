@@ -10,7 +10,7 @@
 
 namespace green {
 
-	bool load_config(const std::filesystem::path &);
+	bool load_config(const std::filesystem::path &, bool persistent);
 
 	bool save_presets(const std::filesystem::path &);
 

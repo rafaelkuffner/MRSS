@@ -136,8 +136,8 @@ namespace green {
 	std::vector<saliency_preset> & saliency_presets() {
 		// TODO localized names?
 		static std::vector<saliency_preset> v{
-			{"default", {}, true},
-			{"custom", {}, true}
+			{"default", {}, false, true},
+			{"custom", {}, false, true}
 		};
 		return v;
 	}

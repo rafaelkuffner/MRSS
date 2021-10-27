@@ -430,7 +430,8 @@ namespace {
 				auto paths = open_paths_future.get();
 				for (auto &p : paths) {
 					if (p.extension() == ".conf") {
-						load_config(p);
+						// TODO persist changes loaded through ui?
+						load_config(p, true);
 					} else {
 						load_model(p);
 					}
@@ -1065,6 +1066,19 @@ namespace {
 		bool save_ascii = false;
 		bool save_original_vids = false;
 
+		auto use_sal_preset = [&](const char *pname_) {
+			string_view pname = pname_;
+			const auto &presets = saliency_presets();
+			// find in reverse so user-specified config files can override
+			auto it = std::find_if(presets.rbegin(), presets.rend(), [&](const auto &p){ return p.name == pname; });
+			if (it == presets.rend()) {
+				std::cout << "saliency preset " << pname << " not found" << std::endl;
+				return;
+			}
+			std::cout << "using saliency preset " << pname << std::endl;
+			sal_uparams = it->uparams;
+		};
+
 		auto alt_opts = group{
 			option("--version").set(do_version)
 				.doc(loc[help_cli_version].clone()),
@@ -1093,7 +1107,12 @@ namespace {
 			(option("--color") & value("mode", colormode))
 				.doc(loc[help_cli_color].clone()),
 			(option("--dumpcurv") & value("curvfile", dumpcurvfile))
-				.doc("Debugging use only")
+				.doc("Debugging use only"),
+			(option("--config") & value("configfile").call([](const char *p) {
+					// changes loaded here are _not_ persisted
+					load_config(std::filesystem::u8path(p), false);
+				}))
+				.doc(loc[help_cli_config].clone())
 		}.doc(loc[help_cli_opts_common].clone());
 
 		auto sal_opts = group{
@@ -1113,6 +1132,8 @@ namespace {
 				.doc(loc[help_sal_noiseheight].clone()),
 			(option("-s", "--subsampling") & number("samples-per-neighborhood", sal_uparams.samples_per_neighborhood))
 				.doc(loc[help_sal_samplespern].clone()),
+			(option("--salpreset") & value("presetname").call(use_sal_preset))
+				.doc(loc[help_sal_preset].clone()),
 			option("--fullsampling").call([&]{ sal_uparams.subsample_auto = false; })
 				.doc(loc[help_sal_full].clone()),
 			(option("--salprop") & value("propname", salprop))
@@ -1656,7 +1677,7 @@ namespace {
 			std::cout << "failed to create config dir " << cdir.u8string() << std::endl;
 			return;
 		}
-		load_config(cdir / "presets.conf");
+		load_config(cdir / "presets.conf", true);
 	}
 
 	void config_save() {
@@ -1678,7 +1699,8 @@ namespace {
 				std::cout << "chdir to " << p << std::endl;
 				std::filesystem::current_path(p);
 			} else if (p.extension() == ".conf") {
-				load_config(p);
+				// TODO persist changes loaded through ui?
+				load_config(p, true);
 			} else {
 				load_model(p);
 			}

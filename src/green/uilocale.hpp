@@ -27,6 +27,7 @@ namespace green {
 			help_cli_noprogress,
 			help_cli_color,
 			help_cli_propnames,
+			help_cli_config,
 			param_threads,
 			// saliency
 			help_cli_opts_saliency,
@@ -40,6 +41,7 @@ namespace green {
 			help_sal_noiseheight,
 			help_sal_samplespern,
 			help_sal_subsample,
+			help_sal_preset,
 			help_sal_full,
 			help_sal_salprop,
 			help_sal_colorprop,

@@ -180,6 +180,7 @@ namespace green {
 	struct saliency_preset {
 		std::string name;
 		saliency_user_params uparams;
+		bool persistent = false;
 		bool builtin = false;
 	};
 
