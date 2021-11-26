@@ -32,7 +32,7 @@ namespace green {
 		loc[help_cli_opts_saliency] = "Saliency options:";
 		loc[help_sal_go] = "Compute saliency";
 		loc[help_sal_curv] = "Curvature measure to use. Options are:\n"
-			"- don (default)\n- mean (for comparison with previous work)";
+			"- don (default)\n- mean (for comparison with previous work, disabled by default)";
 		loc[help_sal_area] = "Size of the largest salient features.\nSpecified as a fraction of the surface area.";
 		loc[help_sal_levels] = "Using more levels allows increasingly local features to become visible.";
 		loc[help_sal_normpower] = "Controls how quickly saliency tends towards extreme values.\n"

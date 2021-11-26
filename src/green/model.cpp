@@ -66,6 +66,8 @@ namespace green {
 
 	float autocontrast_target_entropy_factor[2]{0.45f, 0.3f};
 
+	bool enable_mean_curv;
+
 	ModelBase::ModelBase(const std::filesystem::path &fpath) {
 		// face status not really required here
 		// NOTE face status currently breaks decimation
@@ -227,7 +229,7 @@ namespace green {
 			m_curv_don = autocontrast(m_mesh, curv, autocontrast_target_entropy_factor[int(saliency_curvature_mode::don)], m_prop_vertex_area, true);
 		}
 
-		{
+		if (enable_mean_curv) {
 			std::cout << "Computing raw mean curvature" << std::endl;
 			const auto time_curv_start = std::chrono::steady_clock::now();
 			curvature_measure curv(m_mesh);
@@ -429,10 +431,14 @@ namespace green {
 		return true;
 	}
 
-	void Model::init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params &uparams) {
+	bool Model::init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params &uparams) {
 		mparams.mesh = &m_mesh;
 		// set input properties
 		mparams.curv = curv(uparams.curv_mode);
+		if (!mparams.curv.prop_curv.is_valid()) {
+			std::cout << "specified curvature not available, cannot compute saliency" << std::endl;
+			return false;
+		}
 		mparams.prop_vertex_area = m_prop_vertex_area;
 		mparams.prop_edge_length = m_prop_edge_length;
 		// create output properties
@@ -444,6 +450,7 @@ namespace green {
 		for (auto &prop : mparams.prop_saliency_levels) {
 			mparams.mesh->add_property(prop);
 		}
+		return true;
 	}
 
 	void Model::cleanup_saliency_params(saliency_mesh_params &mparams, bool success) noexcept {

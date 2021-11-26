@@ -1147,7 +1147,7 @@ namespace green {
 		}
 		saliency_user_params uparams = uparams0;
 		saliency_mesh_params mparams;
-		m_model->init_saliency_params(mparams, uparams);
+		if (!m_model->init_saliency_params(mparams, uparams)) return;
 		// cleanup will be run when the result is received from the future
 		// can use shared lock for actual computation because only property contents are being used
 		// HACK make_shared is an ugly workaround for std::function needing to be copyable

@@ -1115,6 +1115,8 @@ namespace {
 				.doc(loc[help_cli_color].clone()),
 			(option("--dumpcurv") & value("curvfile", dumpcurvfile))
 				.doc("Debugging use only"),
+			option("--enable-meancurv").set(enable_mean_curv)
+				.doc("Enable mean curvature"),
 			(option("--config") & value("configfile").call([](const char *p) {
 					// changes loaded here are _not_ persisted
 					load_config(std::filesystem::u8path(p), false);
@@ -1318,27 +1320,31 @@ namespace {
 			}
 
 			saliency_mesh_params mparams;
-			m.init_saliency_params(mparams, sal_uparams);
+			if (m.init_saliency_params(mparams, sal_uparams)) {
 
-			// calculate saliency
-			if (!compute_saliency(mparams, sal_uparams, sal_progress)) {
-				cout << "saliency cancelled" << endl;
-				exit(1);
+				// calculate saliency
+				if (!compute_saliency(mparams, sal_uparams, sal_progress)) {
+					cout << "saliency cancelled" << endl;
+					exit(1);
+				}
+
+				m.cleanup_saliency_params(mparams, true);
+
+				sd.prop_saliency = mparams.prop_saliency;
+				sd.prop_sampled = mparams.prop_sampled;
+				sd.uparams = sal_uparams;
+				sd.progress = sal_progress;
+				sd.uparams_known = true;
+				sd.persistent = true;
+				sd.should_export = true;
+				sd.dispname = salprop;
+
+				// put at last index
+				m.saliency().push_back(sd);
+
+			} else {
+				do_dec = false;
 			}
-
-			m.cleanup_saliency_params(mparams, true);
-
-			sd.prop_saliency = mparams.prop_saliency;
-			sd.prop_sampled = mparams.prop_sampled;
-			sd.uparams = sal_uparams;
-			sd.progress = sal_progress;
-			sd.uparams_known = true;
-			sd.persistent = true;
-			sd.should_export = true;
-			sd.dispname = salprop;
-
-			// put at last index
-			m.saliency().push_back(sd);
 		}
 
 		if (do_dec) {
@@ -1577,7 +1583,9 @@ namespace ImGui {
 		} else if (uparams.meta_mode == saliency_metaparam_mode::globality) {
 			widgets.slider(param_sal_globality, help_sal_globality, &saliency_user_params::globality, 0.f, 1.f);
 		}
-		widgets.combobox(param_sal_curv, help_sal_curv, &saliency_user_params::curv_mode, {curv_don, curv_mean});
+		if (enable_mean_curv) {
+			widgets.combobox(param_sal_curv, help_sal_curv, &saliency_user_params::curv_mode, {curv_don, curv_mean});
+		}
 		widgets.checkbox(param_sal_autocontrast, help_sal_autocontrast, &saliency_user_params::auto_contrast);
 		// TODO autocontrast tooltip
 		if (uparams.auto_contrast) {

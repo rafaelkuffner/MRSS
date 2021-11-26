@@ -29,6 +29,8 @@ namespace green {
 	// indexed by saliency_curvature_mode
 	extern float autocontrast_target_entropy_factor[2];
 
+	extern bool enable_mean_curv;
+
 	enum class model_color_mode : unsigned char {
 		none,
 		vcolor,
@@ -232,7 +234,7 @@ namespace green {
 
 		bool decimate(const decimate_user_params &uparams, decimate_progress &progress);
 
-		void init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params &uparams);
+		bool init_saliency_params(saliency_mesh_params &mparams, const saliency_user_params &uparams);
 
 		void cleanup_saliency_params(saliency_mesh_params &mparams, bool success) noexcept;
 
