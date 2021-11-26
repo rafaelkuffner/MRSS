@@ -1094,7 +1094,7 @@ namespace {
 		};
 		
 		auto common_opts = group{
-			(required("-i", "--input") & value("infile", infile))
+			(option("-i", "--input") & value("infile", infile))
 				.doc(loc[help_input].clone()),
 			(option("-o", "--output") & value("outfile", outfile))
 				.doc(loc[help_output].clone()),
@@ -1233,6 +1233,17 @@ namespace {
 		if (!(do_sal || do_dec || show_gui || infile.size() || outfile.size())) {
 			if (!do_help && !do_version) cout << "nothing to do" << endl;
 			exit(0);
+		}
+
+		if ((do_sal || do_dec) && infile.empty()) {
+			cout << "input model required" << endl;
+			exit(1);
+		}
+
+		if (show_gui && infile.empty()) {
+			// no work to be done, just open the gui
+			main_gui();
+			return;
 		}
 
 		apply_threads(0);
