@@ -159,6 +159,11 @@ namespace green {
 			return m_dead;
 		}
 
+		// basis transform from world space to model space
+		glm::mat3 basis() const {
+			return glm::mat3(m_basis_vectors[m_basis_right].v, m_basis_vectors[m_basis_up].v, m_basis_vectors[m_basis_back].v);
+		}
+
 		virtual glm::mat4 transform() const override;
 
 		virtual void pre_draw() override;

@@ -148,12 +148,17 @@ namespace green {
 
 	glm::mat4 ModelEntity::transform() const {
 		if (!m_model) return glm::mat4(1);
+		const auto ib = transpose(basis());
+		const auto miny = m_scale * std::min((ib * m_model->bound_min()).y, (ib * m_model->bound_max()).y);
+		const auto center = m_scale * (ib * m_model->bound_center());
 		glm::mat4 transform(1);
-		transform = glm::translate(transform, m_translation);
+		// start exactly on ground plane
+		transform = glm::translate(transform, m_translation + glm::vec3(0, center.y - miny, 0));
 		transform *= glm::eulerAngleYXZ(m_rotation_euler_yxz.y, m_rotation_euler_yxz.x, m_rotation_euler_yxz.z);
+		transform = glm::translate(transform, -center);
 		transform = glm::scale(transform, glm::vec3(m_scale));
-		glm::mat3 basis(m_basis_vectors[m_basis_right].v, m_basis_vectors[m_basis_up].v, m_basis_vectors[m_basis_back].v);
-		return transform * glm::mat4(transpose(basis));
+		transform *= glm::mat4(ib);
+		return transform;
 	}
 
 	void ModelEntity::update_vbo() {

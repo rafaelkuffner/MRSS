@@ -964,7 +964,7 @@ namespace {
 		auto time_last_fps = time_next_frame;
 		int fps_counter = 0;
 
-		cam.focus.y = 1;
+		cam.focus.y = 2;
 		cam.cam_yaw = -glm::pi<float>() / 4;
 		cam.cam_pitch = glm::pi<float>() / 8;
 

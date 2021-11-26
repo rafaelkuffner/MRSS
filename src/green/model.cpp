@@ -207,6 +207,7 @@ namespace green {
 			m_bound_min = min(m_bound_min, om2glm(m_mesh.point(*vit)));
 			m_bound_max = max(m_bound_max, om2glm(m_mesh.point(*vit)));
 		}
+		std::cout << "bound min=" << m_bound_min << " max=" << m_bound_max << " unitscale=" << unit_bound_scale() << std::endl;
 
 		std::cout << "Computing vertex areas" << std::endl;
 		m_prop_vertex_area = computeVertexAreas(m_mesh);
@@ -848,7 +849,7 @@ namespace green {
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_modelview"), 1, false, value_ptr(modelview));
 		glUniformMatrix4fv(glGetUniformLocation(prog, "u_projection"), 1, false, value_ptr(projection));
 		glUniform4fv(glGetUniformLocation(prog, "u_color"), 1, value_ptr(params.color));
-		glm::vec3 pos_bias = -bound_center();
+		glm::vec3 pos_bias{0}; // = -bound_center();
 		glUniform3fv(glGetUniformLocation(prog, "u_pos_bias"), 1, value_ptr(pos_bias));
 		glUniform1f(glGetUniformLocation(prog, "u_shading"), params.shading);
 		float bias = 0;
