@@ -35,7 +35,9 @@ namespace green {
 			"- don (default)\n- mean (for comparison with previous work)";
 		loc[help_sal_area] = "Size of the largest salient features.\nSpecified as a fraction of the surface area.";
 		loc[help_sal_levels] = "Using more levels allows increasingly local features to become visible.";
-		loc[help_sal_normpower] = "Controls how quickly saliency tends towards extreme values.";
+		loc[help_sal_normpower] = "Controls how quickly saliency tends towards extreme values.\n"
+			"Low/high values cause changes around low/high curvatures to be more salient.";
+		loc[help_sal_autocontrast] = "Automatically set contrast to make mean saliency approximately midrange (white).";
 		loc[help_sal_curvweight] = "Additional visibility for immediate local features of high curvature.";
 		loc[help_sal_noisefilter] = "Filter out noise from otherwise smooth surfaces.\nEnable to access noise parameters.";
 		loc[help_sal_noiseheight] = "Maximum magnitude of noise to filter.\nSpecified as a fraction of the square root of the surface area.";
@@ -71,14 +73,18 @@ namespace green {
 			"-  1 : even weighting, saliency has no impact\n"
 			"- <1 : more salient => more error\n"
 			"- >1 : more salient => less error\n"
-			"-  X : default [TODO]"; // TODO default value
+			"- 20 : default"; // TODO keep default value up-to-date
 		loc[help_dec_binweight] = "Saliency bin weighting; 0 (even) .. 1 (most weight to highest saliency)";
 		loc[help_dec_power] = "Non-linearity of saliency weighting:\n"
 			"- <1 : mid-range saliency preserved more\n"
 			"-  1 : linear\n"
 			"- >1 : mid-range saliency preserved less\n"
-			"-  X : default [TODO]"; // TODO default value
+			"-  2 : default"; // TODO keep default value up-to-date
 		loc[help_dec_bins] = "Number of saliency bins";
+		loc[help_dec_seams] = "Preserve seams in UV coords and normals";
+		loc[help_dec_folds] = "Prevent mesh surface folding over itself (flipped triangles)";
+		loc[help_dec_limit_aspect] = "Limit triangle aspect ratio";
+		loc[help_dec_max_aspect] = "Maximum desired triangle aspect ratio";
 		loc[help_dec_decprop] = "Saliency property to use for decimation if not calculating saliency.\n"
 			"Default is @0, the first property.";
 		loc[help_dec_usesaliency] = "Use saliency for decimation";

@@ -477,6 +477,7 @@ namespace {
 				Checkbox("Show Grid", &show_grid);
 				Checkbox("Show Axes", &show_axes);
 				Checkbox("Show Focus", &show_focus);
+				Checkbox("Show Control Help", &controlhelp_window_open);
 				Separator();
 				PushStyleVar(ImGuiStyleVar_ItemSpacing, normal_item_spacing);
 				if (Button("Reset")) {
@@ -505,7 +506,6 @@ namespace {
 				Checkbox("Saliency", &saliency_window_open);
 				Checkbox("Decimation", &decimation_window_open);
 				Checkbox("Options", &options_window_open);
-				Checkbox("Control Help", &controlhelp_window_open);
 				Separator();
 				PopStyleVar();
 				EndMenu();
@@ -579,9 +579,16 @@ namespace {
 			SetNextWindowPos({winsize.x - 20, 30}, ImGuiCond_Always, {1.f, 0.f});
 			if (Begin("ControlHelp", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing)) {
 				PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-				Text("Left Mouse: Drag\n [Object, Horizontal]\n + Shift: Vertical\n + Alt: Drag Camera\n + Ctrl: Focus Here");
-				Text("Right Mouse: Rotate camera");
-				Text("Scroll: Zoom");
+				TextUnformatted(
+					"                  [View > Show Control Help]\n"
+					"            LMB Drag: Move object horizontal\n"
+					"      LMB Drag + Shift: Move object vertical\n"
+					"      LMB Drag + Alt: Move camera horizontal\n"
+					"LMB Drag + Alt + Shift: Move camera vertical\n"
+					"                   LMB + Control: Focus here\n"
+					"                     RMB Drag: Rotate camera\n"
+					"                                Scroll: Zoom"
+				);
 				PopStyleVar();
 			}
 			End();
@@ -1560,7 +1567,7 @@ namespace ImGui {
 			widgets.slider(param_sal_globality, help_sal_globality, &saliency_user_params::globality, 0.f, 1.f);
 		}
 		widgets.combobox(param_sal_curv, help_sal_curv, &saliency_user_params::curv_mode, {curv_don, curv_mean});
-		widgets.checkbox(param_sal_autocontrast, nullstr, &saliency_user_params::auto_contrast);
+		widgets.checkbox(param_sal_autocontrast, help_sal_autocontrast, &saliency_user_params::auto_contrast);
 		// TODO autocontrast tooltip
 		if (uparams.auto_contrast) {
 			if (model) {
@@ -1660,11 +1667,11 @@ namespace ImGui {
 			widgets.slider(param_dec_power, help_dec_power, &decimate_user_params::sal_power, 0.f, 10.f, "%.3f", 2.f);
 		}
 		// TODO help text
-		widgets.checkbox(param_dec_seams, nullstr, &decimate_user_params::preserve_seams);
-		widgets.checkbox(param_dec_folds, nullstr, &decimate_user_params::prevent_folds);
-		widgets.checkbox(param_dec_limit_aspect, nullstr, &decimate_user_params::limit_aspect);
+		widgets.checkbox(param_dec_seams, help_dec_seams, &decimate_user_params::preserve_seams);
+		widgets.checkbox(param_dec_folds, help_dec_folds, &decimate_user_params::prevent_folds);
+		widgets.checkbox(param_dec_limit_aspect, help_dec_limit_aspect, &decimate_user_params::limit_aspect);
 		if (uparams.limit_aspect) {
-			widgets.slider(param_dec_max_aspect, nullstr, &decimate_user_params::max_aspect, 1.f, 20.f, "%.3f", 2.f);
+			widgets.slider(param_dec_max_aspect, help_dec_max_aspect, &decimate_user_params::max_aspect, 1.f, 20.f, "%.3f", 2.f);
 		}
 		// ensure params are valid
 		uparams.sanitize();
