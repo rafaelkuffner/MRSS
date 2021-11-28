@@ -1037,7 +1037,11 @@ if(MSVC10)
   endif( VC10_STDINT_FIX )
 endif(MSVC10)
 
-ADD_DEFINITIONS( -DASSIMP_BUILD_DLL_EXPORT )
+# dont mark symbols for export when static linking - ben
+# TODO there's still a bunch of OpenDDL stuff getting exported
+IF(BUILD_SHARED_LIBS)
+	ADD_DEFINITIONS( -DASSIMP_BUILD_DLL_EXPORT )
+ENDIF()
 
 if ( MSVC )
   ADD_DEFINITIONS( -D_SCL_SECURE_NO_WARNINGS )
