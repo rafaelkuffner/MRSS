@@ -120,7 +120,8 @@ namespace {
 	GLFWwindow *window = nullptr;
 	ImGuiContext *imguictx = nullptr;
 
-	float zfar = 1000000;
+	float znear = 0.0001f;
+	float zfar = 10000;
 	cgu::orbital_camera cam;
 	float cam_fov = 1.f;
 	
@@ -672,7 +673,7 @@ namespace {
 		}
 		glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-		glm::mat4 proj = glm::perspective(cam_fov, float(fbsize.x) / fbsize.y, 0.1f, zfar);
+		glm::mat4 proj = glm::perspective(cam_fov, float(fbsize.x) / fbsize.y, znear, zfar);
 		glm::mat4 view = cam.view();
 		auto proj_inv = inverse(proj);
 		auto view_inv = inverse(view);
