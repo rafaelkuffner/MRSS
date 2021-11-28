@@ -25,6 +25,9 @@ cgu_maybe_set_output_dirs()
 # AssImp defaults this to on; we want it off
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
+# request GLFW to hint for e.g. NVidia Optimus
+option(GLFW_USE_HYBRID_HPG "Force use of high-performance GPU on hybrid systems" ON)
+
 # GLEW
 add_subdirectory("ext/glew-2.1.0")
 set_property(TARGET glew PROPERTY FOLDER "ext")
