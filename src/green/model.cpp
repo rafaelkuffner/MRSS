@@ -197,6 +197,11 @@ namespace green {
 
 	Model::Model(ModelBase &&base) : ModelBase(std::move(base)) {
 		
+		// about normals:
+		// - we load any normals from file as halfedge normals
+		// - we always recalculate vertex and face normals
+		// - rendering prefers to use halfedge normals for smooth shading
+
 		// calculate normals always
 		std::cout << "Computing vertex normals" << std::endl;
 		m_mesh.update_face_normals();
@@ -422,8 +427,8 @@ namespace green {
 		if (!green::decimate(mparams, uparams, progress)) return false;
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
-		m_mesh.request_vertex_normals();
 		m_mesh.update_vertex_normals();
+		// note that decimation keeps face normals up-to-date
 		// recompute vertex areas and edge length
 		std::cout << "Computing vertex areas" << std::endl;
 		m_prop_vertex_area = computeVertexAreas(m_mesh);

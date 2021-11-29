@@ -97,12 +97,12 @@ namespace {
 			mesh.property(prop_seam, eh) = bool(b0 || b1);
 		}
 		for (auto vh : mesh.vertices()) {
-			int boundarity = 0;
+			int seamarity = 0;
 			// search incoming halfedges at each vertex for seam edges
 			for (auto it = mesh.cvih_begin(vh); it.is_valid(); ++it) {
-				boundarity += bool(mesh.property(prop_seam, mesh.edge_handle(*it)));
+				seamarity += bool(mesh.property(prop_seam, mesh.edge_handle(*it)));
 			}
-			mesh.property(prop_seamarity, vh) = uint8_t(std::min<int>(255, boundarity));
+			mesh.property(prop_seamarity, vh) = uint8_t(std::min<int>(255, seamarity));
 		}
 	}
 
@@ -135,6 +135,7 @@ namespace {
 		return maxl2 / sqrt(a2);
 	}
 
+	// TODO this should be an 'observer'
 	template <typename MeshT>
 	class ModProgress : public Decimater::ModBaseT<MeshT> {
 	public:
@@ -177,22 +178,26 @@ namespace {
 	};
 
 	template <typename MeshT>
-	class ModSeamPreservation : public Decimater::ModBaseT<MeshT> {
+	class ModHPropPreservation : public Decimater::ModBaseT<MeshT> {
 	public:
-		DECIMATING_MODULE(ModSeamPreservation, MeshT, SeamPreservation);
+		DECIMATING_MODULE(ModHPropPreservation, MeshT, SeamPreservation);
 
-		ModSeamPreservation(MeshT &_mesh) : Base(_mesh, true) {
-			// seam flags based on differences in halfedge properties
-			// (normal, texcoord2d, texcoord3d)
-			_mesh.add_property(prop_seam);
-			// number of seam edges
-			_mesh.add_property(prop_seamarity);
-			compute_seams(_mesh, prop_seam, prop_seamarity);
+		ModHPropPreservation(MeshT &_mesh) : Base(_mesh, true) {
+			
 		}
 
-		virtual ~ModSeamPreservation() {
+		virtual ~ModHPropPreservation() {
 			this->mesh().remove_property(prop_seam);
 			this->mesh().remove_property(prop_seamarity);
+		}
+
+		void preserve_seams() {
+			// seam flags based on differences in halfedge properties
+			// (normal, texcoord2d, texcoord3d)
+			this->mesh().add_property(prop_seam);
+			// number of seam edges
+			this->mesh().add_property(prop_seamarity);
+			compute_seams(this->mesh(), prop_seam, prop_seamarity);
 		}
 
 		virtual void initialize() override {
@@ -222,12 +227,13 @@ namespace {
 		}
 
 		virtual void postprocess_collapse(const CollapseInfo &_ci) override {
-			// TODO turn off check when sure of correctness
-			check_seams(_ci);
+			// turn off check if sure of correctness
+			//check_seams(_ci);
 		}
 
 	private:
 		void check_seams(const CollapseInfo &_ci) {
+			if (!prop_seam.is_valid()) return;
 			auto &mesh = _ci.mesh;
 			for (auto it = mesh.cvih_begin(_ci.v1); it.is_valid(); ++it) {
 				if (is_seam(mesh, *it) && !mesh.property(prop_seam, mesh.edge_handle(*it))) {
@@ -238,7 +244,6 @@ namespace {
 
 		// fix halfedge properties wrt seams so the result of collapsing is correct
 		void fix_properties(const CollapseInfo &_ci) {
-			if (!prop_seam.is_valid()) return;
 			auto &mesh = _ci.mesh;
 			const HalfedgeHandle h0 = _ci.v0v1;
 			const HalfedgeHandle h1 = mesh.next_halfedge_handle(h0);
@@ -248,20 +253,23 @@ namespace {
 			const HalfedgeHandle o2 = mesh.next_halfedge_handle(o1);
 
 			// copy properties to other incoming halfedges at v0
+			// this still needs to happen for halfedge props to be 'correct', even if we're not preserving seams
 			HalfedgeHandle hs = h0;
 			for (HalfedgeHandle h = mesh.prev_halfedge_handle(h0); h != o0; h = mesh.prev_halfedge_handle(mesh.opposite_halfedge_handle(h))) {
 				mesh.copy_all_properties(hs, h, true);
 				// switch source halfedge when crossing seam
-				// this relies on v0 having boundarity <= 2
-				if (mesh.property(prop_seam, mesh.edge_handle(h))) hs = mesh.prev_halfedge_handle(o0);
+				// this relies on v0 having seamarity <= 2
+				if (prop_seam.is_valid() && mesh.property(prop_seam, mesh.edge_handle(h))) hs = mesh.prev_halfedge_handle(o0);
 			}
 
-			// preserve seam flags of edges merged by loop collapse (of 2-gons)
-			if (mesh.next_halfedge_handle(h2) == h0 && mesh.property(prop_seam, mesh.edge_handle(h2))) {
-				mesh.property(prop_seam, mesh.edge_handle(h1)) = true;
-			}
-			if (mesh.next_halfedge_handle(o2) == o0 && mesh.property(prop_seam, mesh.edge_handle(o1))) {
-				mesh.property(prop_seam, mesh.edge_handle(o2)) = true;
+			if (prop_seam.is_valid()) {
+				// preserve seam flags of edges merged by loop collapse (of 2-gons)
+				if (mesh.next_halfedge_handle(h2) == h0 && mesh.property(prop_seam, mesh.edge_handle(h2))) {
+					mesh.property(prop_seam, mesh.edge_handle(h1)) = true;
+				}
+				if (mesh.next_halfedge_handle(o2) == o0 && mesh.property(prop_seam, mesh.edge_handle(o1))) {
+					mesh.property(prop_seam, mesh.edge_handle(o2)) = true;
+				}
 			}
 		}
 
@@ -419,7 +427,7 @@ namespace {
 		OpenMesh::Decimater::DecimaterT<PolyMesh> m_decimater;
 		ModProgress<PolyMesh>::Handle m_hmod_progress;
 		ModAspectRatio<PolyMesh>::Handle m_hmod_aspect;
-		ModSeamPreservation<PolyMesh>::Handle m_hmod_seams;
+		ModHPropPreservation<PolyMesh>::Handle m_hmod_hprops;
 		ModFoldPrevention<PolyMesh>::Handle m_hmod_folds;
 		std::chrono::steady_clock::time_point m_time_start = std::chrono::steady_clock::now();
 		int m_target_collapses = 0;
@@ -439,10 +447,13 @@ namespace {
 			mod_progress.time_start = m_time_start;
 			mod_progress.show_progress = uparams.show_progress;
 
-			// seam preservation module
+			// halfedge property preservation module
+			m_decimater.add(m_hmod_hprops);
+
+			// seam preservation
 			if (uparams.preserve_seams) {
 				std::cout << "decimating with seam preservation" << std::endl;
-				m_decimater.add(m_hmod_seams);
+				m_decimater.module(m_hmod_hprops).preserve_seams();
 			}
 
 			// fold prevention module
