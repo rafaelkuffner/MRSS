@@ -428,6 +428,10 @@ namespace green {
 		// recompute normals
 		std::cout << "Computing vertex normals" << std::endl;
 		m_mesh.update_vertex_normals();
+		if (m_mesh.has_halfedge_normals()) {
+			std::cout << "Computing halfedge normals" << std::endl;
+			m_mesh.update_halfedge_normals(1.57);
+		}
 		// note that decimation keeps face normals up-to-date
 		// recompute vertex areas and edge length
 		std::cout << "Computing vertex areas" << std::endl;
