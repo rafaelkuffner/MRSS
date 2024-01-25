@@ -1,14 +1,15 @@
 
 # MRSS - Multi Resolution Subsampled Saliency
-
+![Results](/images/header.png)
 Code for the paper "Saliency detection for large-scale mesh decimation", C&G 2023
 https://www.sciencedirect.com/science/article/pii/S0097849323000134?via%3Dihub
 
 Implements the method described in the paper and a decimation algorithm that uses the saliency information. Saliency maps can also be used on ZBrush as the "polypaint" if you are working with a quadmesh. 
+![GUI](/images/GUI.png)
+
 
 Feel free to use it following the provided license (authors would be happy if you notify us when using it).
 
-![Alt text](/relative/path/to/img.jpg?raw=true "Optional Title")
 
 
 
