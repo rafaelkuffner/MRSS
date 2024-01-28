@@ -21,7 +21,6 @@ set(sources
 	entity.hpp
 	entity.cpp
 	simd.h
-	plf_colony.h
 	decimate.hpp
 	decimate.cpp
 	saliency.hpp
@@ -32,10 +31,6 @@ set(sources
 	curvature.cpp
 	meshutils.hpp
 	meshutils.cpp
-	Histogram.h
-	Histogram.cpp
-	FloatHistogram.h
-	FloatHistogram.cpp
 	dialog.hpp
 	dialog_win32.cpp
 	dialog_simple.cpp
